@@ -3,6 +3,7 @@ name: Build FL3SH Optimizer EXE
 on:
   push:
     branches: [main, master]
+    tags: ['v*']
   workflow_dispatch:
 
 jobs:
