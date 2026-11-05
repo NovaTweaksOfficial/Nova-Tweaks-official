@@ -1,0 +1,37 @@
+#!/bin/bash
+# FL3SH Optimizer macOS Launcher
+DIR="$(cd "$(dirname "$0")/.." && pwd)/Resources"
+SCRIPT="$DIR/FL3SH_Optimizer_WebGUI.ps1"
+
+# Find pwsh
+if command -v pwsh >/dev/null 2>&1; then
+  PWSH="pwsh"
+elif [ -x "/usr/local/bin/pwsh" ]; then
+  PWSH="/usr/local/bin/pwsh"
+elif [ -x "/opt/homebrew/bin/pwsh" ]; then
+  PWSH="/opt/homebrew/bin/pwsh"
+else
+  osascript -e 'display dialog "PowerShell 7 is not installed. Please install it first." buttons {"OK"} default button 1 with icon stop'
+  exit 1
+fi
+
+# Kill any existing instance on port 8765
+lsof -ti:8765 2>/dev/null | xargs kill -9 2>/dev/null
+
+# Start the server in background
+"$PWSH" -NoProfile -File "$SCRIPT" >/tmp/fl3sh_optimizer.log 2>&1 &
+SERVER_PID=$!
+
+# Wait for server to be ready
+for i in $(seq 1 30); do
+  if curl -s -o /dev/null http://localhost:8765/ 2>/dev/null; then
+    break
+  fi
+  sleep 0.5
+done
+
+# Open browser
+open "http://localhost:8765"
+
+# Keep running until user closes (monitor)
+wait $SERVER_PID

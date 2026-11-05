@@ -1,0 +1,67 @@
+name: Build FL3SH Optimizer EXE
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup PowerShell
+        shell: pwsh
+        run: |
+          Write-Host "PowerShell version:"
+          $PSVersionTable.PSVersion
+
+      - name: Install PS2EXE
+        shell: pwsh
+        run: |
+          Install-Module PS2EXE -Scope CurrentUser -Force -AllowClobber
+          Write-Host "PS2EXE installed"
+
+      - name: Compile to EXE
+        shell: pwsh
+        run: |
+          $scriptPath = "FL3SH_Optimizer_WinForms_Red.ps1"
+          $outputPath = "FL3SH_Optimizer.exe"
+          if (-not (Test-Path $scriptPath)) {
+            Write-Error "Script not found: $scriptPath"
+            exit 1
+          }
+          Invoke-PS2EXE `
+            -InputFile $scriptPath `
+            -OutputFile $outputPath `
+            -Title "FL3SH Optimizer" `
+            -Description "Safe Fortnite performance optimizer" `
+            -Company "FL3SH" `
+            -Product "FL3SH Optimizer" `
+            -Version "1.0.0.0" `
+            -RequireAdmin `
+            -NoConsole `
+            -x64
+          if (Test-Path $outputPath) {
+            Write-Host "Build successful: $outputPath"
+            $size = (Get-Item $outputPath).Length
+            Write-Host "File size: $([math]::Round($size/1MB,2)) MB"
+          } else {
+            Write-Error "Build failed - EXE not created"
+            exit 1
+          }
+
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FL3SH_Optimizer_EXE
+          path: FL3SH_Optimizer.exe
+          retention-days: 30
+
+      - name: Create Release (on tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: FL3SH_Optimizer.exe
