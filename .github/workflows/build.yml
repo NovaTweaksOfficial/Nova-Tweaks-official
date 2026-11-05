@@ -27,7 +27,7 @@ jobs:
       - name: Compile to EXE
         shell: pwsh
         run: |
-          $scriptPath = "FL3SH_Optimizer_WinForms_Red.ps1"
+          $scriptPath = "FL3SH_Optimizer_WinForms_Ultimate.ps1"
           $outputPath = "FL3SH_Optimizer.exe"
           if (-not (Test-Path $scriptPath)) {
             Write-Error "Script not found: $scriptPath"
@@ -36,11 +36,11 @@ jobs:
           Invoke-PS2EXE `
             -InputFile $scriptPath `
             -OutputFile $outputPath `
-            -Title "FL3SH Optimizer" `
-            -Description "Safe Fortnite performance optimizer" `
+            -Title "FL3SH Optimizer Ultimate" `
+            -Description "Safe Fortnite performance optimizer - Credits: FL3SH & XRT" `
             -Company "FL3SH" `
-            -Product "FL3SH Optimizer" `
-            -Version "1.0.0.0" `
+            -Product "FL3SH Optimizer Ultimate" `
+            -Version "2.0.0.0" `
             -RequireAdmin `
             -NoConsole `
             -x64
