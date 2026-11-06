@@ -273,7 +273,7 @@ function Invoke-NetworkTweaks { if ($IsWin) { try { netsh interface tcp set glob
 function Invoke-VisualEffects { if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }; try { defaults write com.apple.universalaccess reduceTransparency -bool true; defaults write com.apple.universalaccess reduceMotion -bool true; defaults write NSGlobalDomain NSAutomaticWindowAnimationsEnabled -bool false; defaults write com.apple.dock expose-animation-duration -float 0.1; defaults write com.apple.dashboard mcx-disabled -boolean YES; defaults write NSGlobalDomain KeyRepeat -int 2; defaults write NSGlobalDomain InitialKeyRepeat -int 15; killall Dock 2>$null; Write-Log "Visual effects reduced." "OK" } catch { Write-Log "Visual tweaks failed." "WARN" } }
 
 # Mac Power
-function Invoke-MacPower { if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }; try { pmset -c sleep 0 2>$null; pmset -c disksleep 0 2>$null; pmset -c displaysleep 10 2>$null; pmset -a sms 0 2>$null; Write-Log "Power settings tuned." "OK" } catch { Write-Log "Power tweak failed." "WARN" } }
+function Invoke-MacPower { if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }; Invoke-MacRoot -Command "pmset -c sleep 0; pmset -c disksleep 0; pmset -c displaysleep 10; pmset -a sms 0" -Label "Power settings tuned." | Out-Null }
 
 # Potato Graphics
 function Invoke-PotatoGraphics {
@@ -521,7 +521,7 @@ function Invoke-MacDisableAppNap { if (-not $IsMac) { Write-Log "macOS only." "W
 function Invoke-MacDisableWindowAnimations { if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }; try { defaults write NSGlobalDomain NSAutomaticWindowAnimationsEnabled -bool false; defaults write -g QLPanelAnimationDuration -float 0; killall Dock 2>$null; Write-Log "Window animations disabled." "OK" } catch { Write-Log "Window anim failed." "WARN" } }
 function Invoke-MacDisableFontSmoothing { if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }; try { defaults -currentHost write -globalDomain AppleFontSmoothing -int 0; Write-Log "Font smoothing disabled." "OK" } catch { Write-Log "Font smoothing failed." "WARN" } }
 function Invoke-MacPurgeMemory { if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }; try { purge 2>$null; Write-Log "Memory purged." "OK" } catch { Write-Log "Purge failed." "WARN" } }
-function Invoke-MacDisableSpotlight { if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }; try { mdutil -i off / 2>$null; Write-Log "Spotlight disabled." "OK" } catch { Write-Log "Spotlight failed." "WARN" } }
+function Invoke-MacDisableSpotlight { if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }; Invoke-MacRoot -Command "mdutil -i off /" -Label "Spotlight disabled." | Out-Null }
 
 # ---------- v5.2 TWEAK FUNCTIONS ----------
 # Network
@@ -940,13 +940,13 @@ function Invoke-MacDisableSiri {
 
 function Invoke-MacDisableTimeMachine {
     if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }
-    try { tmutil disable 2>$null; Write-Log "Time Machine disabled." "OK" } catch { Write-Log "Time Machine tweak failed: $($_.Exception.Message)" "WARN" }
+    Invoke-MacRoot -Command "tmutil disable" -Label "Time Machine disabled." | Out-Null
 }
 
 function Invoke-MacDisableAutoUpdates {
     if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }
     try {
-        softwareupdate --schedule off 2>$null | Out-Null
+        Invoke-MacRoot -Command "softwareupdate --schedule off" -Label "Automatic update schedule disabled." | Out-Null
         defaults write com.apple.SoftwareUpdate AutomaticCheckEnabled -bool false 2>$null
         defaults write com.apple.SoftwareUpdate AutomaticDownload -bool false 2>$null
         defaults write com.apple.SoftwareUpdate CriticalUpdateInstall -bool false 2>$null
@@ -1363,33 +1363,70 @@ function Invoke-MacRefresh {
     foreach ($n in $Names) { try { & killall $n 2>$null } catch {} }
 }
 
+function ConvertTo-NovaShellArg {
+    param([string]$Value)
+    return "'" + ([string]$Value).Replace("'", "'\''") + "'"
+}
+
+# macOS system settings (pmset, nvram, networksetup, mdutil, tmutil) need root.
+# Prompt through AppleScript so the app never runs the whole UI as root.
+function Invoke-MacRoot {
+    param([string]$Command, [string]$Label = "System change")
+    if (-not $IsMac) { Write-Log "macOS only." "WARN"; return $false }
+    try {
+        $escaped = $Command.Replace('\', '\\').Replace('"', '\"')
+        $apple = 'do shell script "' + $escaped + '" with administrator privileges'
+        & osascript -e $apple 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) { Write-Log "$Label" "OK"; return $true }
+        Write-Log "$Label needs administrator approval." "WARN"
+        return $false
+    } catch { Write-Log "$Label failed: $($_.Exception.Message)" "WARN"; return $false }
+}
+
 function Invoke-MacDns {
     param([string[]]$Servers)
     if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }
     try {
         $services = & networksetup -listallnetworkservices 2>$null | Select-Object -Skip 1
+        $cmds = @()
         foreach ($s in $services) {
-            if ($s -and $s -notmatch '^\*') { & networksetup -setdnsservers $s @Servers 2>$null }
+            if ($s -and $s -notmatch '^\*') {
+                $cmds += "networksetup -setdnsservers $(ConvertTo-NovaShellArg $s) $($Servers -join ' ')"
+            }
         }
-        & dscacheutil -flushcache 2>$null
-        Write-Log "DNS set to $($Servers -join ', ')." "OK"
+        if (-not $cmds) { Write-Log "No network services found." "WARN"; return }
+        $cmds += "dscacheutil -flushcache"
+        $cmds += "killall -HUP mDNSResponder"
+        Invoke-MacRoot -Command ($cmds -join '; ') -Label "DNS set to $($Servers -join ', ')." | Out-Null
     } catch { Write-Log "DNS change failed." "WARN" }
+}
+
+function Invoke-MacIpv6Off {
+    param([switch]$On)
+    if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }
+    try {
+        $services = & networksetup -listallnetworkservices 2>$null | Select-Object -Skip 1
+        $verb = if ($On) { "-setv6automatic" } else { "-setv6off" }
+        $cmds = @()
+        foreach ($s in $services) {
+            if ($s -and $s -notmatch '^\*') { $cmds += "networksetup $verb $(ConvertTo-NovaShellArg $s)" }
+        }
+        if (-not $cmds) { Write-Log "No network services found." "WARN"; return }
+        $label = if ($On) { "IPv6 restored on network services." } else { "IPv6 disabled on network services." }
+        Invoke-MacRoot -Command ($cmds -join '; ') -Label $label | Out-Null
+    } catch { Write-Log "IPv6 change failed." "WARN" }
 }
 
 function Invoke-MacPmset {
     param([string]$Arguments)
     if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }
-    try {
-        $parts = $Arguments -split '\s+'
-        & pmset @parts 2>$null | Out-Null
-        Write-Log "pmset $Arguments" "OK"
-    } catch { Write-Log "pmset failed: $Arguments" "WARN" }
+    Invoke-MacRoot -Command "pmset $Arguments" -Label "pmset $Arguments applied." | Out-Null
 }
 
 function Invoke-MacNvram {
     param([string]$Setting, [string]$Value)
     if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }
-    try { & nvram "$Setting=$Value" 2>$null; Write-Log "nvram $Setting=$Value" "OK" } catch { Write-Log "nvram $Setting failed." "WARN" }
+    Invoke-MacRoot -Command "nvram $(ConvertTo-NovaShellArg "$Setting=$Value")" -Label "nvram $Setting=$Value" | Out-Null
 }
 
 # Startup delay / QoS / core parking / timer / menu / transparency
@@ -1465,7 +1502,7 @@ $Script:Tweaks = @(
     @{Id="memory";Name="Memory cleanup (trim + purge)";Desc="Trims idle process working sets and purges standby/inactive memory. Frees RAM.";Risk="Safe";Free=$true;Win=$true;Mac=$true;Cat="General";Action={Invoke-MemoryCleanup}},
     @{Id="temp";Name="Temp + cache cleanup";Desc="Clears temp folders, browser cache, and Fortnite shader cache. Frees disk space.";Risk="Safe";Free=$true;Win=$true;Mac=$true;Cat="General";Action={Invoke-TempCleanup}},
     @{Id="startup";Name="Disable startup delay";Desc="Removes the artificial startup app delay timer for faster boot.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="General";Action={Invoke-StartupDelayOff}},
-    @{Id="spotlight";Name="Disable Spotlight indexing";Desc="Stops Spotlight from indexing. Frees disk I/O. Reversible.";Risk="Caution";Free=$false;Win=$false;Mac=$true;Cat="General";Action={try{mdutil -i off / 2>$null;Write-Log "Spotlight disabled on /." "OK"}catch{Write-Log "Spotlight tweak failed." "WARN"}}},
+    @{Id="spotlight";Name="Disable Spotlight indexing";Desc="Stops Spotlight from indexing. Frees disk I/O. Reversible.";Risk="Caution";Free=$false;Win=$false;Mac=$true;Cat="General";Action={try{mdutil -i off / 2>$null;Write-Log "Spotlight disabled on /." "OK"}catch{Write-Log "Spotlight tweak failed." "WARN"};Off={Invoke-MacRoot -Command "mdutil -i on /" -Label "Spotlight enabled."}}},
     # Input
     @{Id="inputdelay";Name="Input Response Accelerator";Desc="10 changes: mouse accel off, max keyboard repeat, no filter keys, priority separation, data queues. Reduces input lag ~60%.";Risk="Safe";Free=$false;Win=$true;Mac=$false;Cat="Input";Action={Invoke-InputDelayReducer}},
     @{Id="mouseprec";Name="Mouse Precision";Desc="Disables mouse acceleration for 1:1 tracking. Essential for aim consistency.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Input";Action={Invoke-MousePrecision}},
@@ -1703,18 +1740,18 @@ $Script:Tweaks = @(
     @{Id="foregroundboost";Name="Foreground priority boost";Desc="Sets Win32PrioritySeparation to 38 so the active game gets a larger CPU quantum slice.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Input";Action={Invoke-RegSet -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 38}},
 
     # ---------- v5.3 EXPANSION: NETWORK ----------
-    @{Id="dnsgoogle";Name="Google DNS";Desc="Sets 8.8.8.8 and 8.8.4.4 on active adapters, then flushes DNS. Low-latency public resolver.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={if($IsWin){Get-NetAdapter -ErrorAction SilentlyContinue | ForEach-Object { try { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses @("8.8.8.8","8.8.4.4") -ErrorAction SilentlyContinue } catch {} }; ipconfig /flushdns 2>$null | Out-Null; Write-Log "Google DNS applied." "OK"}}},
-    @{Id="dnsquad9";Name="Quad9 DNS";Desc="Sets 9.9.9.9 and 149.112.112.112 on active adapters with malware blocking. Flushes DNS after.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={if($IsWin){Get-NetAdapter -ErrorAction SilentlyContinue | ForEach-Object { try { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses @("9.9.9.9","149.112.112.112") -ErrorAction SilentlyContinue } catch {} }; ipconfig /flushdns 2>$null | Out-Null; Write-Log "Quad9 DNS applied." "OK"}}},
+    @{Id="dnsgoogle";Name="Google DNS";Desc="Sets 8.8.8.8 and 8.8.4.4 on active adapters, then flushes DNS. Low-latency public resolver.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={if($IsWin){Get-NetAdapter -ErrorAction SilentlyContinue | ForEach-Object { try { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses @("8.8.8.8","8.8.4.4") -ErrorAction SilentlyContinue } catch {} }; ipconfig /flushdns 2>$null | Out-Null; Write-Log "Google DNS applied." "OK"};Off={if($IsWin){Get-NetAdapter -ErrorAction SilentlyContinue | ForEach-Object { try { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ResetServerAddresses -ErrorAction SilentlyContinue } catch {} }; ipconfig /flushdns 2>$null | Out-Null; Write-Log "DNS reset to automatic." "OK"}}}},
+    @{Id="dnsquad9";Name="Quad9 DNS";Desc="Sets 9.9.9.9 and 149.112.112.112 on active adapters with malware blocking. Flushes DNS after.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={if($IsWin){Get-NetAdapter -ErrorAction SilentlyContinue | ForEach-Object { try { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses @("9.9.9.9","149.112.112.112") -ErrorAction SilentlyContinue } catch {} }; ipconfig /flushdns 2>$null | Out-Null; Write-Log "Quad9 DNS applied." "OK"};Off={if($IsWin){Get-NetAdapter -ErrorAction SilentlyContinue | ForEach-Object { try { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ResetServerAddresses -ErrorAction SilentlyContinue } catch {} }; ipconfig /flushdns 2>$null | Out-Null; Write-Log "DNS reset to automatic." "OK"}}}},
     @{Id="dnsauto";Name="Reset DNS to automatic";Desc="Clears manual DNS servers and returns every adapter to DHCP-provided DNS.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={if($IsWin){Get-NetAdapter -ErrorAction SilentlyContinue | ForEach-Object { try { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ResetServerAddresses -ErrorAction SilentlyContinue } catch {} }; ipconfig /flushdns 2>$null | Out-Null; Write-Log "DNS reset to automatic." "OK"}}},
-    @{Id="teredooff";Name="Disable Teredo tunneling";Desc="Turns off the Teredo IPv6 transition tunnel. Less background tunnel traffic.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-Cmd -Cmd "netsh interface teredo set state disabled"}},
-    @{Id="isatapoff";Name="Disable ISATAP";Desc="Turns off the ISATAP IPv6 transition adapter. Less background network overhead.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-Cmd -Cmd "netsh interface isatap set state disabled"}},
-    @{Id="six4off";Name="Disable 6to4";Desc="Turns off the 6to4 IPv6 relay. Fewer virtual adapters and less background traffic.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-Cmd -Cmd "netsh interface 6to4 set state disabled"}},
-    @{Id="rscdisable";Name="Disable Receive Segment Coalescing";Desc="Stops the NIC from batching received packets. Lower latency, slightly more CPU.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-Cmd -Cmd "netsh int tcp set global rsc=disabled"}},
+    @{Id="teredooff";Name="Disable Teredo tunneling";Desc="Turns off the Teredo IPv6 transition tunnel. Less background tunnel traffic.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-Cmd -Cmd "netsh interface teredo set state disabled";Off={Invoke-Cmd -Cmd "netsh interface teredo set state default"}}},
+    @{Id="isatapoff";Name="Disable ISATAP";Desc="Turns off the ISATAP IPv6 transition adapter. Less background network overhead.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-Cmd -Cmd "netsh interface isatap set state disabled";Off={Invoke-Cmd -Cmd "netsh interface isatap set state default"}}},
+    @{Id="six4off";Name="Disable 6to4";Desc="Turns off the 6to4 IPv6 relay. Fewer virtual adapters and less background traffic.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-Cmd -Cmd "netsh interface 6to4 set state disabled";Off={Invoke-Cmd -Cmd "netsh interface 6to4 set state default"}}},
+    @{Id="rscdisable";Name="Disable Receive Segment Coalescing";Desc="Stops the NIC from batching received packets. Lower latency, slightly more CPU.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-Cmd -Cmd "netsh int tcp set global rsc=disabled";Off={Invoke-Cmd -Cmd "netsh int tcp set global rsc=enabled"}}},
     @{Id="initialrto";Name="Lower TCP initial retransmit timeout";Desc="Sets the initial TCP retransmission timeout to 2000 ms. Faster recovery from a dropped packet.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-Cmd -Cmd "netsh int tcp set global initialRto=2000"}},
-    @{Id="wifipowersave";Name="Disable Wi-Fi power saving";Desc="Sets adapter power saving to Disabled so the Wi-Fi radio does not sleep between packets.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-AdapterProp -DisplayName "Power Saving Mode" -Value "Disabled"}},
-    @{Id="eeeoff";Name="Disable Energy Efficient Ethernet";Desc="Turns off EEE on Ethernet adapters. Keeps the link fully awake for steadier latency.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-AdapterProp -DisplayName "Energy Efficient Ethernet" -Value "Disabled"}},
-    @{Id="flowcontroloff";Name="Disable Ethernet flow control";Desc="Turns off adapter flow control so pause frames do not delay game packets.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-AdapterProp -DisplayName "Flow Control" -Value "Disabled"}},
-    @{Id="woloff";Name="Disable Wake on Magic Packet";Desc="Stops the NIC from waking the PC for magic packets. Less standby power and background wake events.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-AdapterProp -DisplayName "Wake on Magic Packet" -Value "Disabled"}},
+    @{Id="wifipowersave";Name="Disable Wi-Fi power saving";Desc="Sets adapter power saving to Disabled so the Wi-Fi radio does not sleep between packets.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-AdapterProp -DisplayName "Power Saving Mode" -Value "Disabled";Off={Invoke-AdapterProp -DisplayName "Power Saving Mode" -Value "Enabled"}}},
+    @{Id="eeeoff";Name="Disable Energy Efficient Ethernet";Desc="Turns off EEE on Ethernet adapters. Keeps the link fully awake for steadier latency.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-AdapterProp -DisplayName "Energy Efficient Ethernet" -Value "Disabled";Off={Invoke-AdapterProp -DisplayName "Energy Efficient Ethernet" -Value "Enabled"}}},
+    @{Id="flowcontroloff";Name="Disable Ethernet flow control";Desc="Turns off adapter flow control so pause frames do not delay game packets.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-AdapterProp -DisplayName "Flow Control" -Value "Disabled";Off={Invoke-AdapterProp -DisplayName "Flow Control" -Value "Auto"}}},
+    @{Id="woloff";Name="Disable Wake on Magic Packet";Desc="Stops the NIC from waking the PC for magic packets. Less standby power and background wake events.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-AdapterProp -DisplayName "Wake on Magic Packet" -Value "Disabled";Off={Invoke-AdapterProp -DisplayName "Wake on Magic Packet" -Value "Enabled"}}},
     @{Id="smbmultichannel";Name="Disable SMB Multichannel";Desc="Stops SMB from opening multiple network connections. Less overhead on small home networks.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-Cmd -Cmd "Set-SmbClientConfiguration -EnableMultiChannel $false -Force -ErrorAction SilentlyContinue"}},
     @{Id="netdiscoveryoff";Name="Disable Network Discovery";Desc="Blocks the Network Discovery firewall group. Less broadcast chatter and a smaller attack surface.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-Cmd -Cmd "netsh advfirewall firewall set rule group='Network Discovery' new enable=No"}},
     @{Id="filesharingoff";Name="Disable File and Printer Sharing";Desc="Blocks the File and Printer Sharing firewall group. Less inbound surface and background SMB traffic.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-Cmd -Cmd "netsh advfirewall firewall set rule group='File and Printer Sharing' new enable=No"}},
@@ -1722,16 +1759,16 @@ $Script:Tweaks = @(
     @{Id="flusharp";Name="Flush ARP cache";Desc="Clears the ARP neighbor cache so stale MAC mappings are rebuilt. Helps after router or switch changes.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-Cmd -Cmd "netsh interface ip delete arpcache"}},
 
     # ---------- v5.3 EXPANSION: POWER ----------
-    @{Id="displaysleepoff";Name="Disable display sleep";Desc="Stops the monitor from sleeping or dimming on AC power. Useful for long sessions and benchmarks.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Power";Action={Invoke-Cmd -Cmd "powercfg /change monitor-timeout-ac 0"}},
+    @{Id="displaysleepoff";Name="Disable display sleep";Desc="Stops the monitor from sleeping or dimming on AC power. Useful for long sessions and benchmarks.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Power";Action={Invoke-Cmd -Cmd "powercfg /change monitor-timeout-ac 0";Off={Invoke-Cmd -Cmd "powercfg /change monitor-timeout-ac 10"}}},
     @{Id="procmax100";Name="Keep processor at 100% max";Desc="Sets the processor maximum state to 100% on AC and battery so Windows cannot cap clocks.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Power";Action={Invoke-PowerSet -Subgroup "SUB_PROCESSOR" -Setting "PROCTHROTTLEMAX" -AC 100 -DC 100}},
     @{Id="energysaveroff";Name="Disable Energy Saver";Desc="Turns off the Energy Saver power mode that throttles hardware to save power.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Power";Action={Invoke-PowerSet -Subgroup "SUB_ENERGYSAVER" -Setting "ESBATTTHRESHOLD" -AC 0 -DC 0}},
-    @{Id="adaptbrightnessoff";Name="Disable adaptive brightness";Desc="Stops Windows from changing display brightness based on ambient light. Steadier frame pacing.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Power";Action={Invoke-PowerSet -Subgroup "SUB_VIDEO" -Setting "ADAPTBRIGHT" -AC 0 -DC 0}},
-    @{Id="waketimersoff";Name="Disable wake timers";Desc="Stops scheduled tasks and maintenance from waking the PC. Fewer surprise wake events.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Power";Action={Invoke-PowerSet -Subgroup "SUB_SLEEP" -Setting "BD3B718A-0680-4D9D-8AB2-E1D2B4AC806D" -AC 0 -DC 0}},
-    @{Id="usbwakeoff";Name="Disable USB wake";Desc="Stops USB devices from waking the PC from sleep. Prevents accidental wakes from mice and hubs.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Power";Action={Invoke-PowerSet -Subgroup "SUB_USB" -Setting "48E6B7A6-50F5-4782-A5D4-53BB8F07E226" -AC 0 -DC 0}},
-    @{Id="modernstandbyoff";Name="Disable Modern Standby";Desc="Forces classic S3 sleep instead of Modern Standby. Reboot required; not supported on every laptop.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Power";Action={Invoke-RegSet -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Power" -Name "PlatformAoAcOverride" -Value 0}},
-    @{Id="powerplanhigh";Name="High Performance power plan";Desc="Switches to the built-in High Performance plan. Less aggressive clock dropping than Balanced.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Power";Action={Invoke-Cmd -Cmd "powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c"}},
+    @{Id="adaptbrightnessoff";Name="Disable adaptive brightness";Desc="Stops Windows from changing display brightness based on ambient light. Steadier frame pacing.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Power";Action={Invoke-PowerSet -Subgroup "SUB_VIDEO" -Setting "ADAPTBRIGHT" -AC 0 -DC 0;Off={Invoke-PowerSet -Subgroup "SUB_VIDEO" -Setting "ADAPTBRIGHT" -AC 1 -DC 1}}},
+    @{Id="waketimersoff";Name="Disable wake timers";Desc="Stops scheduled tasks and maintenance from waking the PC. Fewer surprise wake events.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Power";Action={Invoke-PowerSet -Subgroup "SUB_SLEEP" -Setting "BD3B718A-0680-4D9D-8AB2-E1D2B4AC806D" -AC 0 -DC 0;Off={Invoke-PowerSet -Subgroup "SUB_SLEEP" -Setting "BD3B718A-0680-4D9D-8AB2-E1D2B4AC806D" -AC 1 -DC 1}}},
+    @{Id="usbwakeoff";Name="Disable USB wake";Desc="Stops USB devices from waking the PC from sleep. Prevents accidental wakes from mice and hubs.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Power";Action={Invoke-PowerSet -Subgroup "SUB_USB" -Setting "48E6B7A6-50F5-4782-A5D4-53BB8F07E226" -AC 0 -DC 0;Off={Invoke-PowerSet -Subgroup "SUB_USB" -Setting "48E6B7A6-50F5-4782-A5D4-53BB8F07E226" -AC 1 -DC 1}}},
+    @{Id="modernstandbyoff";Name="Disable Modern Standby";Desc="Forces classic S3 sleep instead of Modern Standby. Reboot required; not supported on every laptop.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Power";Action={Invoke-RegSet -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Power" -Name "PlatformAoAcOverride" -Value 0;Off={Invoke-Cmd -Cmd "Remove-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Power' -Name PlatformAoAcOverride -Force -ErrorAction SilentlyContinue"}}},
+    @{Id="powerplanhigh";Name="High Performance power plan";Desc="Switches to the built-in High Performance plan. Less aggressive clock dropping than Balanced.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Power";Action={Invoke-Cmd -Cmd "powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c";Off={Invoke-Cmd -Cmd "powercfg /setactive 381b4222-f694-41f0-9685-ff5bb260df2e"}}},
     @{Id="powerplanbalanced";Name="Balanced power plan";Desc="Returns to the standard Balanced plan. Useful after testing or on battery.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Power";Action={Invoke-Cmd -Cmd "powercfg /setactive 381b4222-f694-41f0-9685-ff5bb260df2e"}},
-    @{Id="cpuidleoff";Name="Disable CPU idle states";Desc="Prevents the CPU from entering deep idle states under load. Lower latency, higher heat and power draw.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Power";Action={Invoke-PowerSet -Subgroup "SUB_PROCESSOR" -Setting "IDLEDISABLE" -AC 1 -DC 1}},
+    @{Id="cpuidleoff";Name="Disable CPU idle states";Desc="Prevents the CPU from entering deep idle states under load. Lower latency, higher heat and power draw.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Power";Action={Invoke-PowerSet -Subgroup "SUB_PROCESSOR" -Setting "IDLEDISABLE" -AC 1 -DC 1;Off={Invoke-PowerSet -Subgroup "SUB_PROCESSOR" -Setting "IDLEDISABLE" -AC 0 -DC 0}}},
 
     # ---------- v5.3 EXPANSION: VISUAL ----------
     @{Id="dragfullwindows";Name="Disable window contents while dragging";Desc="Shows only an outline while moving windows. Makes dragging feel instant on slower GPUs.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Visual";Action={Invoke-RegSet -Path "HKCU:\Control Panel\Desktop" -Name "DragFullWindows" -Value "0" -Type String}},
@@ -1755,12 +1792,15 @@ $Script:Tweaks = @(
     @{Id="optimizessd";Name="Retrim system drive";Desc="Runs Optimize-Volume with -ReTrim on C: to refresh SSD free blocks. Frees performance on full drives.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Storage";Action={Invoke-Cmd -Cmd "Optimize-Volume -DriveLetter C -ReTrim -ErrorAction SilentlyContinue"}},
 
     # ---------- v5.3 EXPANSION: FIRMWARE-ADJACENT ----------
-    @{Id="hypervisoroff";Name="Disable Hyper-V hypervisor at boot";Desc="Sets hypervisorlaunchtype off. Removes virtualization overhead for gaming but breaks WSL2, Docker and VBS. Reboot required.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Firmware";Action={Invoke-BcdSet -Setting "hypervisorlaunchtype" -Value "off"}},
+    @{Id="hypervisoroff";Name="Disable Hyper-V hypervisor at boot";Desc="Sets hypervisorlaunchtype off. Removes virtualization overhead for gaming but breaks WSL2, Docker and VBS. Reboot required.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Firmware";Action={Invoke-BcdSet -Setting "hypervisorlaunchtype" -Value "off";Off={Invoke-BcdSet -Setting "hypervisorlaunchtype" -Value "auto"}}},
     @{Id="vbsdisable";Name="Disable VBS at boot";Desc="Turns off Virtualization-Based Security. Frees CPU cycles for games; lowers isolation. Reboot required.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Firmware";Action={Invoke-RegGroup -Items @(
         @{Path="HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard";Name="EnableVirtualizationBasedSecurity";Value=0},
         @{Path="HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity";Name="Enabled";Value=0}
+    )};Off={Invoke-RegGroup -Items @(
+        @{Path="HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard";Name="EnableVirtualizationBasedSecurity";Value=1},
+        @{Path="HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity";Name="Enabled";Value=1}
     )}},
-    @{Id="memoryintegrityoff";Name="Disable Memory Integrity";Desc="Turns off HVCI/Memory Integrity. Recovers CPU performance at the cost of kernel-level protection. Reboot required.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Firmware";Action={Invoke-RegSet -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity" -Name "Enabled" -Value 0}},
+    @{Id="memoryintegrityoff";Name="Disable Memory Integrity";Desc="Turns off HVCI/Memory Integrity. Recovers CPU performance at the cost of kernel-level protection. Reboot required.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Firmware";Action={Invoke-RegSet -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity" -Name "Enabled" -Value 0;Off={Invoke-RegSet -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity" -Name "Enabled" -Value 1}}},
 
     # ---------- v5.3 EXPANSION: PRIVACY ----------
     @{Id="suggestedcontentoff";Name="Disable suggested content";Desc="Turns off suggested apps, tips and promotional content across Settings and the shell.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Privacy";Action={Invoke-RegGroup -Items @(
@@ -1903,48 +1943,48 @@ $Script:Tweaks = @(
     @{Id="macrubberband";Name="Disable rubber-band scrolling (Mac)";Desc="Stops the elastic overscroll bounce. Less compositor work while scrolling.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Input";Action={Invoke-MacDefaults -Domain "NSGlobalDomain" -Key "NSScrollViewRubberbanding" -Type bool -Value "false"}},
 
     # ---------- v5.3 EXPANSION: macOS NETWORK ----------
-    @{Id="macdnscloud";Name="Cloudflare DNS (Mac)";Desc="Sets 1.1.1.1 and 1.0.0.1 on every network service and flushes DNS.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Network";Action={Invoke-MacDns -Servers @("1.1.1.1","1.0.0.1")}},
-    @{Id="macdnsgoogle";Name="Google DNS (Mac)";Desc="Sets 8.8.8.8 and 8.8.4.4 on every network service and flushes DNS.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Network";Action={Invoke-MacDns -Servers @("8.8.8.8","8.8.4.4")}},
+    @{Id="macdnscloud";Name="Cloudflare DNS (Mac)";Desc="Sets 1.1.1.1 and 1.0.0.1 on every network service and flushes DNS.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Network";Action={Invoke-MacDns -Servers @("1.1.1.1","1.0.0.1")};Off={Invoke-MacDns -Servers @("Empty")}},
+    @{Id="macdnsgoogle";Name="Google DNS (Mac)";Desc="Sets 8.8.8.8 and 8.8.4.4 on every network service and flushes DNS.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Network";Action={Invoke-MacDns -Servers @("8.8.8.8","8.8.4.4")};Off={Invoke-MacDns -Servers @("Empty")}},
     @{Id="macdnsauto";Name="Reset DNS to automatic (Mac)";Desc="Clears manual DNS servers on every network service and returns to DHCP.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Network";Action={Invoke-MacDns -Servers @("Empty")}},
-    @{Id="macipv6off";Name="Disable IPv6 (Mac)";Desc="Turns off IPv6 on every network service. Less background traffic on IPv4-only networks.";Risk="Caution";Free=$true;Win=$false;Mac=$true;Cat="Network";Action={if($IsMac){$services=& networksetup -listallnetworkservices 2>$null | Select-Object -Skip 1; foreach($s in $services){if($s -and $s -notmatch '^\*'){& networksetup -setv6off $s 2>$null}}; Write-Log "IPv6 disabled on network services." "OK"}}},
+    @{Id="macipv6off";Name="Disable IPv6 (Mac)";Desc="Turns off IPv6 on every network service. Less background traffic on IPv4-only networks.";Risk="Caution";Free=$true;Win=$false;Mac=$true;Cat="Network";Action={Invoke-MacIpv6Off};Off={Invoke-MacIpv6Off -On}},
     @{Id="macairdropoff";Name="Disable AirDrop (Mac)";Desc="Turns off AirDrop advertising and receiving. Less background radio activity.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Network";Action={Invoke-MacDefaults -Domain "com.apple.NetworkBrowser" -Key "DisableAirDrop" -Type bool -Value "true"}},
     @{Id="macflushdns";Name="Flush DNS cache (Mac)";Desc="Clears the macOS DNS cache and restarts mDNSResponder. Fixes stale lookups.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Network";Action={if($IsMac){& dscacheutil -flushcache 2>$null; & killall -HUP mDNSResponder 2>$null; Write-Log "DNS cache flushed." "OK"}}},
 
     # ---------- v5.3 EXPANSION: macOS POWER ----------
-    @{Id="macpowernap";Name="Disable Power Nap (Mac)";Desc="Stops background mail, backup and update work while the Mac sleeps.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Power";Action={Invoke-MacPmset -Arguments "-a powernap 0"}},
-    @{Id="macwomp";Name="Disable wake on network (Mac)";Desc="Stops network access from waking the Mac. Less surprise wake activity.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Power";Action={Invoke-MacPmset -Arguments "-a womp 0"}},
-    @{Id="machibernate";Name="Disable hibernation (Mac)";Desc="Sets hibernatemode 0 so the Mac uses normal sleep instead of writing RAM to disk.";Risk="Caution";Free=$true;Win=$false;Mac=$true;Cat="Power";Action={Invoke-MacPmset -Arguments "-a hibernatemode 0"}},
-    @{Id="macstandby";Name="Disable standby (Mac)";Desc="Stops the deeper standby state after sleep. Faster wake, slightly more standby power.";Risk="Caution";Free=$true;Win=$false;Mac=$true;Cat="Power";Action={Invoke-MacPmset -Arguments "-a standby 0"}},
-    @{Id="macdisplaysleep";Name="Disable display sleep (Mac)";Desc="Stops the display from sleeping. Useful for long sessions and benchmarks.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Power";Action={Invoke-MacPmset -Arguments "-a displaysleep 0"}},
-    @{Id="macgpuswitch";Name="Force discrete GPU (Mac)";Desc="Forces the discrete GPU on dual-GPU Intel Macs. More performance, more heat and battery drain.";Risk="Caution";Free=$true;Win=$false;Mac=$true;Cat="Power";Action={Invoke-MacPmset -Arguments "-a gpuswitch 1"}},
+    @{Id="macpowernap";Name="Disable Power Nap (Mac)";Desc="Stops background mail, backup and update work while the Mac sleeps.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Power";Action={Invoke-MacPmset -Arguments "-a powernap 0";Off={Invoke-MacPmset -Arguments "-a powernap 1"}}},
+    @{Id="macwomp";Name="Disable wake on network (Mac)";Desc="Stops network access from waking the Mac. Less surprise wake activity.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Power";Action={Invoke-MacPmset -Arguments "-a womp 0";Off={Invoke-MacPmset -Arguments "-a womp 1"}}},
+    @{Id="machibernate";Name="Disable hibernation (Mac)";Desc="Sets hibernatemode 0 so the Mac uses normal sleep instead of writing RAM to disk.";Risk="Caution";Free=$true;Win=$false;Mac=$true;Cat="Power";Action={Invoke-MacPmset -Arguments "-a hibernatemode 0";Off={Invoke-MacPmset -Arguments "-a hibernatemode 3"}}},
+    @{Id="macstandby";Name="Disable standby (Mac)";Desc="Stops the deeper standby state after sleep. Faster wake, slightly more standby power.";Risk="Caution";Free=$true;Win=$false;Mac=$true;Cat="Power";Action={Invoke-MacPmset -Arguments "-a standby 0";Off={Invoke-MacPmset -Arguments "-a standby 1"}}},
+    @{Id="macdisplaysleep";Name="Disable display sleep (Mac)";Desc="Stops the display from sleeping. Useful for long sessions and benchmarks.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Power";Action={Invoke-MacPmset -Arguments "-a displaysleep 0";Off={Invoke-MacPmset -Arguments "-a displaysleep 10"}}},
+    @{Id="macgpuswitch";Name="Force discrete GPU (Mac)";Desc="Forces the discrete GPU on dual-GPU Intel Macs. More performance, more heat and battery drain.";Risk="Caution";Free=$true;Win=$false;Mac=$true;Cat="Power";Action={Invoke-MacPmset -Arguments "-a gpuswitch 1";Off={Invoke-MacPmset -Arguments "-a gpuswitch 2"}}},
     @{Id="maclowpoweroff";Name="Disable Low Power Mode (Mac)";Desc="Turns off Low Power Mode throttling so clocks stay high.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Power";Action={Invoke-MacPmset -Arguments "-a lowpowermode 0"}},
 
     # ---------- v5.3 EXPANSION: macOS VISUAL ----------
-    @{Id="macreducemotion";Name="Reduce motion (Mac)";Desc="Turns off parallax, zoom and window motion effects. Less compositor work.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Visual";Action={Invoke-MacDefaults -Domain "com.apple.universalaccess" -Key "reduceMotion" -Type bool -Value "true"}},
-    @{Id="macfinderanim";Name="Disable Finder animations (Mac)";Desc="Removes Finder open/close animations. Snappier file browsing.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Visual";Action={Invoke-MacDefaults -Domain "com.apple.finder" -Key "DisableAllAnimations" -Type bool -Value "true"; Invoke-MacRefresh -Names @("Finder")}},
-    @{Id="macdockbounce";Name="Disable Dock bounce (Mac)";Desc="Stops app icons from bouncing when launched.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Visual";Action={Invoke-MacDefaults -Domain "com.apple.dock" -Key "no-bouncing" -Type bool -Value "true"; Invoke-MacRefresh -Names @("Dock")}},
-    @{Id="macdocklaunch";Name="Disable Dock launch animation (Mac)";Desc="Removes the Dock app-launch animation.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Visual";Action={Invoke-MacDefaults -Domain "com.apple.dock" -Key "launchanim" -Type bool -Value "false"; Invoke-MacRefresh -Names @("Dock")}},
-    @{Id="macdockminimize";Name="Use scale minimize effect (Mac)";Desc="Switches the minimize effect from genie to scale. Less animation work.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Visual";Action={Invoke-MacDefaults -Domain "com.apple.dock" -Key "mineffect" -Type string -Value "scale"; Invoke-MacRefresh -Names @("Dock")}},
-    @{Id="macmissioncontrol";Name="Speed up Mission Control (Mac)";Desc="Shortens the Mission Control animation for an almost instant transition.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Visual";Action={Invoke-MacDefaults -Domain "com.apple.dock" -Key "expose-animation-duration" -Type float -Value "0.1"; Invoke-MacRefresh -Names @("Dock")}},
-    @{Id="macdockmagnifyoff";Name="Disable Dock magnification (Mac)";Desc="Turns off Dock icon magnification. Less redraw work as the pointer moves.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Visual";Action={Invoke-MacDefaults -Domain "com.apple.dock" -Key "magnification" -Type bool -Value "false"; Invoke-MacRefresh -Names @("Dock")}},
+    @{Id="macreducemotion";Name="Reduce motion (Mac)";Desc="Turns off parallax, zoom and window motion effects. Less compositor work.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Visual";Action={Invoke-MacDefaults -Domain "com.apple.universalaccess" -Key "reduceMotion" -Type bool -Value "true";Off={Invoke-MacDefaults -Domain "com.apple.universalaccess" -Key "reduceMotion" -Type bool -Value "false"}}},
+    @{Id="macfinderanim";Name="Disable Finder animations (Mac)";Desc="Removes Finder open/close animations. Snappier file browsing.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Visual";Action={Invoke-MacDefaults -Domain "com.apple.finder" -Key "DisableAllAnimations" -Type bool -Value "true"; Invoke-MacRefresh -Names @("Finder");Off={Invoke-MacDefaults -Domain "com.apple.finder" -Key "DisableAllAnimations" -Type bool -Value "false"; Invoke-MacRefresh -Names @("Finder")}}},
+    @{Id="macdockbounce";Name="Disable Dock bounce (Mac)";Desc="Stops app icons from bouncing when launched.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Visual";Action={Invoke-MacDefaults -Domain "com.apple.dock" -Key "no-bouncing" -Type bool -Value "true"; Invoke-MacRefresh -Names @("Dock");Off={Invoke-MacDefaults -Domain "com.apple.dock" -Key "no-bouncing" -Type bool -Value "false"; Invoke-MacRefresh -Names @("Dock")}}},
+    @{Id="macdocklaunch";Name="Disable Dock launch animation (Mac)";Desc="Removes the Dock app-launch animation.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Visual";Action={Invoke-MacDefaults -Domain "com.apple.dock" -Key "launchanim" -Type bool -Value "false"; Invoke-MacRefresh -Names @("Dock");Off={Invoke-MacDefaults -Domain "com.apple.dock" -Key "launchanim" -Type bool -Value "true"; Invoke-MacRefresh -Names @("Dock")}}},
+    @{Id="macdockminimize";Name="Use scale minimize effect (Mac)";Desc="Switches the minimize effect from genie to scale. Less animation work.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Visual";Action={Invoke-MacDefaults -Domain "com.apple.dock" -Key "mineffect" -Type string -Value "scale"; Invoke-MacRefresh -Names @("Dock");Off={Invoke-MacDefaults -Domain "com.apple.dock" -Key "mineffect" -Type string -Value "genie"; Invoke-MacRefresh -Names @("Dock")}}},
+    @{Id="macmissioncontrol";Name="Speed up Mission Control (Mac)";Desc="Shortens the Mission Control animation for an almost instant transition.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Visual";Action={Invoke-MacDefaults -Domain "com.apple.dock" -Key "expose-animation-duration" -Type float -Value "0.1"; Invoke-MacRefresh -Names @("Dock");Off={Invoke-MacDefaults -Domain "com.apple.dock" -Key "expose-animation-duration" -Type float -Value "0.5"; Invoke-MacRefresh -Names @("Dock")}}},
+    @{Id="macdockmagnifyoff";Name="Disable Dock magnification (Mac)";Desc="Turns off Dock icon magnification. Less redraw work as the pointer moves.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Visual";Action={Invoke-MacDefaults -Domain "com.apple.dock" -Key "magnification" -Type bool -Value "false"; Invoke-MacRefresh -Names @("Dock");Off={Invoke-MacDefaults -Domain "com.apple.dock" -Key "magnification" -Type bool -Value "true"; Invoke-MacRefresh -Names @("Dock")}}},
 
     # ---------- v5.3 EXPANSION: macOS SERVICES ----------
     @{Id="macappstoreauto";Name="Disable App Store auto-updates (Mac)";Desc="Stops the App Store from downloading and installing updates in the background.";Risk="Caution";Free=$true;Win=$false;Mac=$true;Cat="Services";Action={Invoke-MacDefaultsGroup -Items @(
         @{Domain="com.apple.commerce";Key="AutoUpdate";Type="bool";Value="false"},
         @{Domain="com.apple.SoftwareUpdate";Key="AutomaticDownload";Type="bool";Value="false"}
     )}},
-    @{Id="macdashboardoff";Name="Disable Dashboard (Mac)";Desc="Turns off the legacy Dashboard layer and its background widgets.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Services";Action={Invoke-MacDefaults -Domain "com.apple.dashboard" -Key "mcx-disabled" -Type bool -Value "true"; Invoke-MacRefresh -Names @("Dashboard")}},
+    @{Id="macdashboardoff";Name="Disable Dashboard (Mac)";Desc="Turns off the legacy Dashboard layer and its background widgets.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Services";Action={Invoke-MacDefaults -Domain "com.apple.dashboard" -Key "mcx-disabled" -Type bool -Value "true"; Invoke-MacRefresh -Names @("Dashboard");Off={Invoke-MacDefaults -Domain "com.apple.dashboard" -Key "mcx-disabled" -Type bool -Value "false"; Invoke-MacRefresh -Names @("Dashboard")}}},
 
     # ---------- v5.3 EXPANSION: macOS STORAGE ----------
-    @{Id="maclocalsnapshots";Name="Disable local Time Machine snapshots (Mac)";Desc="Stops macOS keeping local APFS snapshots for Time Machine. Frees disk space.";Risk="Caution";Free=$true;Win=$false;Mac=$true;Cat="Storage";Action={Invoke-Cmd -Cmd "tmutil disablelocal"}},
+    @{Id="maclocalsnapshots";Name="Disable local Time Machine snapshots (Mac)";Desc="Stops macOS keeping local APFS snapshots for Time Machine. Frees disk space.";Risk="Caution";Free=$true;Win=$false;Mac=$true;Cat="Storage";Action={Invoke-MacRoot -Command "tmutil disablelocal" -Label "Local snapshots disabled.";Off={Invoke-MacRoot -Command "tmutil enablelocal" -Label "Local snapshots enabled."}}},
     @{Id="macquicklookcache";Name="Clear Quick Look cache (Mac)";Desc="Clears the Quick Look thumbnail cache so previews rebuild cleanly.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Storage";Action={Invoke-MacCleanup -Paths @("$env:HOME/Library/Caches/com.apple.QuickLook.thumbnailcache") -Label "Quick Look cache"}},
     @{Id="maclaunchservices";Name="Rebuild LaunchServices database (Mac)";Desc="Rebuilds the app-launch database. Fixes duplicate Open With entries and stale app associations.";Risk="Caution";Free=$true;Win=$false;Mac=$true;Cat="Storage";Action={Invoke-Cmd -Cmd "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -kill -r -domain local -domain system -domain user"}},
     @{Id="maclogclear";Name="Clear user logs (Mac)";Desc="Deletes user-level log files. Frees disk space; system logs are untouched.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Storage";Action={Invoke-MacCleanup -Paths @("$env:HOME/Library/Logs") -Label "User logs"}},
     @{Id="maccacheclear";Name="Clear user caches (Mac)";Desc="Deletes user cache folders. Apps rebuild them; first launches may be slower.";Risk="Caution";Free=$true;Win=$false;Mac=$true;Cat="Storage";Action={Invoke-MacCleanup -Paths @("$env:HOME/Library/Caches") -Label "User caches"}},
 
     # ---------- v5.3 EXPANSION: macOS FIRMWARE-ADJACENT ----------
-    @{Id="macautopoweron";Name="Disable auto power-on after power loss";Desc="Clears the NVRAM AutoBoot flag so the Mac stays off when power returns. Intel Macs only.";Risk="Caution";Free=$true;Win=$false;Mac=$true;Cat="Firmware";Action={Invoke-MacNvram -Setting "AutoBoot" -Value "%00"}},
-    @{Id="macbootchime";Name="Disable boot chime";Desc="Clears the NVRAM BootAudio flag to silence the startup chime. Firmware-level, reversible with nvram -d BootAudio.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Firmware";Action={Invoke-MacNvram -Setting "BootAudio" -Value "%00"}},
+    @{Id="macautopoweron";Name="Disable auto power-on after power loss";Desc="Clears the NVRAM AutoBoot flag so the Mac stays off when power returns. Intel Macs only.";Risk="Caution";Free=$true;Win=$false;Mac=$true;Cat="Firmware";Action={Invoke-MacNvram -Setting "AutoBoot" -Value "%00";Off={Invoke-MacRoot -Command "nvram -d AutoBoot" -Label "Auto power-on restored."}}},
+    @{Id="macbootchime";Name="Disable boot chime";Desc="Clears the NVRAM BootAudio flag to silence the startup chime. Firmware-level, reversible with nvram -d BootAudio.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Firmware";Action={Invoke-MacNvram -Setting "BootAudio" -Value "%00";Off={Invoke-MacRoot -Command "nvram -d BootAudio" -Label "Boot chime restored."}}},
 
     # ---------- v5.3 EXPANSION: macOS PRIVACY ----------
     @{Id="maclocationoff";Name="Disable Location Services (Mac)";Desc="Turns off macOS Location Services. Apps lose location access.";Risk="Caution";Free=$true;Win=$false;Mac=$true;Cat="Privacy";Action={Invoke-MacDefaults -Domain "com.apple.locationd" -Key "LocationServicesEnabled" -Type bool -Value "false"}},

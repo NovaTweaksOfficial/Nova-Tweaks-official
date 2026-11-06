@@ -13,7 +13,8 @@ providers, Teredo/ISATAP/6to4 and NIC tuning, CPU idle and wake controls, update
 Hyper-V boot options, deeper privacy controls, and a large macOS set covering pointer acceleration, key repeat,
 scroll behavior, Dock/Finder animations, Power Nap, GPU switching, local snapshots, LaunchServices, analytics,
 advertising, and more. Every entry still performs a real registry, service, power, network, or macOS
-`defaults` change.
+`defaults` change. On macOS, tweaks that touch protected system settings (`pmset`, `nvram`, `networksetup`,
+Spotlight, Time Machine) ask for administrator approval for that one action; the app itself never runs as root.
 
 v5.2 added a Windows **Drag Macro** (capture start/end, adjustable swipe duration, hold time, repeat and loop)
 and a **BIOS / UEFI** page that detects firmware, memory speed, XMP/EXPO, Secure Boot, boot mode, VBS/HVCI and
@@ -65,7 +66,7 @@ Invoke-PS2EXE `
   -Description "Nova Tweaks performance suite - by Kyle Bonebrake" `
   -Company "Nova Tweaks" `
   -Product "Nova Tweaks" `
-  -Version "5.3.0.0" `
+  -Version "5.3.1.0" `
   -RequireAdmin `
   -NoConsole `
   -STA `
