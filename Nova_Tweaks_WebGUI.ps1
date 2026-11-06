@@ -9,7 +9,7 @@
 #>
 
 $IsWin = $IsWindows -or ($env:OS -eq "Windows_NT")
-$IsMac = $IsMacOS -or ((uname 2>/dev/null) -eq "Darwin")
+$IsMac = $IsMacOS -or ($env:OS -ne "Windows_NT" -and (Test-Path "/System/Library/CoreServices/SystemVersion.plist"))
 
 $Script:Root = if ($IsWin) { Join-Path $env:USERPROFILE "NovaTweaks" } else { Join-Path $env:HOME ".novatweaks" }
 $Script:BackupDir = Join-Path $Script:Root "backups"
