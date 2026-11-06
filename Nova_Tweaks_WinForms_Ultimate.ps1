@@ -17,10 +17,10 @@ Add-Type -AssemblyName System.Drawing
 
 # ---------- Theme (Vibrant Red) ----------
 $C = @{
-    Bg        = [System.Drawing.Color]::FromArgb(8,8,12)
-    Sidebar   = [System.Drawing.Color]::FromArgb(14,14,20)
-    Card      = [System.Drawing.Color]::FromArgb(18,18,28)
-    Card2     = [System.Drawing.Color]::FromArgb(24,24,36)
+    Bg        = [System.Drawing.Color]::FromArgb(10,10,16)
+    Sidebar   = [System.Drawing.Color]::FromArgb(12,12,18)
+    Card      = [System.Drawing.Color]::FromArgb(16,16,24)
+    Card2     = [System.Drawing.Color]::FromArgb(22,22,32)
     CardHover = [System.Drawing.Color]::FromArgb(30,30,44)
     Red       = [System.Drawing.Color]::FromArgb(255,26,46)
     Red2      = [System.Drawing.Color]::FromArgb(204,0,24)
@@ -43,6 +43,24 @@ $FontBody  = New-Object System.Drawing.Font("Segoe UI",10)
 $FontSmall = New-Object System.Drawing.Font("Segoe UI",8.5)
 $FontMono  = New-Object System.Drawing.Font("Consolas",9)
 $FontBig   = New-Object System.Drawing.Font("Segoe UI",26,[System.Drawing.FontStyle]::Bold)
+
+
+# ---------- UI Helpers ----------
+function Set-RoundedRegion($ctrl,$radius) {
+    try {
+        $r = [System.Drawing.Region]::FromHrgn([Win32Ex]::CreateRoundRectRgn(0,0,$ctrl.Width,$ctrl.Height,$radius,$radius))
+        $ctrl.Region = $r
+    } catch {}
+}
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public class Win32Ex2 {
+    [DllImport("gdi32.dll")] public static extern IntPtr CreateRoundRectRgn(int nLeftRect,int nTopRect,int nRightRect,int nBottomRect,int nWidthEllipse,int nHeightEllipse);
+}
+"@ -ErrorAction SilentlyContinue
+# alias
+$script:RoundRgn = [Win32Ex2]
 
 # ---------- Paths ----------
 $Script:Root      = Join-Path $env:USERPROFILE "NovaTweaks"
@@ -1128,7 +1146,8 @@ function Show-MainForm {
     $form.StartPosition = "CenterScreen"
     $form.BackColor = $C.Bg
     $form.ForeColor = $C.Text
-    $form.FormBorderStyle = "FixedSingle"
+    $form.FormBorderStyle = "Sizable"
+    $form.MinimumSize = New-Object System.Drawing.Size(1100,700)
     $form.MaximizeBox = $false
     $form.Font = $FontBody
 
