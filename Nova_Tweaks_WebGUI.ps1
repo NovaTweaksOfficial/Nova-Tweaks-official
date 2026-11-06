@@ -1646,6 +1646,13 @@ spotify.exe</textarea>
     <div style="margin-top:16px;color:var(--textdim);font-size:12px;line-height:1.8">
       <b style="color:var(--text)">Pro:</b> All tweaks + Input Response Accelerator + Network Spike Smoother + Potato Graphics + full Game Booster. Everyone gets Pro.
     </div>
+    <h3 style="margin:18px 0 8px;font-size:14px">Account Sync</h3>
+    <div style="font-size:12px;color:var(--textdim);margin-bottom:8px">Export your account to a sync code, then import it on another device.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      <button class="btn ghost sm" id="exportSyncBtn">Export Sync Code</button>
+      <button class="btn ghost sm" id="importSyncBtn">Import Sync Code</button>
+    </div>
+    <textarea class="textarea" id="syncCode" style="min-height:60px" placeholder="Sync code appears here..."></textarea>
     <h3 style="margin:18px 0 8px;font-size:14px">Appearance</h3>
     <label style="font-size:12px;display:block;margin-bottom:4px">Accent color</label>
     <input type="color" id="accentColor" value="#ff1a2e" style="width:60px;height:32px;border:none;background:none">
@@ -1901,6 +1908,23 @@ document.getElementById('toggleSnow').addEventListener('change',e=>{document.get
   try{const bc=new BroadcastChannel('nova_online');bc.onmessage=()=>update();}catch{}
   window.addEventListener('beforeunload',()=>{const o=read();delete o[ID];write(o);});
 })();
+
+
+document.getElementById('exportSyncBtn').addEventListener('click',()=>{
+  const acc=state.user; if(!acc){showToast('Sign in first');return;}
+  const code=btoa(JSON.stringify(acc));
+  document.getElementById('syncCode').value=code; showToast('Sync code generated');
+});
+document.getElementById('importSyncBtn').addEventListener('click',async()=>{
+  const code=document.getElementById('syncCode').value.trim(); if(!code){showToast('Paste a sync code');return;}
+  try{
+    const acc=JSON.parse(atob(code));
+    await api('/api/register',{name:acc.Name,email:acc.Email,password:'synced'});
+    const r=await api('/api/login',{email:acc.Email,password:'synced'});
+    if(r.success){onLogin(r.account);showToast('Account imported');}
+    else showToast(r.message);
+  }catch(e){showToast('Invalid sync code');}
+});
 
 renderStats();renderCatBar();loadTweaks();
 const h=new Date().getHours();document.getElementById('greeting').textContent=h<12?'Good morning':h<18?'Good afternoon':'Good evening';
