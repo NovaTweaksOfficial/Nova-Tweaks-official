@@ -31,7 +31,7 @@ jobs:
       - name: Compile to EXE
         shell: pwsh
         run: |
-          $scriptPath = "Nova_Tweaks_WebGUI.ps1"
+          $scriptPath = "Nova_Tweaks_WinForms_Ultimate.ps1"
           $outputPath = "NovaTweaks.exe"
           if (-not (Test-Path $scriptPath)) {
             Write-Error "Script not found: $scriptPath"
