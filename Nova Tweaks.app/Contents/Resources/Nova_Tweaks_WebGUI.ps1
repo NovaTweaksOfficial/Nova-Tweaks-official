@@ -1387,6 +1387,7 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
       <div class="login-logo" style="font-size:56px">Nova Tweaks</div>
       <div class="login-sub" style="letter-spacing:6px">Performance Suite</div>
       <div style="display:flex;gap:18px;justify-content:center;margin-top:14px;flex-wrap:wrap">
+        <div style="text-align:center"><div id="onlineCount" style="font-size:22px;font-weight:900;color:var(--text)">1</div><div style="font-size:9px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px">Users Online</div></div>
         <div style="text-align:center"><div style="font-size:22px;font-weight:900;color:var(--text)">750+</div><div style="font-size:9px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px">Tweaks</div></div>
         <div style="text-align:center"><div style="font-size:22px;font-weight:900;color:var(--text)">8</div><div style="font-size:9px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px">Categories</div></div>
         <div style="text-align:center"><div style="font-size:22px;font-weight:900;color:var(--text)">100%</div><div style="font-size:9px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px">Reversible</div></div>
@@ -1880,6 +1881,20 @@ document.getElementById('accentColor').addEventListener('input',e=>{document.doc
 document.getElementById('sidebarColor').addEventListener('input',e=>{document.querySelector('.sidebar').style.background=e.target.value;});
 document.getElementById('toggleOutline').addEventListener('change',e=>{document.querySelectorAll('.tweakcard').forEach(c=>{if(e.target.checked)c.classList.add('rotating-outline');else c.classList.remove('rotating-outline');});});
 document.getElementById('toggleSnow').addEventListener('change',e=>{document.getElementById('snowCanvas').style.display=e.target.checked?'block':'none';});
+
+
+// Live online-user counter (tracks open sessions via BroadcastChannel + localStorage heartbeat)
+(function(){
+  const KEY='nova_online_users';
+  const ID=Math.random().toString(36).slice(2);
+  function read(){try{return JSON.parse(localStorage.getItem(KEY)||'{}')}catch{return {}}}
+  function write(o){try{localStorage.setItem(KEY,JSON.stringify(o))}catch{}}
+  function beat(){const o=read();const now=Date.now();for(const k in o){if(now-o[k]>15000)delete o[k]}o[ID]=now;write(o);update();}
+  function update(){const o=read();const now=Date.now();let n=0;for(const k in o){if(now-o[k]<=15000)n++}const el=document.getElementById('onlineCount');if(el)el.textContent=Math.max(1,n);}
+  beat();setInterval(beat,5000);
+  try{const bc=new BroadcastChannel('nova_online');bc.onmessage=()=>update();}catch{}
+  window.addEventListener('beforeunload',()=>{const o=read();delete o[ID];write(o);});
+})();
 
 renderStats();renderCatBar();loadTweaks();
 const h=new Date().getHours();document.getElementById('greeting').textContent=h<12?'Good morning':h<18?'Good afternoon':'Good evening';
