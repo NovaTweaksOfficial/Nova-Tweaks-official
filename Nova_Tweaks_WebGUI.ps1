@@ -341,10 +341,101 @@ function Invoke-BCDEdit {
 # Revert All
 function Revert-All {
     if ($IsWin) {
+        # Power plan + base network/BCD
         powercfg /setactive 381b4222-f694-41f0-9685-ff5bb260df2e 2>$null
         netsh interface tcp set global autotuninglevel=normal 2>$null | Out-Null
         bcdedit /set disabledynamictick no 2>$null | Out-Null
+        bcdedit /set useplatformtick no 2>$null | Out-Null
+        bcdedit /set useplatformclock false 2>$null | Out-Null
+        bcdedit /set tscsyncpolicy Default 2>$null | Out-Null
+        bcdedit /timeout 30 2>$null | Out-Null
+        try { netsh int tcp set supplemental template=internet congestionprovider=CUBIC 2>$null | Out-Null } catch {}
         @("XblAuthManager","XblGameSave","XboxGipSvc","XboxNetApiSvc","DiagTrack","dmwappushservice","SysMain") | ForEach-Object { Set-Service -Name $_ -StartupType Manual -ErrorAction SilentlyContinue }
+
+        # Network
+        try {
+            Get-NetAdapter -ErrorAction SilentlyContinue | ForEach-Object {
+                try { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ResetServerAddresses -ErrorAction SilentlyContinue } catch {}
+                try { Set-NetAdapterRss -Name $_.Name -Enabled $true -ErrorAction SilentlyContinue } catch {}
+                try { Set-NetAdapterAdvancedProperty -Name $_.Name -DisplayName "Interrupt Moderation" -DisplayValue "Enabled" -ErrorAction SilentlyContinue } catch {}
+            }
+        } catch {}
+        try { Get-ChildItem "HKLM:\SYSTEM\CurrentControlSet\Services\NetBT\Parameters\Interfaces" -ErrorAction SilentlyContinue | ForEach-Object { Set-ItemProperty -Path $_.PSPath -Name "NetbiosOptions" -Value 0 -Type DWord -Force } } catch {}
+        try { Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient" -Name "EnableMulticast" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue } catch {}
+        try { Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters" -Name "DisabledComponents" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue } catch {}
+        try { Set-SmbServerConfiguration -EnableSMB1Protocol $true -Force -ErrorAction SilentlyContinue } catch {}
+        try { Set-SmbClientConfiguration -EnableInsecureGuestLogons $true -Force -ErrorAction SilentlyContinue } catch {}
+        ipconfig /flushdns 2>$null | Out-Null
+
+        # Power
+        powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMIN 5 2>$null | Out-Null
+        powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMIN 5 2>$null | Out-Null
+        powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFBOOSTMODE 1 2>$null | Out-Null
+        powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFBOOSTMODE 1 2>$null | Out-Null
+        powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR SYSCOOLPOL 0 2>$null | Out-Null
+        powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR SYSCOOLPOL 0 2>$null | Out-Null
+        powercfg /setacvalueindex SCHEME_CURRENT SUB_PCIEXPRESS ASPM 1 2>$null | Out-Null
+        powercfg /setdcvalueindex SCHEME_CURRENT SUB_PCIEXPRESS ASPM 1 2>$null | Out-Null
+        powercfg /setacvalueindex SCHEME_CURRENT SUB_ENERGYSAVER ESBATTTHRESHOLD 20 2>$null | Out-Null
+        powercfg /setactive SCHEME_CURRENT 2>$null | Out-Null
+        powercfg /change standby-timeout-ac 30 2>$null | Out-Null
+        powercfg /change hibernate-timeout-ac 180 2>$null | Out-Null
+        powercfg /change disk-timeout-ac 20 2>$null | Out-Null
+        powercfg /change disk-timeout-dc 20 2>$null | Out-Null
+
+        # Visual
+        try { Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\PushNotifications" -Name "ToastEnabled" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue } catch {}
+        try { Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Notifications\Settings" -Name "NOC_GLOBAL_SETTING_TOASTS_ENABLED" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue } catch {}
+        try { Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "MinAnimate" -Value "1" -Type String -Force -ErrorAction SilentlyContinue } catch {}
+        try { Set-ItemProperty -Path "HKCU:\Control Panel\Desktop\WindowMetrics" -Name "MinAnimate" -Value "1" -Type String -Force -ErrorAction SilentlyContinue } catch {}
+        try { Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue } catch {}
+        try {
+            $adv = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+            Set-ItemProperty -Path $adv -Name "SnapAssist" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $adv -Name "SnapFill" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $adv -Name "JointResize" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+        } catch {}
+
+        # Services + vendor tasks
+        Set-Service -Name "RemoteRegistry" -StartupType Manual -ErrorAction SilentlyContinue
+        try { Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue } catch {}
+        $telTasks = @(
+            "\Microsoft\Windows\Application Experience\ProgramDataUpdater",
+            "\Microsoft\Windows\Application Experience\AitAgent",
+            "\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser",
+            "\Microsoft\Windows\Customer Experience Improvement Program\Consolidator",
+            "\Microsoft\Windows\Customer Experience Improvement Program\UsbCeip"
+        )
+        foreach ($t in $telTasks) {
+            try {
+                $i = $t.LastIndexOf('\')
+                Enable-ScheduledTask -TaskPath $t.Substring(0, $i + 1) -TaskName $t.Substring($i + 1) -ErrorAction SilentlyContinue | Out-Null
+            } catch {}
+        }
+        try { Set-Service -Name "NvTelemetryContainer" -StartupType Automatic -ErrorAction SilentlyContinue; Start-Service -Name "NvTelemetryContainer" -ErrorAction SilentlyContinue } catch {}
+        try { Get-ScheduledTask -TaskName "Nv*" -ErrorAction SilentlyContinue | ForEach-Object { Enable-ScheduledTask -TaskPath $_.TaskPath -TaskName $_.TaskName -ErrorAction SilentlyContinue | Out-Null } } catch {}
+        try { Set-Service -Name "AMD Crash Defender Service" -StartupType Manual -ErrorAction SilentlyContinue } catch {}
+        try { Get-ScheduledTask -TaskName "AMD*" -ErrorAction SilentlyContinue | ForEach-Object { Enable-ScheduledTask -TaskPath $_.TaskPath -TaskName $_.TaskName -ErrorAction SilentlyContinue | Out-Null } } catch {}
+
+        # Storage
+        fsutil behavior set memoryusage 1 2>$null | Out-Null
+
+        # Privacy
+        try { Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors" -Name "DisableLocation" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue } catch {}
+        foreach ($cap in @("location", "webcam", "microphone")) {
+            try { Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\$cap" -Name "Value" -Value "Allow" -Type String -Force -ErrorAction SilentlyContinue } catch {}
+        }
+        try {
+            Set-ItemProperty -Path "HKCU:\Software\Microsoft\Clipboard" -Name "EnableClipboardHistory" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path "HKCU:\Software\Microsoft\Clipboard" -Name "CloudClipboardAutomaticUpload" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+        } catch {}
+        try { Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "Start_TrackProgs" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue } catch {}
+        try { Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Privacy" -Name "TailoredExperiencesWithDiagnosticDataEnabled" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue } catch {}
+
+        # General
+        try { Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue } catch {}
+        try { Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\Maintenance" -Name "MaintenanceDisabled" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue } catch {}
+
         Write-Log "Windows revert complete. Reboot recommended." "OK"
     } else {
         try {
@@ -355,12 +446,29 @@ function Revert-All {
             defaults delete com.apple.dashboard mcx-disabled 2>$null
             defaults delete NSGlobalDomain KeyRepeat 2>$null
             defaults delete NSGlobalDomain InitialKeyRepeat 2>$null
+            defaults write com.apple.assistant.support "Assistant Enabled" -bool true 2>$null
+            defaults write com.apple.Siri SiriEnabled -bool true 2>$null
+            tmutil enable 2>$null
+            softwareupdate --schedule on 2>$null | Out-Null
+            defaults write com.apple.SoftwareUpdate AutomaticCheckEnabled -bool true 2>$null
+            defaults write com.apple.SoftwareUpdate AutomaticDownload -bool true 2>$null
+            defaults write com.apple.SoftwareUpdate CriticalUpdateInstall -bool true 2>$null
+            defaults delete com.apple.dock autohide-time-modifier 2>$null
+            defaults delete com.apple.dock autohide-delay 2>$null
+            defaults write NSGlobalDomain AppleEnableMenuBarTransparency -bool true 2>$null
+            defaults write com.apple.screencapture disable-shadow -bool false 2>$null
+            defaults write com.apple.coreservices.useractivityd ActivityAdvertisingAllowed -bool true 2>$null
+            defaults write com.apple.coreservices.useractivityd ActivityReceivingAllowed -bool true 2>$null
             mdutil -i on / 2>$null
             pmset -c sleep 10 2>$null; pmset -a sms 1 2>$null
             killall Dock 2>$null
+            killall SystemUIServer 2>$null
+            killall Siri 2>$null
             Write-Log "macOS revert complete." "OK"
         } catch { Write-Log "Revert partial." "WARN" }
     }
+    $Script:Config.TweakStates = @{}
+    Save-Config
 }
 
 # ---------- EXTRA TWEAK FUNCTIONS ----------
@@ -405,6 +513,695 @@ function Invoke-MacDisableWindowAnimations { if (-not $IsMac) { Write-Log "macOS
 function Invoke-MacDisableFontSmoothing { if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }; try { defaults -currentHost write -globalDomain AppleFontSmoothing -int 0; Write-Log "Font smoothing disabled." "OK" } catch { Write-Log "Font smoothing failed." "WARN" } }
 function Invoke-MacPurgeMemory { if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }; try { purge 2>$null; Write-Log "Memory purged." "OK" } catch { Write-Log "Purge failed." "WARN" } }
 function Invoke-MacDisableSpotlight { if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }; try { mdutil -i off / 2>$null; Write-Log "Spotlight disabled." "OK" } catch { Write-Log "Spotlight failed." "WARN" } }
+
+# ---------- v5.2 TWEAK FUNCTIONS ----------
+# Network
+function Invoke-DnsCloudflare {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        $adapters = @(Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Up" })
+        foreach ($a in $adapters) {
+            try { Set-DnsClientServerAddress -InterfaceIndex $a.ifIndex -ServerAddresses @("1.1.1.1", "1.0.0.1") -ErrorAction SilentlyContinue } catch {}
+        }
+        ipconfig /flushdns 2>$null | Out-Null
+        Write-Log "Cloudflare DNS set on $($adapters.Count) active adapter(s); DNS cache flushed." "OK"
+    } catch { Write-Log "DNS tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-DisableNetbios {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        $iface = "HKLM:\SYSTEM\CurrentControlSet\Services\NetBT\Parameters\Interfaces"
+        $n = 0
+        Get-ChildItem $iface -ErrorAction SilentlyContinue | ForEach-Object {
+            Set-ItemProperty -Path $_.PSPath -Name "NetbiosOptions" -Value 2 -Type DWord -Force
+            $n++
+        }
+        Write-Log "NetBIOS over TCP/IP disabled on $n interface(s)." "OK"
+    } catch { Write-Log "NetBIOS tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-EnableRss {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        $n = 0
+        Get-NetAdapter -ErrorAction SilentlyContinue | ForEach-Object {
+            try { Set-NetAdapterRss -Name $_.Name -Enabled $true -ErrorAction Stop; $n++ } catch {}
+        }
+        Write-Log "Receive Side Scaling enabled on $n adapter(s)." "OK"
+    } catch { Write-Log "RSS tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-DisableInterruptModeration {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        $n = 0
+        Get-NetAdapter -ErrorAction SilentlyContinue | ForEach-Object {
+            try { Set-NetAdapterAdvancedProperty -Name $_.Name -DisplayName "Interrupt Moderation" -DisplayValue "Disabled" -ErrorAction Stop; $n++ } catch {}
+        }
+        Write-Log "Interrupt moderation disabled on $n adapter(s)." "OK"
+    } catch { Write-Log "Interrupt moderation tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-DisableSmb1 {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        Set-SmbServerConfiguration -EnableSMB1Protocol $false -Force -ErrorAction Stop
+        Set-SmbClientConfiguration -EnableInsecureGuestLogons $false -Force -ErrorAction SilentlyContinue
+        Write-Log "SMBv1 disabled; insecure guest logons blocked." "OK"
+    } catch { Write-Log "SMBv1 tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-TcpCongestionCtcp {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        netsh int tcp set supplemental template=internet congestionprovider=ctcp 2>$null | Out-Null
+        Write-Log "TCP congestion provider set to CTCP (reboot recommended)." "OK"
+    } catch { Write-Log "CTCP tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-DisableLlmnr {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        $p = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient"
+        if (-not (Test-Path $p)) { New-Item -Path $p -Force | Out-Null }
+        Set-ItemProperty -Path $p -Name "EnableMulticast" -Value 0 -Type DWord -Force
+        Write-Log "LLMNR disabled." "OK"
+    } catch { Write-Log "LLMNR tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-DisableIPv6 {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        $p = "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters"
+        if (-not (Test-Path $p)) { New-Item -Path $p -Force | Out-Null }
+        Set-ItemProperty -Path $p -Name "DisabledComponents" -Value 0xFFFFFFFF -Type DWord -Force
+        Write-Log "IPv6 disabled (reboot required)." "OK"
+    } catch { Write-Log "IPv6 tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+# Power
+function Invoke-CpuMinState100 {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMIN 100 2>$null | Out-Null
+        powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMIN 100 2>$null | Out-Null
+        powercfg /setactive SCHEME_CURRENT 2>$null | Out-Null
+        Write-Log "CPU minimum state set to 100%." "OK"
+    } catch { Write-Log "CPU minimum state failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-NoSleep {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        powercfg /change standby-timeout-ac 0 2>$null | Out-Null
+        powercfg /change hibernate-timeout-ac 0 2>$null | Out-Null
+        Write-Log "Sleep and hibernate timeouts disabled on AC." "OK"
+    } catch { Write-Log "Sleep timeout tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-BatterySaverOff {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        powercfg /setdcvalueindex SCHEME_CURRENT SUB_ENERGYSAVER ESBATTTHRESHOLD 0 2>$null | Out-Null
+        powercfg /setactive SCHEME_CURRENT 2>$null | Out-Null
+        Write-Log "Battery saver threshold disabled." "OK"
+    } catch { Write-Log "Battery saver tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-DiskSleepOff {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        powercfg /change disk-timeout-ac 0 2>$null | Out-Null
+        powercfg /change disk-timeout-dc 0 2>$null | Out-Null
+        Write-Log "Disk sleep disabled on AC and battery." "OK"
+    } catch { Write-Log "Disk sleep tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+# Visual
+function Invoke-NotificationsOff {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        $p = "HKCU:\Software\Microsoft\Windows\CurrentVersion\PushNotifications"
+        if (-not (Test-Path $p)) { New-Item -Path $p -Force | Out-Null }
+        Set-ItemProperty -Path $p -Name "ToastEnabled" -Value 0 -Type DWord -Force
+        $p2 = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Notifications\Settings"
+        if (-not (Test-Path $p2)) { New-Item -Path $p2 -Force | Out-Null }
+        Set-ItemProperty -Path $p2 -Name "NOC_GLOBAL_SETTING_TOASTS_ENABLED" -Value 0 -Type DWord -Force
+        Write-Log "Notification toasts disabled." "OK"
+    } catch { Write-Log "Notification tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-WindowAnimationsOff {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "MinAnimate" -Value "0" -Type String -Force
+        Set-ItemProperty -Path "HKCU:\Control Panel\Desktop\WindowMetrics" -Name "MinAnimate" -Value "0" -Type String -Force
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2 -Type DWord -Force
+        Write-Log "Window animations disabled." "OK"
+    } catch { Write-Log "Window animation tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-SnapAssistOff {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        $p = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+        if (-not (Test-Path $p)) { New-Item -Path $p -Force | Out-Null }
+        foreach ($n in @("SnapAssist", "SnapFill", "SnapAssistEngaged", "JointResize")) {
+            Set-ItemProperty -Path $p -Name $n -Value 0 -Type DWord -Force
+        }
+        Write-Log "Snap Assist and window snapping disabled." "OK"
+    } catch { Write-Log "Snap Assist tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+# Services
+function Invoke-DisableRemoteRegistry {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        Stop-Service -Name RemoteRegistry -Force -ErrorAction SilentlyContinue
+        Set-Service -Name RemoteRegistry -StartupType Disabled -ErrorAction SilentlyContinue
+        Write-Log "Remote Registry disabled." "OK"
+    } catch { Write-Log "Remote Registry tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-DisableRemoteDesktop {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        $p = "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server"
+        Set-ItemProperty -Path $p -Name "fDenyTSConnections" -Value 1 -Type DWord -Force
+        Write-Log "Incoming Remote Desktop connections blocked." "OK"
+    } catch { Write-Log "Remote Desktop tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-DisableTelemetryTasks {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    $tasks = @(
+        "\Microsoft\Windows\Application Experience\ProgramDataUpdater",
+        "\Microsoft\Windows\Application Experience\AitAgent",
+        "\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser",
+        "\Microsoft\Windows\Customer Experience Improvement Program\Consolidator",
+        "\Microsoft\Windows\Customer Experience Improvement Program\UsbCeip"
+    )
+    $n = 0
+    foreach ($t in $tasks) {
+        try {
+            $i = $t.LastIndexOf('\')
+            $path = $t.Substring(0, $i + 1)
+            $name = $t.Substring($i + 1)
+            Disable-ScheduledTask -TaskPath $path -TaskName $name -ErrorAction Stop | Out-Null
+            $n++
+        } catch {}
+    }
+    Write-Log "Disabled $n telemetry scheduled task(s)." "OK"
+}
+
+# Game / vendor background
+function Invoke-NvidiaTelemetryOff {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        foreach ($s in @("NvTelemetryContainer")) {
+            $svc = Get-Service -Name $s -ErrorAction SilentlyContinue
+            if ($svc) {
+                Stop-Service -Name $s -Force -ErrorAction SilentlyContinue
+                Set-Service -Name $s -StartupType Disabled -ErrorAction SilentlyContinue
+            }
+        }
+        $tasks = @(Get-ScheduledTask -TaskName "Nv*" -ErrorAction SilentlyContinue)
+        foreach ($t in $tasks) { try { Disable-ScheduledTask -TaskPath $t.TaskPath -TaskName $t.TaskName -ErrorAction SilentlyContinue | Out-Null } catch {} }
+        Write-Log "NVIDIA telemetry service and scheduled tasks disabled." "OK"
+    } catch { Write-Log "NVIDIA telemetry tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-AmdTelemetryOff {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        $svc = Get-Service -Name "AMD Crash Defender Service" -ErrorAction SilentlyContinue
+        if ($svc) {
+            Stop-Service -Name "AMD Crash Defender Service" -Force -ErrorAction SilentlyContinue
+            Set-Service -Name "AMD Crash Defender Service" -StartupType Disabled -ErrorAction SilentlyContinue
+        }
+        $tasks = @(Get-ScheduledTask -TaskName "AMD*" -ErrorAction SilentlyContinue)
+        foreach ($t in $tasks) { try { Disable-ScheduledTask -TaskPath $t.TaskPath -TaskName $t.TaskName -ErrorAction SilentlyContinue | Out-Null } catch {} }
+        Write-Log "AMD telemetry service and scheduled tasks disabled." "OK"
+    } catch { Write-Log "AMD telemetry tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+# Storage
+function Invoke-NtfsMemoryUsage {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        fsutil behavior set memoryusage 2 2>$null | Out-Null
+        Write-Log "NTFS memory usage increased for metadata caching." "OK"
+    } catch { Write-Log "NTFS memory tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-WinSxSCleanup {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        Dism.exe /Online /Cleanup-Image /StartComponentCleanup /Quiet 2>$null | Out-Null
+        Write-Log "WinSxS component store cleanup complete." "OK"
+    } catch { Write-Log "WinSxS cleanup failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-ClearPrefetch {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        Remove-Item -Path "$env:WINDIR\Prefetch\*.pf" -Force -ErrorAction SilentlyContinue
+        Write-Log "Prefetch cache cleared." "OK"
+    } catch { Write-Log "Prefetch clear failed: $($_.Exception.Message)" "WARN" }
+}
+
+# Firmware-adjacent (OS-level only; no BIOS flashing)
+function Invoke-BcdTimeout {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        bcdedit /timeout 3 2>$null | Out-Null
+        Write-Log "Boot manager timeout set to 3 seconds." "OK"
+    } catch { Write-Log "Boot timeout tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-BcdBootMenu {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        bcdedit /set "{current}" bootmenupolicy Standard 2>$null | Out-Null
+        Write-Log "Boot menu policy set to Standard." "OK"
+    } catch { Write-Log "Boot menu tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-BcdPlatformTick {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        bcdedit /set useplatformtick yes 2>$null | Out-Null
+        Write-Log "Platform tick source enabled (reboot required)." "OK"
+    } catch { Write-Log "Platform tick tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-PcieAspmOff {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        powercfg /setacvalueindex SCHEME_CURRENT SUB_PCIEXPRESS ASPM 0 2>$null | Out-Null
+        powercfg /setdcvalueindex SCHEME_CURRENT SUB_PCIEXPRESS ASPM 0 2>$null | Out-Null
+        powercfg /setactive SCHEME_CURRENT 2>$null | Out-Null
+        Write-Log "PCIe ASPM disabled." "OK"
+    } catch { Write-Log "PCIe ASPM tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-CpuBoostAggressive {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFBOOSTMODE 2 2>$null | Out-Null
+        powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFBOOSTMODE 2 2>$null | Out-Null
+        powercfg /setactive SCHEME_CURRENT 2>$null | Out-Null
+        Write-Log "CPU performance boost mode set to Aggressive." "OK"
+    } catch { Write-Log "CPU boost tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-CoolingActive {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR SYSCOOLPOL 1 2>$null | Out-Null
+        powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR SYSCOOLPOL 1 2>$null | Out-Null
+        powercfg /setactive SCHEME_CURRENT 2>$null | Out-Null
+        Write-Log "System cooling policy set to Active." "OK"
+    } catch { Write-Log "Cooling policy tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+# Privacy
+function Invoke-LocationOff {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        $p = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors"
+        if (-not (Test-Path $p)) { New-Item -Path $p -Force | Out-Null }
+        Set-ItemProperty -Path $p -Name "DisableLocation" -Value 1 -Type DWord -Force
+        $c = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location"
+        if (-not (Test-Path $c)) { New-Item -Path $c -Force | Out-Null }
+        Set-ItemProperty -Path $c -Name "Value" -Value "Deny" -Type String -Force
+        Write-Log "Location access denied." "OK"
+    } catch { Write-Log "Location tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-CameraOff {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        $c = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\webcam"
+        if (-not (Test-Path $c)) { New-Item -Path $c -Force | Out-Null }
+        Set-ItemProperty -Path $c -Name "Value" -Value "Deny" -Type String -Force
+        Write-Log "Camera access denied for all apps." "OK"
+    } catch { Write-Log "Camera tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-MicrophoneOff {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        $c = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone"
+        if (-not (Test-Path $c)) { New-Item -Path $c -Force | Out-Null }
+        Set-ItemProperty -Path $c -Name "Value" -Value "Deny" -Type String -Force
+        Write-Log "Microphone access denied for all apps." "OK"
+    } catch { Write-Log "Microphone tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-ClipboardSyncOff {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        $p = "HKCU:\Software\Microsoft\Clipboard"
+        if (-not (Test-Path $p)) { New-Item -Path $p -Force | Out-Null }
+        Set-ItemProperty -Path $p -Name "EnableClipboardHistory" -Value 0 -Type DWord -Force
+        Set-ItemProperty -Path $p -Name "CloudClipboardAutomaticUpload" -Value 0 -Type DWord -Force
+        Write-Log "Clipboard history and cloud sync disabled." "OK"
+    } catch { Write-Log "Clipboard tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-AppLaunchTrackingOff {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "Start_TrackProgs" -Value 0 -Type DWord -Force
+        Write-Log "App launch tracking disabled." "OK"
+    } catch { Write-Log "App tracking tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-TailoredExperiencesOff {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        $p = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Privacy"
+        if (-not (Test-Path $p)) { New-Item -Path $p -Force | Out-Null }
+        Set-ItemProperty -Path $p -Name "TailoredExperiencesWithDiagnosticDataEnabled" -Value 0 -Type DWord -Force
+        Write-Log "Tailored experiences disabled." "OK"
+    } catch { Write-Log "Tailored experiences tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+# General
+function Invoke-LongPaths {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1 -Type DWord -Force
+        Write-Log "Long file paths enabled." "OK"
+    } catch { Write-Log "Long paths tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-ResetNetworkStack {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        netsh winsock reset 2>$null | Out-Null
+        netsh int ip reset 2>$null | Out-Null
+        ipconfig /flushdns 2>$null | Out-Null
+        Write-Log "Winsock and TCP/IP reset; DNS flushed. Reboot required." "OK"
+    } catch { Write-Log "Network reset failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-DisableAutoMaintenance {
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        $p = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\Maintenance"
+        if (-not (Test-Path $p)) { New-Item -Path $p -Force | Out-Null }
+        Set-ItemProperty -Path $p -Name "MaintenanceDisabled" -Value 1 -Type DWord -Force
+        Write-Log "Automatic maintenance disabled." "OK"
+    } catch { Write-Log "Maintenance tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+# macOS
+function Invoke-MacDisableSiri {
+    if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }
+    try {
+        defaults write com.apple.assistant.support "Assistant Enabled" -bool false 2>$null
+        defaults write com.apple.Siri SiriEnabled -bool false 2>$null
+        killall Siri 2>$null
+        Write-Log "Siri disabled." "OK"
+    } catch { Write-Log "Siri tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-MacDisableTimeMachine {
+    if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }
+    try { tmutil disable 2>$null; Write-Log "Time Machine disabled." "OK" } catch { Write-Log "Time Machine tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-MacDisableAutoUpdates {
+    if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }
+    try {
+        softwareupdate --schedule off 2>$null | Out-Null
+        defaults write com.apple.SoftwareUpdate AutomaticCheckEnabled -bool false 2>$null
+        defaults write com.apple.SoftwareUpdate AutomaticDownload -bool false 2>$null
+        defaults write com.apple.SoftwareUpdate CriticalUpdateInstall -bool false 2>$null
+        Write-Log "Automatic macOS updates disabled." "OK"
+    } catch { Write-Log "Auto update tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-MacDockAnimationsOff {
+    if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }
+    try {
+        defaults write com.apple.dock autohide-time-modifier -float 0 2>$null
+        defaults write com.apple.dock autohide-delay -float 0 2>$null
+        killall Dock 2>$null
+        Write-Log "Dock animations disabled." "OK"
+    } catch { Write-Log "Dock animation tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-MacMenuBarTransparencyOff {
+    if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }
+    try {
+        defaults write NSGlobalDomain AppleEnableMenuBarTransparency -bool false 2>$null
+        killall SystemUIServer 2>$null
+        Write-Log "Menu bar transparency disabled." "OK"
+    } catch { Write-Log "Menu bar tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-MacScreenshotShadowOff {
+    if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }
+    try {
+        defaults write com.apple.screencapture disable-shadow -bool true 2>$null
+        killall SystemUIServer 2>$null
+        Write-Log "Screenshot window shadow disabled." "OK"
+    } catch { Write-Log "Screenshot shadow tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-MacDisableHandoff {
+    if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }
+    try {
+        defaults write com.apple.coreservices.useractivityd ActivityAdvertisingAllowed -bool false 2>$null
+        defaults write com.apple.coreservices.useractivityd ActivityReceivingAllowed -bool false 2>$null
+        Write-Log "Handoff/Continuity advertising disabled." "OK"
+    } catch { Write-Log "Handoff tweak failed: $($_.Exception.Message)" "WARN" }
+}
+
+# ---------- DRAG MACRO ENGINE (Windows) ----------
+if (-not $Script:MacroSync) {
+    $Script:MacroSync = [hashtable]::Synchronized(@{
+        Running = $false; Stop = $false; Status = "Idle"; Iteration = 0
+        StartX = 0; StartY = 0; EndX = 0; EndY = 0
+        Duration = 300; Hold = 60; Repeat = 3; Loop = $false; Worker = $null
+    })
+}
+
+$Script:MacroWorker = {
+    param($sync)
+    $pressed = $false
+    try {
+        if (-not ("NovaMacroNative" -as [type])) {
+            Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public class NovaMacroNative {
+    [DllImport("user32.dll")] public static extern bool SetCursorPos(int X, int Y);
+    [DllImport("user32.dll")] public static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, UIntPtr dwExtraInfo);
+}
+"@ -ErrorAction Stop
+        }
+        $sync.Status = "Running"
+        $iter = 0
+        while (-not $sync.Stop) {
+            $iter++
+            $sync.Iteration = $iter
+            $steps = [Math]::Max(4, [int]([double]$sync.Duration / 10.0))
+            $stepDelay = [Math]::Max(1, [int]([double]$sync.Duration / $steps))
+            for ($i = 1; $i -le $steps; $i++) {
+                if ($sync.Stop) { break }
+                $t = [double]$i / [double]$steps
+                $x = [int]([double]$sync.StartX + ([double]$sync.EndX - [double]$sync.StartX) * $t)
+                $y = [int]([double]$sync.StartY + ([double]$sync.EndY - [double]$sync.StartY) * $t)
+                [NovaMacroNative]::SetCursorPos($x, $y) | Out-Null
+                Start-Sleep -Milliseconds $stepDelay
+            }
+            if ($sync.Stop) { break }
+            [NovaMacroNative]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero)
+            $pressed = $true
+            Start-Sleep -Milliseconds ([int]$sync.Hold)
+            [NovaMacroNative]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero)
+            $pressed = $false
+            if (-not [bool]$sync.Loop -and $iter -ge [int]$sync.Repeat) { break }
+            Start-Sleep -Milliseconds 40
+        }
+        $sync.Status = $(if ($sync.Stop) { "Stopped" } else { "Finished" })
+    } catch {
+        $sync.Status = "Error: $($_.Exception.Message)"
+    } finally {
+        try { if ($pressed) { [NovaMacroNative]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero) } } catch {}
+        $sync.Running = $false
+    }
+}
+
+function Get-NovaCursorPos {
+    if (-not $IsWin) { return $null }
+    try {
+        Add-Type -AssemblyName System.Windows.Forms -ErrorAction SilentlyContinue
+        $p = [System.Windows.Forms.Cursor]::Position
+        return @{ x = [int]$p.X; y = [int]$p.Y }
+    } catch { return $null }
+}
+
+function Start-NovaMacro {
+    param([int]$StartX, [int]$StartY, [int]$EndX, [int]$EndY, [int]$Duration = 300, [int]$Hold = 60, [int]$Repeat = 3, [bool]$Loop)
+    if (-not $IsWin) { return @{ success = $false; message = "Drag Macro is Windows only." } }
+    $sync = $Script:MacroSync
+    if ($sync.Running) { return @{ success = $false; message = "A macro is already running." } }
+    $Duration = [Math]::Min(5000, [Math]::Max(30, $Duration))
+    $Hold = [Math]::Min(5000, [Math]::Max(0, $Hold))
+    $Repeat = [Math]::Min(1000, [Math]::Max(1, $Repeat))
+    $sync.Stop = $false
+    $sync.Status = "Starting"
+    $sync.Iteration = 0
+    $sync.StartX = $StartX; $sync.StartY = $StartY
+    $sync.EndX = $EndX; $sync.EndY = $EndY
+    $sync.Duration = $Duration; $sync.Hold = $Hold
+    $sync.Repeat = $Repeat; $sync.Loop = [bool]$Loop
+    $ps = [PowerShell]::Create()
+    [void]$ps.AddScript($Script:MacroWorker).AddArgument($sync)
+    $sync.Worker = $ps
+    $sync.Running = $true
+    [void]$ps.BeginInvoke()
+    return @{ success = $true; message = "Macro started: $Repeat pass(es), $Duration ms per swipe." }
+}
+
+function Stop-NovaMacro {
+    if (-not $IsWin) { return @{ success = $false; message = "Drag Macro is Windows only." } }
+    if (-not $Script:MacroSync.Running) { return @{ success = $true; message = "Macro is not running." } }
+    $Script:MacroSync.Stop = $true
+    $Script:MacroSync.Status = "Stopping"
+    return @{ success = $true; message = "Macro stop requested." }
+}
+
+function Get-NovaMacroStatus {
+    if (-not $IsWin) { return @{ success = $false; running = $false; status = "Windows only" } }
+    $sync = $Script:MacroSync
+    if (-not $sync.Running -and $sync.Worker) {
+        try { $sync.Worker.Dispose() } catch {}
+        $sync.Worker = $null
+    }
+    return @{ success = $true; running = [bool]$sync.Running; status = [string]$sync.Status; iteration = [int]$sync.Iteration }
+}
+
+# ---------- BIOS / UEFI DETECTION ----------
+function Get-NovaBiosInfo {
+    $items = @()
+    $guidance = @()
+    if (-not $IsWin) {
+        $isAppleSilicon = $false
+        try { if ((sysctl -n hw.optional.arm64 2>$null) -eq "1") { $isAppleSilicon = $true } } catch {}
+        if (-not $isAppleSilicon) { try { $isAppleSilicon = ((uname -m 2>$null) -match "arm64") } catch {} }
+        try { $items += @{ k = "Model"; v = (sysctl -n hw.model 2>$null) } } catch {}
+        try { $cpu = (sysctl -n machdep.cpu.brand_string 2>$null); if ($cpu) { $items += @{ k = "Chip"; v = $cpu } } } catch {}
+        try { $items += @{ k = "Architecture"; v = $(if ($isAppleSilicon) { "Apple silicon (arm64)" } else { "Intel (x86_64)" }) } } catch {}
+        try { $items += @{ k = "OS"; v = "macOS $(sw_vers -productVersion 2>$null)" } } catch {}
+        if ($isAppleSilicon) {
+            $items += @{ k = "Firmware"; v = "Apple firmware is managed by macOS. No user-accessible BIOS/UEFI on Apple silicon." }
+            $guidance = @(
+                "Apple silicon Macs have no user-accessible BIOS/UEFI. Keep macOS updated and use System Settings for performance options.",
+                "There are no firmware knobs to change; the macOS tweaks in Nova Tweaks are OS-level and reversible.",
+                "Firmware/BIOS tweaks in Nova Tweaks are Windows-only because Windows exposes those settings to software."
+            )
+        } else {
+            $items += @{ k = "Firmware"; v = "Intel Mac firmware is managed by macOS. No Windows-style BIOS setup utility; use Startup Manager and Recovery." }
+            $guidance = @(
+                "Intel Macs have no BIOS setup screen like a PC. Hold Option at boot for Startup Manager and Command+R for Recovery.",
+                "Reset NVRAM with Option+Command+P+R at boot only if you have a persistent display or startup-disk issue.",
+                "Firmware/BIOS tweaks in Nova Tweaks are Windows-only; the macOS tweaks here are OS-level and reversible."
+            )
+        }
+        return @{ supported = $false; platform = "macOS"; items = $items; guidance = $guidance }
+    }
+
+    try {
+        $board = Get-CimInstance Win32_BaseBoard -ErrorAction Stop
+        $items += @{ k = "Motherboard"; v = ("$($board.Manufacturer) $($board.Product)").Trim() }
+    } catch {}
+    try {
+        $bios = Get-CimInstance Win32_BIOS -ErrorAction Stop
+        $bd = try { [System.Management.ManagementDateTimeConverter]::ToDateTime($bios.ReleaseDate).ToString("yyyy-MM-dd") } catch { "$($bios.ReleaseDate)" }
+        $items += @{ k = "BIOS"; v = ("$($bios.Manufacturer) $($bios.SMBIOSBIOSVersion) · $bd").Trim() }
+    } catch {}
+    try {
+        $cpu = Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Object -First 1
+        $items += @{ k = "CPU"; v = "$($cpu.Name)".Trim() }
+        $items += @{ k = "Virtualization"; v = "Firmware enabled: $($cpu.VirtualizationFirmwareEnabled) · SLAT: $($cpu.SecondLevelAddressTranslationExtensions)" }
+    } catch {}
+    try {
+        $gpu = Get-CimInstance Win32_VideoController -ErrorAction Stop | Select-Object -First 1
+        $items += @{ k = "GPU"; v = ("$($gpu.Name) · driver $($gpu.DriverVersion)").Trim() }
+    } catch {}
+    try {
+        $mods = @(Get-CimInstance Win32_PhysicalMemory -ErrorAction Stop)
+        if ($mods.Count -gt 0) {
+            $typeCode = [int]$mods[0].SMBIOSMemoryType
+            $typeMap = @{ 20 = "DDR"; 21 = "DDR2"; 24 = "DDR3"; 26 = "DDR4"; 34 = "DDR5" }
+            $type = if ($typeMap.ContainsKey($typeCode)) { $typeMap[$typeCode] } else { "Type $typeCode" }
+            $cap = [math]::Round((($mods | Measure-Object -Property Capacity -Sum).Sum) / 1GB, 0)
+            $items += @{ k = "Memory"; v = "$($mods.Count)x $([math]::Round($mods[0].Capacity / 1GB, 0)) GB $type ($cap GB total)" }
+            $rated = ($mods | Measure-Object -Property Speed -Maximum).Maximum
+            $conf = ($mods | Measure-Object -Property ConfiguredClockSpeed -Maximum).Maximum
+            if ($conf -and $rated) {
+                $items += @{ k = "Memory speed"; v = "$conf MHz configured · $rated MHz rated" }
+                if ($conf -ge ($rated * 0.95)) {
+                    $items += @{ k = "XMP / EXPO"; v = "Likely ON — memory is running at its rated speed." }
+                } else {
+                    $items += @{ k = "XMP / EXPO"; v = "Likely OFF — $conf MHz vs $rated MHz rated. Enable XMP/EXPO (DOCP on ASUS) in UEFI." }
+                }
+            }
+            if ($mods[0].PartNumber) {
+                $items += @{ k = "Modules"; v = (($mods | ForEach-Object { ("$($_.Manufacturer) $($_.PartNumber)").Trim() }) -join " · ") }
+            }
+        }
+    } catch {}
+    try {
+        $sb = Confirm-SecureBootUEFI -ErrorAction Stop
+        $items += @{ k = "Secure Boot"; v = $(if ($sb) { "Enabled" } else { "Disabled" }) }
+    } catch {
+        $items += @{ k = "Secure Boot"; v = "Unavailable — legacy boot or needs admin." }
+    }
+    try {
+        $bcd = (bcdedit /enum "{current}" 2>$null | Out-String)
+        $boot = if ($bcd -match "winload\.efi|bootmgfw\.efi") { "UEFI" } elseif ($bcd -match "winload\.exe") { "Legacy BIOS" } else { "Unknown" }
+        $items += @{ k = "Boot mode"; v = $boot }
+    } catch {
+        $items += @{ k = "Boot mode"; v = "Unavailable." }
+    }
+    try {
+        $dg = Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard -ErrorAction Stop
+        $vbsMap = @{ 0 = "Off"; 1 = "Enabled (not running)"; 2 = "Running" }
+        $vbsCode = [int]$dg.VirtualizationBasedSecurityStatus
+        $vbs = if ($vbsMap.ContainsKey($vbsCode)) { $vbsMap[$vbsCode] } else { "Unknown" }
+        $hvci = if (@($dg.SecurityServicesRunning) -contains 2) { "HVCI running" } else { "HVCI off" }
+        $items += @{ k = "VBS / HVCI"; v = "$vbs · $hvci" }
+    } catch {
+        $items += @{ k = "VBS / HVCI"; v = "Unavailable (needs admin)." }
+    }
+    try {
+        $tpm = Get-Tpm -ErrorAction Stop
+        $items += @{ k = "TPM"; v = $(if ($tpm.TpmPresent) { "Present · ready: $($tpm.TpmReady)" } else { "Not present" }) }
+    } catch {
+        $items += @{ k = "TPM"; v = "Unavailable (needs admin)." }
+    }
+    $items += @{ k = "Windows"; v = [System.Environment]::OSVersion.VersionString }
+
+    $guidance = @(
+        "Enable XMP / EXPO (DOCP on ASUS, A-XMP on MSI) so memory runs at its rated speed.",
+        "Enable Resizable BAR / Smart Access Memory for direct GPU access to VRAM.",
+        "Use UEFI boot with GPT and CSM disabled; enable Secure Boot for Windows 11.",
+        "Set the GPU PCIe slot to Gen4/Gen5 (Auto is usually fine) and disable ASPM for the GPU slot.",
+        "Enable PBO / Precision Boost Overdrive (AMD) or Turbo Boost / MCE (Intel) for CPU headroom.",
+        "Set case and CPU fan curves to Performance before a long gaming session.",
+        "VBS/HVCI and Memory Integrity are good for security but cost FPS; decide which you need.",
+        "Update to the latest stable BIOS from your motherboard vendor, then re-check XMP/EXPO."
+    )
+    return @{ supported = $true; platform = "Windows"; items = $items; guidance = $guidance }
+}
 
 # ---------- GENERIC TWEAK HELPERS ----------
 function Invoke-RegSet { param([string]$Path,[string]$Name,$Value,[string]$Type="DWord",[switch]$HKCU)
@@ -612,7 +1409,72 @@ $Script:Tweaks = @(
     @{Id="macwinanim";Name="Disable Window Animations (Mac)";Desc="Removes window open/close animations.";Risk="Safe";Free=$true;Cat="Visual";Win=$false;Mac=$true;Action={Invoke-MacDisableWindowAnimations}},
     @{Id="macfontsmooth";Name="Disable Font Smoothing (Mac)";Desc="Sharper text rendering, less GPU work.";Risk="Safe";Free=$true;Cat="Visual";Win=$false;Mac=$true;Action={Invoke-MacDisableFontSmoothing}},
     @{Id="macpurge";Name="Purge Memory (Mac)";Desc="Purges inactive memory.";Risk="Safe";Free=$true;Cat="General";Win=$false;Mac=$true;Action={Invoke-MacPurgeMemory}},
-    @{Id="macspotlight";Name="Disable Spotlight (Mac)";Desc="Stops Spotlight indexing.";Risk="Caution";Free=$false;Cat="General";Win=$false;Mac=$true;Action={Invoke-MacDisableSpotlight}}
+    @{Id="macspotlight";Name="Disable Spotlight (Mac)";Desc="Stops Spotlight indexing.";Risk="Caution";Free=$false;Cat="General";Win=$false;Mac=$true;Action={Invoke-MacDisableSpotlight}},
+
+    # Network additions
+    @{Id="dnscloud";Name="Cloudflare DNS";Desc="Sets 1.1.1.1 and 1.0.0.1 on active adapters, then flushes DNS. Lower lookup latency and cleaner routing.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-DnsCloudflare}},
+    @{Id="netbiosoff";Name="Disable NetBIOS over TCP/IP";Desc="Turns off legacy NetBIOS name broadcasts on every adapter. Less background chatter on the LAN.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-DisableNetbios}},
+    @{Id="rss";Name="Enable Receive Side Scaling";Desc="Spreads network receive processing across CPU cores. Lower ping under load on multi-core systems.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-EnableRss}},
+    @{Id="intmod";Name="Disable interrupt moderation";Desc="Cuts NIC packet batching so packets reach the game sooner. Best on wired Ethernet.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-DisableInterruptModeration}},
+    @{Id="smb1off";Name="Disable SMBv1";Desc="Removes the legacy SMBv1 protocol and blocks insecure guest logons. Less attack surface.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-DisableSmb1}},
+    @{Id="ctcp";Name="Use CTCP congestion control";Desc="Switches TCP to CTCP for smoother throughput on lossy links. Reboot recommended.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-TcpCongestionCtcp}},
+    @{Id="llmnroff";Name="Disable LLMNR";Desc="Turns off Link-Local Multicast Name Resolution. Less broadcast noise and a smaller attack surface.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-DisableLlmnr}},
+    @{Id="ipv6off";Name="Disable IPv6";Desc="Disables the IPv6 stack. Can reduce overhead on IPv4-only networks; some services need IPv6. Reboot required.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-DisableIPv6}},
+    @{Id="resetnet";Name="Reset network stack";Desc="Resets Winsock and TCP/IP, then flushes DNS. Fixes stubborn network issues. Reboot required.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-ResetNetworkStack}},
+
+    # Power additions
+    @{Id="cpumin";Name="Keep CPU at 100% minimum";Desc="Sets processor minimum state to 100% so clocks stay high. More heat and battery drain.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Power";Action={Invoke-CpuMinState100}},
+    @{Id="nosleep";Name="Disable sleep timeout";Desc="Stops the PC from sleeping or hibernating on AC power while you game or benchmark.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Power";Action={Invoke-NoSleep}},
+    @{Id="batteryoff";Name="Disable battery saver";Desc="Turns off battery saver throttling on battery power. Expect higher power draw.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Power";Action={Invoke-BatterySaverOff}},
+    @{Id="disksleep";Name="Disable disk sleep";Desc="Keeps drives awake on AC and battery for instant level loads.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Power";Action={Invoke-DiskSleepOff}},
+
+    # Visual additions
+    @{Id="notifoff";Name="Disable notification toasts";Desc="Turns off Windows notification popups and sounds. Less compositor work and no distractions.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Visual";Action={Invoke-NotificationsOff}},
+    @{Id="winanimoff";Name="Disable window animations";Desc="Sets MinAnimate=0 and the best-performance visual profile. Snappier windows and menus.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Visual";Action={Invoke-WindowAnimationsOff}},
+    @{Id="snapoff";Name="Disable Snap Assist";Desc="Turns off Snap Assist, Snap Fill and window snapping suggestions.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Visual";Action={Invoke-SnapAssistOff}},
+
+    # Services additions
+    @{Id="remotereg";Name="Disable Remote Registry";Desc="Stops and disables the Remote Registry service. Less background surface.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Action={Invoke-DisableRemoteRegistry}},
+    @{Id="rdpoff";Name="Block Remote Desktop";Desc="Sets fDenyTSConnections=1 to refuse incoming RDP sessions. Reversible.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Action={Invoke-DisableRemoteDesktop}},
+    @{Id="telmtasks";Name="Disable telemetry tasks";Desc="Disables the Application Experience and CEIP scheduled tasks that phone home.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Action={Invoke-DisableTelemetryTasks}},
+
+    # Game / vendor additions
+    @{Id="nvtelemetry";Name="Disable NVIDIA telemetry";Desc="Stops NVIDIA Telemetry services and scheduled tasks. Keeps the display driver intact.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Game";Action={Invoke-NvidiaTelemetryOff}},
+    @{Id="amdtelemetry";Name="Disable AMD telemetry";Desc="Stops the AMD Crash Defender/telemetry service and AMD scheduled tasks. Keeps the display driver.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Game";Action={Invoke-AmdTelemetryOff}},
+
+    # Storage additions
+    @{Id="ntfsmem";Name="NTFS memory cache boost";Desc="Tells NTFS to use more RAM for file metadata. Faster level loads when you have spare memory.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Storage";Action={Invoke-NtfsMemoryUsage}},
+    @{Id="winsxs";Name="Clean WinSxS component store";Desc="Runs DISM StartComponentCleanup to remove superseded components. Frees disk space.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Storage";Action={Invoke-WinSxSCleanup}},
+    @{Id="prefetchclear";Name="Clear Prefetch cache";Desc="Deletes stale prefetch files so Windows rebuilds a clean cache. First launches may be slower.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Storage";Action={Invoke-ClearPrefetch}},
+
+    # Firmware-adjacent (OS-level, no BIOS flashing)
+    @{Id="bcdtimeout";Name="Set boot menu timeout to 3s";Desc="Shortens the Windows boot manager menu wait. Faster restarts without skipping recovery.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Firmware";Action={Invoke-BcdTimeout}},
+    @{Id="bootmenu";Name="Use standard boot menu";Desc="Sets the Windows boot menu policy to Standard so recovery options stay available.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Firmware";Action={Invoke-BcdBootMenu}},
+    @{Id="platformtick";Name="Use platform tick source";Desc="Tells Windows to use the platform tick for timing. Can reduce timer jitter on some boards. Reboot required.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Firmware";Action={Invoke-BcdPlatformTick}},
+    @{Id="pcieaspm";Name="Disable PCIe ASPM";Desc="Turns off PCIe Active State Power Management. Keeps the GPU link awake for steadier frame times.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Firmware";Action={Invoke-PcieAspmOff}},
+    @{Id="cpuboost";Name="Aggressive CPU boost";Desc="Sets processor performance boost mode to Aggressive. Higher clocks under load and more heat.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Firmware";Action={Invoke-CpuBoostAggressive}},
+    @{Id="cooling";Name="Active cooling policy";Desc="Tells Windows to prefer fans over throttling when the CPU gets hot.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Firmware";Action={Invoke-CoolingActive}},
+
+    # Privacy additions
+    @{Id="locoff";Name="Disable location access";Desc="Denies location access for apps and Windows services.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Privacy";Action={Invoke-LocationOff}},
+    @{Id="camoff";Name="Disable camera access";Desc="Denies camera access for all apps. Reversible.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Privacy";Action={Invoke-CameraOff}},
+    @{Id="micoff";Name="Disable microphone access";Desc="Denies microphone access for all apps. Reversible.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Privacy";Action={Invoke-MicrophoneOff}},
+    @{Id="clipboardoff";Name="Disable clipboard history sync";Desc="Turns off clipboard history and cloud sync. Less data stored and uploaded.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Privacy";Action={Invoke-ClipboardSyncOff}},
+    @{Id="apptrackoff";Name="Disable app launch tracking";Desc="Stops Windows tracking which apps you launch for Start and search suggestions.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Privacy";Action={Invoke-AppLaunchTrackingOff}},
+    @{Id="tailoredoff";Name="Disable tailored experiences";Desc="Stops Windows using diagnostic data for personalized tips and ads.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Privacy";Action={Invoke-TailoredExperiencesOff}},
+
+    # General additions
+    @{Id="longpaths";Name="Enable long file paths";Desc="Removes the 260-character path limit for apps that opt in. Helps mod and asset tools.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="General";Action={Invoke-LongPaths}},
+    @{Id="nomaintenance";Name="Disable automatic maintenance";Desc="Stops Windows from running background maintenance during your session.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="General";Action={Invoke-DisableAutoMaintenance}},
+
+    # macOS additions
+    @{Id="macsiri";Name="Disable Siri (Mac)";Desc="Turns off Siri and its background listener. Less idle CPU.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Services";Action={Invoke-MacDisableSiri}},
+    @{Id="mactm";Name="Disable Time Machine (Mac)";Desc="Stops Time Machine from running background backups. Re-enable when you want backups.";Risk="Caution";Free=$true;Win=$false;Mac=$true;Cat="Storage";Action={Invoke-MacDisableTimeMachine}},
+    @{Id="macupdates";Name="Disable automatic updates (Mac)";Desc="Stops macOS from checking and downloading updates in the background.";Risk="Caution";Free=$true;Win=$false;Mac=$true;Cat="Services";Action={Invoke-MacDisableAutoUpdates}},
+    @{Id="macdock";Name="Disable Dock animations (Mac)";Desc="Removes Dock hide/show animation and delay for a snappier desktop.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Visual";Action={Invoke-MacDockAnimationsOff}},
+    @{Id="macmenubar";Name="Disable menu bar transparency (Mac)";Desc="Makes the menu bar opaque. Less compositor work.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Visual";Action={Invoke-MacMenuBarTransparencyOff}},
+    @{Id="macshots";Name="Disable screenshot shadow (Mac)";Desc="Removes the drop shadow from screenshots. Faster captures and smaller files.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Visual";Action={Invoke-MacScreenshotShadowOff}},
+    @{Id="machandoff";Name="Disable Handoff (Mac)";Desc="Stops Handoff/Continuity advertising and receiving in the background.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Services";Action={Invoke-MacDisableHandoff}}
 )
 
 if (-not $Script:Config.TweakStates) { $Script:Config.TweakStates = @{} }
@@ -714,7 +1576,15 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .logoutbtn:hover{border-color:var(--red);color:var(--red);background:rgba(255,26,46,.05)}
 
 /* Content */
-.content{flex:1;overflow-y:auto;padding:28px 32px;background:radial-gradient(ellipse at top right,rgba(255,26,46,.05),transparent 50%);position:relative;z-index:1}
+.maincol{flex:1;display:flex;flex-direction:column;min-width:0;height:100vh}
+.topbar{display:flex;align-items:center;gap:4px;padding:9px 16px;background:linear-gradient(180deg,rgba(13,13,20,.98),rgba(9,9,14,.94));border-bottom:1px solid var(--border);position:relative;z-index:3;overflow-x:auto;flex-shrink:0;box-shadow:0 4px 22px rgba(0,0,0,.38)}
+.topbar::-webkit-scrollbar{height:4px}
+.topbar-label{font-size:9px;text-transform:uppercase;letter-spacing:1.6px;color:var(--textmuted);margin:0 8px 0 4px;font-weight:800;flex-shrink:0}
+.topbar .navbtn{width:auto;padding:8px 12px;font-size:12px;border-radius:8px;white-space:nowrap;flex-shrink:0;gap:7px}
+.topbar .navbtn:hover{transform:translateY(-1px);background:rgba(255,255,255,.045)}
+.topbar .navbtn.active{background:linear-gradient(135deg,rgba(255,26,46,.2),rgba(255,26,46,.06));border-left:none;padding-left:12px;color:var(--red);box-shadow:inset 0 0 0 1px rgba(255,26,46,.35),0 2px 10px rgba(255,26,46,.12)}
+.topbar .navicon{width:16px;font-size:13px}
+.content{flex:1;overflow-y:auto;padding:28px 32px;background:radial-gradient(ellipse at top right,rgba(255,26,46,.05),transparent 50%);position:relative;z-index:1;min-height:0}
 .page{display:none;animation:fadeIn .35s cubic-bezier(.4,0,.2,1)}.page.active{display:block}
 @keyframes fadeIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
@@ -797,6 +1667,23 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
 .profilecard:hover{border-color:rgba(255,26,46,.3);transform:translateX(6px);box-shadow:0 8px 30px rgba(0,0,0,.5)}
 .profileicon{width:48px;height:48px;border-radius:10px;background:linear-gradient(135deg,var(--red),var(--red2));display:flex;align-items:center;justify-content:center;font-weight:900;color:#fff;font-size:15px;box-shadow:0 4px 14px var(--redglow);flex-shrink:0}
 
+/* BIOS / UEFI + Drag Macro */
+.biosgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.biositem{background:rgba(0,0,0,.32);border:1px solid var(--border);border-radius:10px;padding:12px 14px;transition:all .25s}
+.biositem:hover{border-color:var(--border2);transform:translateY(-2px)}
+.bioskey{font-size:9px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1.2px;font-weight:800;margin-bottom:5px}
+.biosval{font-size:12.5px;color:var(--text);line-height:1.55;word-break:break-word}
+.macrow{display:flex;gap:14px;flex-wrap:wrap}
+.macrow .card{flex:1;min-width:280px}
+.macropt{display:flex;align-items:center;gap:10px;background:rgba(0,0,0,.32);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px}
+.macropt .dot{width:10px;height:10px;border-radius:50%;background:var(--red);box-shadow:0 0 10px var(--redglow)}
+.macropt .coords{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text)}
+.macropt .lbl{font-size:9px;text-transform:uppercase;letter-spacing:1.2px;color:var(--textmuted);font-weight:800}
+.macrostatus{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--textdim);background:rgba(0,0,0,.32);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-top:12px}
+.slider-row{display:flex;align-items:center;gap:12px;margin:10px 0}
+.slider-row input[type=range]{flex:1;accent-color:var(--red)}
+.slider-row .val{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--red);min-width:78px;text-align:right}
+
 /* Scrollbar */
 ::-webkit-scrollbar{width:8px;height:8px}
 ::-webkit-scrollbar-track{background:var(--bg)}
@@ -829,11 +1716,13 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
 .badge.os-both{background:linear-gradient(135deg,var(--green),#00cc6a);color:#000;box-shadow:0 2px 8px rgba(0,255,136,.25)}
 .badge.unavailable{background:rgba(255,255,255,.06);color:var(--textmuted);border:1px solid rgba(255,255,255,.14)}
 
-/* Rotating outline */
+/* Vibrant red outline */
 .rotating-outline{position:relative;overflow:visible}
-.rotating-outline::before{content:'';position:absolute;inset:-2px;border-radius:inherit;padding:2px;background:conic-gradient(from var(--rot,0deg),var(--red),var(--purple),var(--blue),var(--red));-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:spinOutline 4s linear infinite;pointer-events:none;z-index:0}
+.rotating-outline::before{content:'';position:absolute;inset:-2px;border-radius:inherit;padding:2px;background:conic-gradient(from var(--rot,0deg),#ff1a2e 0deg,#ff4d5e 55deg,#ff8a95 105deg,#cc0018 170deg,#ff1a2e 225deg,#ff5a68 290deg,#ff1a2e 360deg);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:spinOutline 3.4s linear infinite;pointer-events:none;z-index:0;filter:drop-shadow(0 0 5px rgba(255,26,46,.55)) drop-shadow(0 0 14px rgba(255,26,46,.22))}
 @keyframes spinOutline{to{--rot:360deg}}
 @property --rot{syntax:'<angle>';initial-value:0deg;inherits:false}
+.tweakcard.rotating-outline{box-shadow:0 0 0 1px rgba(255,26,46,.12),0 8px 30px rgba(0,0,0,.45),0 0 22px rgba(255,26,46,.08)}
+.tweakcard.rotating-outline:hover{box-shadow:0 12px 40px rgba(0,0,0,.6),0 0 28px rgba(255,26,46,.16)}
 .tweakcard.rotating-outline::before{border-radius:var(--radius)}
 
 /* Snow canvas */
@@ -894,13 +1783,8 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
   <div class="planbadge" id="planBadge">PRO</div>
   <button class="navbtn active" data-page="home"><span class="navicon">◆</span>Home</button>
   <button class="navbtn" data-page="tweaks"><span class="navicon">⚙</span>All Tweaks</button>
-  <button class="navbtn" data-page="crosshair"><span class="navicon">🎯</span>Crosshair</button>
-  <button class="navbtn" data-page="booster"><span class="navicon">⚡</span>Game Booster</button>
-  <button class="navbtn" data-page="potato"><span class="navicon">🥔</span>Potato Graphics</button>
-  <button class="navbtn" data-page="bench"><span class="navicon">📊</span>Benchmark</button>
-  <button class="navbtn" data-page="restore"><span class="navicon">↺</span>Restore</button>
-  <button class="navbtn" data-page="log"><span class="navicon">☰</span>Log</button>
-  <button class="navbtn" data-page="settings"><span class="navicon">✦</span>Settings</button>
+  <div style="padding:14px 12px 6px;font-size:9px;text-transform:uppercase;letter-spacing:1.6px;color:var(--textmuted);font-weight:800">Tools</div>
+  <div style="padding:0 12px;font-size:11px;color:var(--textmuted);line-height:1.6">Crosshair, Booster, Macro, BIOS and the rest live in the top bar.</div>
   <div class="sidebar-bottom">
     <div class="account-badge" id="accountBadge" style="display:none">
       <div class="account-avatar" id="accountAvatar">G</div>
@@ -909,6 +1793,20 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
     <div class="progress"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
     <button class="logoutbtn" id="logoutBtn">Sign Out</button>
   </div>
+</div>
+
+<div class="maincol">
+<div class="topbar">
+  <span class="topbar-label">Tools</span>
+  <button class="navbtn" data-page="crosshair"><span class="navicon">🎯</span>Crosshair</button>
+  <button class="navbtn" data-page="booster"><span class="navicon">⚡</span>Game Booster</button>
+  <button class="navbtn" data-page="potato"><span class="navicon">🥔</span>Potato Graphics</button>
+  <button class="navbtn" data-page="macro"><span class="navicon">🖱</span>Drag Macro</button>
+  <button class="navbtn" data-page="bios"><span class="navicon">🧬</span>BIOS / UEFI</button>
+  <button class="navbtn" data-page="bench"><span class="navicon">📊</span>Benchmark</button>
+  <button class="navbtn" data-page="restore"><span class="navicon">↺</span>Restore</button>
+  <button class="navbtn" data-page="log"><span class="navicon">☰</span>Log</button>
+  <button class="navbtn" data-page="settings"><span class="navicon">✦</span>Settings</button>
 </div>
 
 <div class="content">
@@ -960,7 +1858,7 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
       <div style="font-size:11px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px;margin-top:4px">Applied</div>
     </div>
     <div class="card" style="flex:1;min-width:200px;text-align:center">
-      <div style="font-size:32px;font-weight:900;background:linear-gradient(135deg,var(--blue),#0088cc);-webkit-background-clip:text;-webkit-text-fill-color:transparent" id="statCats">8</div>
+      <div style="font-size:32px;font-weight:900;background:linear-gradient(135deg,var(--blue),#0088cc);-webkit-background-clip:text;-webkit-text-fill-color:transparent" id="statCats">@@CAT_COUNT@@</div>
       <div style="font-size:11px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px;margin-top:4px">Categories</div>
     </div>
     <div class="card" style="flex:1;min-width:200px;text-align:center">
@@ -1099,6 +1997,52 @@ spotify.exe</textarea>
   <button class="btn ghost sm" style="margin-top:12px" id="refreshLogBtn">Refresh</button>
 </div>
 
+<!-- DRAG MACRO -->
+<div class="page" id="page-macro">
+  <h1>Drag Macro</h1>
+  <div class="sub">Capture a start and end point, then Nova Tweaks moves the cursor and left-clicks at the speed you choose. Windows only.</div>
+  <div class="warnbox" id="macroWarn" style="display:none">Drag Macro uses the Windows cursor API, so it is disabled on macOS.</div>
+  <div class="macrow">
+    <div class="card">
+      <h3 style="margin-bottom:12px;font-size:15px">Path</h3>
+      <div class="macropt"><span class="dot"></span><div style="flex:1"><div class="lbl">Start point</div><div class="coords" id="macroStart">Not captured</div></div><button class="btn ghost xs" id="captureStartBtn">Capture (3s)</button></div>
+      <div class="macropt"><span class="dot" style="background:var(--green);box-shadow:0 0 10px var(--green)"></span><div style="flex:1"><div class="lbl">End point</div><div class="coords" id="macroEnd">Not captured</div></div><button class="btn ghost xs" id="captureEndBtn">Capture (3s)</button></div>
+      <div style="font-size:11px;color:var(--textmuted);line-height:1.7;margin-top:8px">Click Capture, then move the cursor to the exact pixel. The point is recorded after a 3 second countdown.</div>
+    </div>
+    <div class="card">
+      <h3 style="margin-bottom:8px;font-size:15px">Speed &amp; timing</h3>
+      <div class="slider-row"><span style="font-size:12px;color:var(--textdim);min-width:108px">Swipe duration</span><input type="range" id="macroDuration" min="30" max="1500" step="10" value="300"><span class="val" id="macroDurationVal">300 ms</span></div>
+      <div class="slider-row"><span style="font-size:12px;color:var(--textdim);min-width:108px">Hold click</span><input type="range" id="macroHold" min="0" max="1000" step="10" value="60"><span class="val" id="macroHoldVal">60 ms</span></div>
+      <div class="slider-row"><span style="font-size:12px;color:var(--textdim);min-width:108px">Repeat</span><input class="input" id="macroRepeat" type="number" min="1" max="500" value="3" style="width:90px"><span style="font-size:11px;color:var(--textmuted)">swipes</span></div>
+      <label style="font-size:12px;display:flex;align-items:center;gap:8px;margin-top:10px"><input type="checkbox" id="macroLoop"> Loop until I press Stop</label>
+      <div class="macrostatus" id="macroStatus">Idle</div>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <button class="btn" id="macroStartBtn">Start Macro</button>
+        <button class="btn danger" id="macroStopBtn">Stop</button>
+      </div>
+      <div style="font-size:11px;color:var(--textmuted);line-height:1.7;margin-top:10px">Safety: press Stop or close the app to end a loop. Competitive games may treat macros as prohibited — check the game's rules first.</div>
+    </div>
+  </div>
+</div>
+
+<!-- BIOS / UEFI -->
+<div class="page" id="page-bios">
+  <h1>BIOS / UEFI</h1>
+  <div class="sub">Detect firmware, memory profile, Secure Boot, VBS and boot mode. Windows cannot edit firmware settings, so this page shows what is set and opens UEFI when you need to change it.</div>
+  <div class="warnbox">Nova Tweaks never flashes or silently edits your BIOS. Firmware changes happen in UEFI; this page only detects and guides.</div>
+  <div class="card">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+      <button class="btn ghost sm" id="biosRefreshBtn">Refresh Detection</button>
+      <button class="btn sm" id="biosRebootBtn">Open UEFI Firmware Settings</button>
+    </div>
+    <div class="biosgrid" id="biosInfo"><div class="biositem"><div class="bioskey">Status</div><div class="biosval">Loading...</div></div></div>
+  </div>
+  <div class="card">
+    <h3 style="margin-bottom:10px;font-size:15px">Recommended UEFI settings</h3>
+    <div id="biosGuidance" style="color:var(--textdim);font-size:13px;line-height:2"></div>
+  </div>
+</div>
+
 <!-- SETTINGS -->
 <div class="page" id="page-settings">
   <h1>Settings</h1>
@@ -1125,10 +2069,11 @@ spotify.exe</textarea>
     <label style="font-size:12px;display:block;margin:10px 0 4px">Sidebar color</label>
     <input type="color" id="sidebarColor" value="#0d0d14" style="width:60px;height:32px;border:none;background:none">
     <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
-      <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="toggleOutline" checked> Rotating outline</label>
+      <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="toggleOutline" checked> Vibrant red outline</label>
       <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="toggleSnow" checked> Snowfall</label>
     </div>
   </div>
+</div>
 </div>
 </div>
 </div>
@@ -1214,6 +2159,8 @@ document.querySelectorAll('.navbtn').forEach(b=>b.addEventListener('click',()=>{
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('page-'+b.dataset.page).classList.add('active');
   if(b.dataset.page==='log')refreshLog();
+  if(b.dataset.page==='bios')loadBios();
+  if(b.dataset.page==='macro')refreshMacroStatus();
 }));
 
 document.getElementById('logoutBtn').addEventListener('click',async()=>{await api('/api/logout');if(window.chrome&&window.chrome.webview){window.chrome.webview.postMessage('nova-reload')}else{location.reload()}});
@@ -1223,17 +2170,24 @@ function renderStats(){
   document.getElementById('statsRow').innerHTML=stats.map(s=>`<div class="statcard"><div class="statlabel">${s.label}</div><div class="statval" style="background:linear-gradient(135deg,${s.color},var(--textdim));-webkit-background-clip:text;-webkit-text-fill-color:transparent">${s.value}</div></div>`).join('');
 }
 
-const cats=['General','Input','Network','Power','Visual','Services','Game','Windows','Mac'];
+const cats=['General','Input','Network','Power','Visual','Services','Game','Storage','Firmware','Privacy','Windows','Mac'];
 let currentCat='General';
+function catCount(c){
+  const all=Object.values(state.tweaks||{});
+  if(c==='Windows') return all.filter(t=>t.os==='Windows'||t.os==='Both').length;
+  if(c==='Mac') return all.filter(t=>t.os==='Mac'||t.os==='Both').length;
+  return all.filter(t=>t.available&&t.cat===c).length;
+}
 function renderCatBar(){
-  document.getElementById('catBar').innerHTML=cats.map(c=>`<button class="catbtn ${c===currentCat?'active':''}" data-cat="${c}">${c}</button>`).join('');
+  document.getElementById('catBar').innerHTML=cats.map(c=>`<button class="catbtn ${c===currentCat?'active':''}" data-cat="${c}">${c}<span style="opacity:.55;margin-left:6px;font-size:10px">${catCount(c)}</span></button>`).join('');
   document.querySelectorAll('.catbtn').forEach(b=>b.addEventListener('click',()=>{currentCat=b.dataset.cat;renderCatBar();renderTweaks()}));
 }
 
 async function loadTweaks(){
   const r=await api('/api/tweaks/list');
   state.tweaks=r.tweaks||{};
-  renderTweaks();updateCounts();
+  state.os=r.os||'unknown';
+  renderCatBar();renderTweaks();updateCounts();updateMacroAvailability();
 }
 function tweaksFor(cat){
   const all=Object.values(state.tweaks);
@@ -1272,16 +2226,19 @@ function renderTweaks(){
   }));
 }
 function updateCounts(){
-  const applied=Object.values(state.tweaks).filter(t=>t.state).length;
-  const total=Object.keys(state.tweaks).length;
+  const all=Object.values(state.tweaks);
+  const applied=all.filter(t=>t.state).length;
+  const total=all.length;
+  const available=all.filter(t=>t.available).length;
+  const pct=available?Math.min(100,Math.round(applied/available*100)):0;
   document.getElementById('ptsInfo').textContent=applied+' tweaks applied';
-  document.getElementById('homeSub').textContent=applied+' of '+total+' tweaks on · Pro plan · All features unlocked';
-  document.getElementById('sugText').textContent=Math.round(applied/total*100)+'% optimized · '+applied+' of '+total+' on.';
-  document.getElementById('progressFill').style.width=Math.round(applied/total*100)+'%';
-  const hp=document.getElementById('homeProgress'); if(hp) hp.style.width=Math.round(applied/total*100)+'%';
+  document.getElementById('homeSub').textContent=applied+' of '+available+' available tweaks on · '+total+' included · Pro plan';
+  document.getElementById('sugText').textContent=pct+'% optimized · '+applied+' of '+available+' available on this PC.';
+  document.getElementById('progressFill').style.width=pct+'%';
+  const hp=document.getElementById('homeProgress'); if(hp) hp.style.width=pct+'%';
   const sa=document.getElementById('statApplied'); if(sa) sa.textContent=applied;
   const st=document.getElementById('statTweaks'); if(st) st.textContent=total;
-  const sc=document.getElementById('statCats'); if(sc) sc.textContent=Object.keys(state.tweaks).length? (new Set(Object.values(state.tweaks).map(t=>t.cat))).size : 8;
+  const sc=document.getElementById('statCats'); if(sc) sc.textContent=total? (new Set(all.map(t=>t.cat))).size : 10;
 }
 
 const profiles=[{name:'Fortnite',desc:'DX11 and Performance mode',plan:'Pro',icon:'FN'},{name:'Fortnite Competitive',desc:'Fixed floor (lowest settings)',plan:'Pro',icon:'FC'},{name:'Marvel Rivals',desc:'Low-graphics competitive profile',plan:'Pro',icon:'MR'},{name:'AMD/Intel Potato',desc:'Works on any GPU. Removes texture packs.',plan:'Pro',icon:'AI'}];
@@ -1360,6 +2317,78 @@ function enableOverlay(){
   loop();
 }
 function disableOverlay(){chState.on=false;if(overlayCanvas){overlayCanvas.remove();overlayCanvas=null;}}
+
+// Drag macro
+const macroState={start:null,end:null,running:false};
+function macroFmt(p){return p?('X '+p.x+' · Y '+p.y):'Not captured'}
+function updateMacroUI(){
+  const s=document.getElementById('macroStart'),e=document.getElementById('macroEnd');
+  if(s&&!s.textContent.startsWith('Capturing'))s.textContent=macroFmt(macroState.start);
+  if(e&&!e.textContent.startsWith('Capturing'))e.textContent=macroFmt(macroState.end);
+  document.getElementById('macroDurationVal').textContent=document.getElementById('macroDuration').value+' ms';
+  document.getElementById('macroHoldVal').textContent=document.getElementById('macroHold').value+' ms';
+}
+function updateMacroAvailability(){
+  const win=state.os==='Windows';
+  ['captureStartBtn','captureEndBtn','macroStartBtn','macroStopBtn'].forEach(id=>{const el=document.getElementById(id);if(el)el.disabled=!win});
+  const w=document.getElementById('macroWarn');if(w)w.style.display=win?'none':'block';
+}
+async function captureMacroPoint(which){
+  if(state.os!=='Windows'){showToast('Drag Macro is Windows only');return;}
+  let n=3;const el=document.getElementById(which==='start'?'macroStart':'macroEnd');
+  el.textContent='Capturing in '+n+'…';
+  const iv=setInterval(()=>{n--;if(n>0)el.textContent='Capturing in '+n+'…';},1000);
+  setTimeout(async()=>{
+    clearInterval(iv);
+    const r=await api('/api/macro/capture');
+    if(r.success){macroState[which]={x:r.x,y:r.y};showToast(which==='start'?'Start point captured':'End point captured');}
+    else showToast(r.message||'Capture failed');
+    updateMacroUI();
+  },3000);
+}
+async function refreshMacroStatus(){
+  if(state.os!=='Windows')return;
+  const r=await api('/api/macro/status');
+  if(r.success){
+    macroState.running=!!r.running;
+    document.getElementById('macroStatus').textContent=(r.status||'Idle')+(r.iteration?' · pass '+r.iteration:'');
+  }
+}
+async function startMacro(){
+  if(state.os!=='Windows'){showToast('Drag Macro is Windows only');return;}
+  if(!macroState.start||!macroState.end){showToast('Capture a start and end point first');return;}
+  const body={start:macroState.start,end:macroState.end,duration:+document.getElementById('macroDuration').value,hold:+document.getElementById('macroHold').value,repeat:+document.getElementById('macroRepeat').value,loop:document.getElementById('macroLoop').checked};
+  const r=await api('/api/macro/start',body);
+  showToast(r.message);
+  refreshMacroStatus();
+}
+async function stopMacro(){const r=await api('/api/macro/stop');showToast(r.message);refreshMacroStatus();}
+document.getElementById('captureStartBtn').addEventListener('click',()=>captureMacroPoint('start'));
+document.getElementById('captureEndBtn').addEventListener('click',()=>captureMacroPoint('end'));
+document.getElementById('macroDuration').addEventListener('input',updateMacroUI);
+document.getElementById('macroHold').addEventListener('input',updateMacroUI);
+document.getElementById('macroStartBtn').addEventListener('click',startMacro);
+document.getElementById('macroStopBtn').addEventListener('click',stopMacro);
+setInterval(()=>{const p=document.getElementById('page-macro');if(p&&p.classList.contains('active'))refreshMacroStatus()},700);
+updateMacroUI();
+
+// BIOS / UEFI detection
+function escHtml(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function biosItem(k,v){return `<div class="biositem"><div class="bioskey">${escHtml(k)}</div><div class="biosval">${escHtml(v)}</div></div>`}
+async function loadBios(){
+  const box=document.getElementById('biosInfo');
+  box.innerHTML=biosItem('Status','Detecting firmware and memory profile...');
+  const r=await api('/api/bios/info');
+  const items=r.items||[];
+  box.innerHTML=items.length?items.map(i=>biosItem(i.k,i.v)).join(''):biosItem('Status','No firmware data available');
+  const g=document.getElementById('biosGuidance');
+  g.innerHTML=(r.guidance||[]).map(s=>'▸ '+escHtml(s)).join('<br>');
+}
+document.getElementById('biosRefreshBtn').addEventListener('click',loadBios);
+document.getElementById('biosRebootBtn').addEventListener('click',async()=>{
+  if(!confirm('Reboot into UEFI firmware settings?\n\nSave your work first. The PC will restart in 5 seconds.'))return;
+  const r=await api('/api/bios/reboot');showToast(r.message);
+});
 
 document.getElementById('accentColor').addEventListener('input',e=>{document.documentElement.style.setProperty('--red',e.target.value);});
 document.getElementById('sidebarColor').addEventListener('input',e=>{document.querySelector('.sidebar').style.background=e.target.value;});
@@ -1496,7 +2525,46 @@ function Invoke-NovaApi {
                     state     = (Get-NovaTweakState ([string]$t.Id))
                 }
             }
-            return (ConvertTo-NovaJson @{ tweaks = $tweakObj })
+            return (ConvertTo-NovaJson @{ tweaks = $tweakObj; os = $(if ($IsWin) { "Windows" } else { "Mac" }) })
+        }
+
+        if ($Path -eq "/api/macro/capture") {
+            if (-not $IsWin) { return (ConvertTo-NovaJson @{ success = $false; message = "Drag Macro is Windows only." }) }
+            $pos = Get-NovaCursorPos
+            if (-not $pos) { return (ConvertTo-NovaJson @{ success = $false; message = "Could not read the cursor position." }) }
+            return (ConvertTo-NovaJson @{ success = $true; x = $pos.x; y = $pos.y })
+        }
+
+        if ($Path -eq "/api/macro/start") {
+            $res = Start-NovaMacro `
+                -StartX ([int]$body.start.x) -StartY ([int]$body.start.y) `
+                -EndX ([int]$body.end.x) -EndY ([int]$body.end.y) `
+                -Duration ([int]$body.duration) -Hold ([int]$body.hold) `
+                -Repeat ([int]$body.repeat) -Loop ([bool]$body.loop)
+            return (ConvertTo-NovaJson $res)
+        }
+
+        if ($Path -eq "/api/macro/stop") {
+            return (ConvertTo-NovaJson (Stop-NovaMacro))
+        }
+
+        if ($Path -eq "/api/macro/status") {
+            return (ConvertTo-NovaJson (Get-NovaMacroStatus))
+        }
+
+        if ($Path -eq "/api/bios/info") {
+            return (ConvertTo-NovaJson (Get-NovaBiosInfo))
+        }
+
+        if ($Path -eq "/api/bios/reboot") {
+            if (-not $IsWin) { return (ConvertTo-NovaJson @{ success = $false; message = "UEFI firmware settings are Windows only. On macOS, restart while holding Command+R." }) }
+            try {
+                $out = & shutdown /r /fw /t 5 2>&1
+                if ($LASTEXITCODE -ne 0) { throw (($out | Out-String).Trim()) }
+                return (ConvertTo-NovaJson @{ success = $true; message = "Rebooting into UEFI in 5 seconds. Save your work." })
+            } catch {
+                return (ConvertTo-NovaJson @{ success = $false; message = "Could not open UEFI: $($_.Exception.Message). Restart and press Del/F2 to enter firmware settings." })
+            }
         }
 
         if ($Path -eq "/api/tweak/toggle") {
@@ -1655,8 +2723,10 @@ function Start-NovaWebServer {
 
     $url = "http://localhost:$port"
     Write-Host "Nova Tweaks UI running at $url" -ForegroundColor Red
-    if ($IsMac) { Start-Process "open" -ArgumentList $url | Out-Null }
-    elseif ($IsWin) { Start-Process $url | Out-Null }
+    if (-not $env:NOVA_NOOPEN) {
+        if ($IsMac) { Start-Process "open" -ArgumentList $url | Out-Null }
+        elseif ($IsWin) { Start-Process $url | Out-Null }
+    }
 
     while ($listener.IsListening) {
         $ctx = $listener.GetContext()
