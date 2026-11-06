@@ -1390,7 +1390,7 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
         <div style="text-align:center"><div id="onlineCount" style="font-size:22px;font-weight:900;color:var(--text)">1</div><div style="font-size:9px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px">Users Online</div></div>
         <div style="text-align:center"><div style="font-size:22px;font-weight:900;color:var(--text)">750+</div><div style="font-size:9px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px">Tweaks</div></div>
         <div style="text-align:center"><div style="font-size:22px;font-weight:900;color:var(--text)">8</div><div style="font-size:9px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px">Categories</div></div>
-        <div style="text-align:center"><div style="font-size:22px;font-weight:900;color:var(--text)">100%</div><div style="font-size:9px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px">Reversible</div></div>
+        <div style="text-align:center"><div style="font-size:22px;font-weight:900;color:var(--text)" id="onlineCount">1</div><div style="font-size:9px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px">Users Online</div></div>
       </div>
     </div>
     <div style="padding:28px 44px 40px">
