@@ -467,6 +467,15 @@ function Revert-All {
             Write-Log "macOS revert complete." "OK"
         } catch { Write-Log "Revert partial." "WARN" }
     }
+    # Restore per-service toggles and run any explicit Off actions.
+    if ($Script:Tweaks) {
+        foreach ($t in $Script:Tweaks) {
+            try {
+                if ($t.Off) { & $t.Off }
+                elseif ($t.Svc) { Invoke-ServiceRestore -Name $t.Svc }
+            } catch {}
+        }
+    }
     $Script:Config.TweakStates = @{}
     Save-Config
 }
@@ -1216,6 +1225,173 @@ function Invoke-Cmd { param([string]$Cmd)
     try { Invoke-Expression $Cmd 2>$null | Out-Null; Write-Log "Ran: $Cmd" "OK" } catch { Write-Log "Cmd failed: $Cmd" "WARN" }
 }
 
+# ---------- EXTENDED TWEAK HELPERS ----------
+function Invoke-RegGroup {
+    param([array]$Items)
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    $n = 0
+    foreach ($i in $Items) {
+        try {
+            if (-not (Test-Path $i.Path)) { New-Item -Path $i.Path -Force | Out-Null }
+            $type = if ($i.Type) { [string]$i.Type } else { "DWord" }
+            Set-ItemProperty -Path $i.Path -Name $i.Name -Value $i.Value -Type $type -Force
+            $n++
+        } catch {}
+    }
+    Write-Log "Applied $n registry values." "OK"
+}
+
+function Invoke-ServiceDisable {
+    param([string]$Name)
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        $svc = Get-Service -Name $Name -ErrorAction SilentlyContinue
+        if (-not $svc) { Write-Log "Service $Name is not installed." "WARN"; return }
+        Stop-Service -Name $Name -Force -ErrorAction SilentlyContinue
+        Set-Service -Name $Name -StartupType Disabled -ErrorAction SilentlyContinue
+        Write-Log "Service $Name disabled." "OK"
+    } catch { Write-Log "Service $Name failed." "WARN" }
+}
+
+function Invoke-ServiceRestore {
+    param([string]$Name)
+    if (-not $IsWin) { return }
+    try {
+        $svc = Get-Service -Name $Name -ErrorAction SilentlyContinue
+        if ($svc) { Set-Service -Name $Name -StartupType Manual -ErrorAction SilentlyContinue }
+        Write-Log "Service $Name restored to Manual." "OK"
+    } catch {}
+}
+
+function Invoke-TaskDisable {
+    param([string]$TaskPath, [string]$TaskName)
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        Disable-ScheduledTask -TaskPath $TaskPath -TaskName $TaskName -ErrorAction Stop | Out-Null
+        Write-Log "Task disabled: $TaskName" "OK"
+    } catch { Write-Log "Task $TaskName not present." "WARN" }
+}
+
+function Invoke-PowerSet {
+    param([string]$Subgroup, [string]$Setting, [string]$AC, [string]$DC)
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try {
+        if ($AC) { powercfg /setacvalueindex SCHEME_CURRENT $Subgroup $Setting $AC 2>$null | Out-Null }
+        if ($DC) { powercfg /setdcvalueindex SCHEME_CURRENT $Subgroup $Setting $DC 2>$null | Out-Null }
+        powercfg /setactive SCHEME_CURRENT 2>$null | Out-Null
+        Write-Log "Power setting $Setting updated." "OK"
+    } catch { Write-Log "Power setting $Setting failed." "WARN" }
+}
+
+function Invoke-AdapterProp {
+    param([string]$DisplayName, [string]$Value)
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    $n = 0
+    try {
+        Get-NetAdapter -ErrorAction SilentlyContinue | ForEach-Object {
+            try { Set-NetAdapterAdvancedProperty -Name $_.Name -DisplayName $DisplayName -DisplayValue $Value -ErrorAction Stop; $n++ } catch {}
+        }
+        Write-Log "Adapter $DisplayName = $Value on $n adapter(s)." "OK"
+    } catch { Write-Log "Adapter $DisplayName failed." "WARN" }
+}
+
+function Invoke-BcdSet {
+    param([string]$Setting, [string]$Value)
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    try { bcdedit /set $Setting $Value 2>$null | Out-Null; Write-Log "bcdedit $Setting=$Value" "OK" } catch { Write-Log "bcdedit $Setting failed." "WARN" }
+}
+
+function Invoke-Cleanup {
+    param([string[]]$Paths, [string]$Label = "Cache")
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    foreach ($p in $Paths) {
+        try {
+            if (Test-Path $p) {
+                Get-ChildItem -Path $p -Force -ErrorAction SilentlyContinue | ForEach-Object {
+                    try { Remove-Item $_.FullName -Recurse -Force -ErrorAction SilentlyContinue } catch {}
+                }
+            }
+        } catch {}
+    }
+    Write-Log "$Label cleaned." "OK"
+}
+
+function Invoke-MacDefaults {
+    param([string]$Domain, [string]$Key, [string]$Type = "bool", [string]$Value = "true")
+    if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }
+    try { & defaults write $Domain $Key $Type $Value 2>$null; Write-Log "defaults $Domain $Key=$Value" "OK" } catch { Write-Log "defaults $Domain $Key failed." "WARN" }
+}
+
+function Invoke-MacDefaultsGroup {
+    param([array]$Items)
+    if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }
+    $n = 0
+    foreach ($i in $Items) {
+        try {
+            $type = if ($i.Type) { [string]$i.Type } else { "bool" }
+            & defaults write $i.Domain $i.Key $type $i.Value 2>$null
+            $n++
+        } catch {}
+    }
+    Write-Log "Applied $n macOS defaults." "OK"
+}
+
+function Invoke-MacDelete {
+    param([string]$Domain, [string]$Key)
+    if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }
+    try { & defaults delete $Domain $Key 2>$null; Write-Log "defaults delete $Domain $Key" "OK" } catch { Write-Log "defaults delete failed: $Domain $Key" "WARN" }
+}
+
+function Invoke-MacCleanup {
+    param([string[]]$Paths, [string]$Label = "Cache")
+    if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }
+    foreach ($p in $Paths) {
+        try {
+            if (Test-Path $p) {
+                Get-ChildItem -Path $p -Force -ErrorAction SilentlyContinue | ForEach-Object {
+                    try { Remove-Item $_.FullName -Recurse -Force -ErrorAction SilentlyContinue } catch {}
+                }
+            }
+        } catch {}
+    }
+    Write-Log "$Label cleaned." "OK"
+}
+
+function Invoke-MacRefresh {
+    param([string[]]$Names)
+    if (-not $IsMac) { return }
+    foreach ($n in $Names) { try { & killall $n 2>$null } catch {} }
+}
+
+function Invoke-MacDns {
+    param([string[]]$Servers)
+    if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }
+    try {
+        $services = & networksetup -listallnetworkservices 2>$null | Select-Object -Skip 1
+        foreach ($s in $services) {
+            if ($s -and $s -notmatch '^\*') { & networksetup -setdnsservers $s @Servers 2>$null }
+        }
+        & dscacheutil -flushcache 2>$null
+        Write-Log "DNS set to $($Servers -join ', ')." "OK"
+    } catch { Write-Log "DNS change failed." "WARN" }
+}
+
+function Invoke-MacPmset {
+    param([string]$Arguments)
+    if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }
+    try {
+        $parts = $Arguments -split '\s+'
+        & pmset @parts 2>$null | Out-Null
+        Write-Log "pmset $Arguments" "OK"
+    } catch { Write-Log "pmset failed: $Arguments" "WARN" }
+}
+
+function Invoke-MacNvram {
+    param([string]$Setting, [string]$Value)
+    if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }
+    try { & nvram "$Setting=$Value" 2>$null; Write-Log "nvram $Setting=$Value" "OK" } catch { Write-Log "nvram $Setting failed." "WARN" }
+}
+
 # Startup delay / QoS / core parking / timer / menu / transparency
 function Invoke-StartupDelayOff {
     if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
@@ -1474,7 +1650,322 @@ $Script:Tweaks = @(
     @{Id="macdock";Name="Disable Dock animations (Mac)";Desc="Removes Dock hide/show animation and delay for a snappier desktop.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Visual";Action={Invoke-MacDockAnimationsOff}},
     @{Id="macmenubar";Name="Disable menu bar transparency (Mac)";Desc="Makes the menu bar opaque. Less compositor work.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Visual";Action={Invoke-MacMenuBarTransparencyOff}},
     @{Id="macshots";Name="Disable screenshot shadow (Mac)";Desc="Removes the drop shadow from screenshots. Faster captures and smaller files.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Visual";Action={Invoke-MacScreenshotShadowOff}},
-    @{Id="machandoff";Name="Disable Handoff (Mac)";Desc="Stops Handoff/Continuity advertising and receiving in the background.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Services";Action={Invoke-MacDisableHandoff}}
+    @{Id="machandoff";Name="Disable Handoff (Mac)";Desc="Stops Handoff/Continuity advertising and receiving in the background.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Services";Action={Invoke-MacDisableHandoff}},
+
+    # ---------- v5.3 EXPANSION: GENERAL ----------
+    @{Id="winwelcomeoff";Name="Disable Windows welcome suggestions";Desc="Turns off the post-update welcome screen, suggested apps and soft-landing prompts. Less background content fetching.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="General";Action={Invoke-RegGroup -Items @(
+        @{Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager";Name="SoftLandingEnabled";Value=0},
+        @{Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager";Name="SubscribedContent-310093Enabled";Value=0},
+        @{Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager";Name="SubscribedContent-338388Enabled";Value=0},
+        @{Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager";Name="SubscribedContent-338389Enabled";Value=0}
+    )}},
+    @{Id="startrecommendoff";Name="Disable Start menu recommendations";Desc="Removes recommended apps and tips from Start. Less background content and a cleaner menu.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="General";Action={Invoke-RegGroup -Items @(
+        @{Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced";Name="Start_IrisRecommendations";Value=0},
+        @{Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced";Name="Start_AccountNotifications";Value=0}
+    )}},
+    @{Id="startrecentoff";Name="Hide recent items in Start";Desc="Stops Start from tracking and showing recently opened apps and documents.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="General";Action={Invoke-RegSet -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "Start_TrackDocs" -Value 0}},
+    @{Id="quickaccessrecent";Name="Hide recent files in Quick Access";Desc="Stops File Explorer from listing recently used files. Less disk and shell work.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="General";Action={Invoke-RegSet -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "ShowRecent" -Value 0}},
+    @{Id="quickaccessfrequent";Name="Hide frequent folders in Quick Access";Desc="Stops File Explorer from listing frequently used folders.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="General";Action={Invoke-RegSet -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "ShowFrequent" -Value 0}},
+    @{Id="wininkoff";Name="Disable Windows Ink Workspace";Desc="Removes the Ink Workspace and its background pen services.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="General";Action={Invoke-RegSet -Path "HKLM:\SOFTWARE\Policies\Microsoft\WindowsInkWorkspace" -Name "AllowWindowsInkWorkspace" -Value 0}},
+    @{Id="meetnowhide";Name="Hide Meet Now button";Desc="Removes the Meet Now icon from the taskbar and its background helper.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="General";Action={Invoke-RegSet -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideSCAMeetNow" -Value 1}},
+    @{Id="bingsearchoff";Name="Disable Bing search in Start";Desc="Stops Start search from sending queries to Bing and Cortana. Local results only.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="General";Action={Invoke-RegGroup -Items @(
+        @{Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\Search";Name="BingSearchEnabled";Value=0},
+        @{Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\Search";Name="CortanaConsent";Value=0}
+    )}},
+    @{Id="searchboxhide";Name="Hide taskbar search box";Desc="Collapses the taskbar search box to an icon-only button and reduces shell rendering.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="General";Action={Invoke-RegSet -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Search" -Name "SearchboxTaskbarMode" -Value 1}},
+    @{Id="taskviewhide";Name="Hide Task View button";Desc="Removes the Task View button from the taskbar.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="General";Action={Invoke-RegSet -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "ShowTaskViewButton" -Value 0}},
+    @{Id="widgetstaskbarhide";Name="Hide widgets taskbar button";Desc="Removes the widgets/news button from the taskbar. Pair with Disable Widgets/News for the full effect.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="General";Action={Invoke-RegSet -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "TaskbarDa" -Value 0}},
+    @{Id="lockstoriesoff";Name="Disable lock screen Spotlight";Desc="Turns off rotating lock-screen images, tips and Spotlight overlays. Less network and compositor work.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="General";Action={Invoke-RegGroup -Items @(
+        @{Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager";Name="RotatingLockScreenEnabled";Value=0},
+        @{Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager";Name="RotatingLockScreenOverlayEnabled";Value=0}
+    )}},
+    @{Id="activityfeedoff";Name="Disable Timeline activity feed";Desc="Stops Windows collecting, publishing and uploading activity history for Timeline.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="General";Action={Invoke-RegGroup -Items @(
+        @{Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced";Name="EnableActivityFeed";Value=0},
+        @{Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced";Name="PublishUserActivities";Value=0},
+        @{Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced";Name="UploadUserActivities";Value=0}
+    )}},
+    @{Id="desktopslideshowoff";Name="Disable desktop slideshow";Desc="Stops the desktop wallpaper slideshow and its periodic image decoding.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="General";Action={Invoke-RegSet -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Wallpapers" -Name "BackgroundType" -Value 0}},
+    @{Id="clearrecyclebin";Name="Empty Recycle Bin";Desc="Permanently deletes everything in the Recycle Bin. Frees disk space.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="General";Action={if($IsWin){Clear-RecycleBin -Force -ErrorAction SilentlyContinue; Write-Log "Recycle Bin emptied." "OK"}}},
+
+    # ---------- v5.3 EXPANSION: INPUT ----------
+    @{Id="mousesens10";Name="Max mouse sensitivity";Desc="Sets the Windows pointer speed to 10 for faster desktop movement. Pair with Mouse Precision for 1:1 tracking.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Input";Action={Invoke-RegSet -Path "HKCU:\Control Panel\Mouse" -Name "MouseSensitivity" -Value "10" -Type String}},
+    @{Id="filterkeysoff";Name="Disable Filter Keys";Desc="Turns off Filter Keys so brief or repeated key presses are not ignored.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Input";Action={Invoke-RegSet -Path "HKCU:\Control Panel\Accessibility\Keyboard Response" -Name "Flags" -Value "122" -Type String}},
+    @{Id="stickykeysoff";Name="Disable Sticky Keys";Desc="Turns off Sticky Keys so modifier keys do not latch during play.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Input";Action={Invoke-RegSet -Path "HKCU:\Control Panel\Accessibility\StickyKeys" -Name "Flags" -Value "506" -Type String}},
+    @{Id="togglekeysoff";Name="Disable Toggle Keys";Desc="Turns off Toggle Keys beeps for Caps Lock, Num Lock and Scroll Lock.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Input";Action={Invoke-RegSet -Path "HKCU:\Control Panel\Accessibility\ToggleKeys" -Name "Flags" -Value "58" -Type String}},
+    @{Id="mousekeysoff";Name="Disable Mouse Keys";Desc="Turns off Mouse Keys so the numeric keypad cannot move the pointer.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Input";Action={Invoke-RegSet -Path "HKCU:\Control Panel\Accessibility\MouseKeys" -Name "Flags" -Value "0" -Type String}},
+    @{Id="cursorblinkoff";Name="Disable cursor blink";Desc="Stops the text cursor from blinking. Removes a small continuous repaint.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Input";Action={Invoke-RegSet -Path "HKCU:\Control Panel\Desktop" -Name "CursorBlinkRate" -Value "-1" -Type String}},
+    @{Id="scrollinactiveoff";Name="Disable scroll inactive windows";Desc="Stops the mouse wheel from scrolling windows you are not using. Prevents accidental input in the background.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Input";Action={Invoke-RegSet -Path "HKCU:\Control Panel\Desktop" -Name "MouseWheelRouting" -Value 0}},
+    @{Id="hungapptimeout";Name="Faster hung app timeout";Desc="Shortens the wait before Windows marks an app as not responding and kills it faster.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Input";Action={Invoke-RegGroup -Items @(
+        @{Path="HKCU:\Control Panel\Desktop";Name="HungAppTimeout";Value="1000";Type="String"},
+        @{Path="HKCU:\Control Panel\Desktop";Name="WaitToKillAppTimeout";Value="2000";Type="String"}
+    )}},
+    @{Id="autokillhung";Name="Auto-end hung apps";Desc="Lets Windows close unresponsive apps automatically instead of waiting for a dialog.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Input";Action={Invoke-RegSet -Path "HKCU:\Control Panel\Desktop" -Name "AutoEndTasks" -Value "1" -Type String}},
+    @{Id="foregroundboost";Name="Foreground priority boost";Desc="Sets Win32PrioritySeparation to 38 so the active game gets a larger CPU quantum slice.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Input";Action={Invoke-RegSet -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 38}},
+
+    # ---------- v5.3 EXPANSION: NETWORK ----------
+    @{Id="dnsgoogle";Name="Google DNS";Desc="Sets 8.8.8.8 and 8.8.4.4 on active adapters, then flushes DNS. Low-latency public resolver.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={if($IsWin){Get-NetAdapter -ErrorAction SilentlyContinue | ForEach-Object { try { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses @("8.8.8.8","8.8.4.4") -ErrorAction SilentlyContinue } catch {} }; ipconfig /flushdns 2>$null | Out-Null; Write-Log "Google DNS applied." "OK"}}},
+    @{Id="dnsquad9";Name="Quad9 DNS";Desc="Sets 9.9.9.9 and 149.112.112.112 on active adapters with malware blocking. Flushes DNS after.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={if($IsWin){Get-NetAdapter -ErrorAction SilentlyContinue | ForEach-Object { try { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses @("9.9.9.9","149.112.112.112") -ErrorAction SilentlyContinue } catch {} }; ipconfig /flushdns 2>$null | Out-Null; Write-Log "Quad9 DNS applied." "OK"}}},
+    @{Id="dnsauto";Name="Reset DNS to automatic";Desc="Clears manual DNS servers and returns every adapter to DHCP-provided DNS.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={if($IsWin){Get-NetAdapter -ErrorAction SilentlyContinue | ForEach-Object { try { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ResetServerAddresses -ErrorAction SilentlyContinue } catch {} }; ipconfig /flushdns 2>$null | Out-Null; Write-Log "DNS reset to automatic." "OK"}}},
+    @{Id="teredooff";Name="Disable Teredo tunneling";Desc="Turns off the Teredo IPv6 transition tunnel. Less background tunnel traffic.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-Cmd -Cmd "netsh interface teredo set state disabled"}},
+    @{Id="isatapoff";Name="Disable ISATAP";Desc="Turns off the ISATAP IPv6 transition adapter. Less background network overhead.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-Cmd -Cmd "netsh interface isatap set state disabled"}},
+    @{Id="six4off";Name="Disable 6to4";Desc="Turns off the 6to4 IPv6 relay. Fewer virtual adapters and less background traffic.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-Cmd -Cmd "netsh interface 6to4 set state disabled"}},
+    @{Id="rscdisable";Name="Disable Receive Segment Coalescing";Desc="Stops the NIC from batching received packets. Lower latency, slightly more CPU.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-Cmd -Cmd "netsh int tcp set global rsc=disabled"}},
+    @{Id="initialrto";Name="Lower TCP initial retransmit timeout";Desc="Sets the initial TCP retransmission timeout to 2000 ms. Faster recovery from a dropped packet.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-Cmd -Cmd "netsh int tcp set global initialRto=2000"}},
+    @{Id="wifipowersave";Name="Disable Wi-Fi power saving";Desc="Sets adapter power saving to Disabled so the Wi-Fi radio does not sleep between packets.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-AdapterProp -DisplayName "Power Saving Mode" -Value "Disabled"}},
+    @{Id="eeeoff";Name="Disable Energy Efficient Ethernet";Desc="Turns off EEE on Ethernet adapters. Keeps the link fully awake for steadier latency.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-AdapterProp -DisplayName "Energy Efficient Ethernet" -Value "Disabled"}},
+    @{Id="flowcontroloff";Name="Disable Ethernet flow control";Desc="Turns off adapter flow control so pause frames do not delay game packets.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-AdapterProp -DisplayName "Flow Control" -Value "Disabled"}},
+    @{Id="woloff";Name="Disable Wake on Magic Packet";Desc="Stops the NIC from waking the PC for magic packets. Less standby power and background wake events.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-AdapterProp -DisplayName "Wake on Magic Packet" -Value "Disabled"}},
+    @{Id="smbmultichannel";Name="Disable SMB Multichannel";Desc="Stops SMB from opening multiple network connections. Less overhead on small home networks.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-Cmd -Cmd "Set-SmbClientConfiguration -EnableMultiChannel $false -Force -ErrorAction SilentlyContinue"}},
+    @{Id="netdiscoveryoff";Name="Disable Network Discovery";Desc="Blocks the Network Discovery firewall group. Less broadcast chatter and a smaller attack surface.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-Cmd -Cmd "netsh advfirewall firewall set rule group='Network Discovery' new enable=No"}},
+    @{Id="filesharingoff";Name="Disable File and Printer Sharing";Desc="Blocks the File and Printer Sharing firewall group. Less inbound surface and background SMB traffic.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-Cmd -Cmd "netsh advfirewall firewall set rule group='File and Printer Sharing' new enable=No"}},
+    @{Id="flushdnscache";Name="Flush DNS cache";Desc="Clears the Windows resolver cache. Fixes stale DNS entries without resetting the whole stack.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-Cmd -Cmd "ipconfig /flushdns"}},
+    @{Id="flusharp";Name="Flush ARP cache";Desc="Clears the ARP neighbor cache so stale MAC mappings are rebuilt. Helps after router or switch changes.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-Cmd -Cmd "netsh interface ip delete arpcache"}},
+
+    # ---------- v5.3 EXPANSION: POWER ----------
+    @{Id="displaysleepoff";Name="Disable display sleep";Desc="Stops the monitor from sleeping or dimming on AC power. Useful for long sessions and benchmarks.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Power";Action={Invoke-Cmd -Cmd "powercfg /change monitor-timeout-ac 0"}},
+    @{Id="procmax100";Name="Keep processor at 100% max";Desc="Sets the processor maximum state to 100% on AC and battery so Windows cannot cap clocks.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Power";Action={Invoke-PowerSet -Subgroup "SUB_PROCESSOR" -Setting "PROCTHROTTLEMAX" -AC 100 -DC 100}},
+    @{Id="energysaveroff";Name="Disable Energy Saver";Desc="Turns off the Energy Saver power mode that throttles hardware to save power.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Power";Action={Invoke-PowerSet -Subgroup "SUB_ENERGYSAVER" -Setting "ESBATTTHRESHOLD" -AC 0 -DC 0}},
+    @{Id="adaptbrightnessoff";Name="Disable adaptive brightness";Desc="Stops Windows from changing display brightness based on ambient light. Steadier frame pacing.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Power";Action={Invoke-PowerSet -Subgroup "SUB_VIDEO" -Setting "ADAPTBRIGHT" -AC 0 -DC 0}},
+    @{Id="waketimersoff";Name="Disable wake timers";Desc="Stops scheduled tasks and maintenance from waking the PC. Fewer surprise wake events.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Power";Action={Invoke-PowerSet -Subgroup "SUB_SLEEP" -Setting "BD3B718A-0680-4D9D-8AB2-E1D2B4AC806D" -AC 0 -DC 0}},
+    @{Id="usbwakeoff";Name="Disable USB wake";Desc="Stops USB devices from waking the PC from sleep. Prevents accidental wakes from mice and hubs.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Power";Action={Invoke-PowerSet -Subgroup "SUB_USB" -Setting "48E6B7A6-50F5-4782-A5D4-53BB8F07E226" -AC 0 -DC 0}},
+    @{Id="modernstandbyoff";Name="Disable Modern Standby";Desc="Forces classic S3 sleep instead of Modern Standby. Reboot required; not supported on every laptop.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Power";Action={Invoke-RegSet -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Power" -Name "PlatformAoAcOverride" -Value 0}},
+    @{Id="powerplanhigh";Name="High Performance power plan";Desc="Switches to the built-in High Performance plan. Less aggressive clock dropping than Balanced.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Power";Action={Invoke-Cmd -Cmd "powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c"}},
+    @{Id="powerplanbalanced";Name="Balanced power plan";Desc="Returns to the standard Balanced plan. Useful after testing or on battery.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Power";Action={Invoke-Cmd -Cmd "powercfg /setactive 381b4222-f694-41f0-9685-ff5bb260df2e"}},
+    @{Id="cpuidleoff";Name="Disable CPU idle states";Desc="Prevents the CPU from entering deep idle states under load. Lower latency, higher heat and power draw.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Power";Action={Invoke-PowerSet -Subgroup "SUB_PROCESSOR" -Setting "IDLEDISABLE" -AC 1 -DC 1}},
+
+    # ---------- v5.3 EXPANSION: VISUAL ----------
+    @{Id="dragfullwindows";Name="Disable window contents while dragging";Desc="Shows only an outline while moving windows. Makes dragging feel instant on slower GPUs.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Visual";Action={Invoke-RegSet -Path "HKCU:\Control Panel\Desktop" -Name "DragFullWindows" -Value "0" -Type String}},
+    @{Id="iconsonly";Name="Disable Explorer thumbnails";Desc="Shows icons instead of image and video thumbnails. Less shell decoding and disk I/O.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Visual";Action={Invoke-RegSet -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "IconsOnly" -Value 1}},
+    @{Id="notificationcenteroff";Name="Disable Notification Center";Desc="Turns off the Action Center/Notification Center panel and its background rendering.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Visual";Action={Invoke-RegSet -Path "HKCU:\Software\Policies\Microsoft\Windows\Explorer" -Name "DisableNotificationCenter" -Value 1}},
+    @{Id="taskbarbadgesoff";Name="Disable taskbar badges";Desc="Stops app badges and counters from drawing on taskbar icons.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Visual";Action={Invoke-RegSet -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "TaskbarBadges" -Value 0}},
+    @{Id="startanimoff";Name="Disable Start animations";Desc="Turns off Start menu open/close animations for an instant menu.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Visual";Action={Invoke-RegSet -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "Start_Animation" -Value 0}},
+
+    # ---------- v5.3 EXPANSION: STORAGE ----------
+    @{Id="clearupdatecache";Name="Clear Windows Update cache";Desc="Stops Windows Update, deletes downloaded update files and restarts the service. Frees disk space.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Storage";Action={Invoke-Cmd -Cmd "Stop-Service wuauserv -Force -ErrorAction SilentlyContinue; Remove-Item 'C:\Windows\SoftwareDistribution\Download\*' -Recurse -Force -ErrorAction SilentlyContinue; Start-Service wuauserv -ErrorAction SilentlyContinue"}},
+    @{Id="clearwerqueue";Name="Clear error report queue";Desc="Deletes queued and archived Windows Error Reporting crash dumps. Frees disk space.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Storage";Action={Invoke-Cleanup -Paths @("C:\ProgramData\Microsoft\Windows\WER\ReportQueue","C:\ProgramData\Microsoft\Windows\WER\ReportArchive","$env:LOCALAPPDATA\Microsoft\Windows\WER") -Label "Error reports"}},
+    @{Id="clearstorecache";Name="Reset Microsoft Store cache";Desc="Runs the Store cache reset tool. Fixes stuck downloads and frees stale package cache.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Storage";Action={Invoke-Cmd -Cmd "wsreset.exe -i"}},
+    @{Id="clearthumbcache";Name="Clear thumbnail cache";Desc="Deletes Explorer thumbnail databases so they rebuild cleanly. Frees disk space.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Storage";Action={Invoke-Cleanup -Paths @("$env:LOCALAPPDATA\Microsoft\Windows\Explorer") -Label "Thumbnail cache"}},
+    @{Id="clearfontcachewin";Name="Clear Windows font cache";Desc="Stops the font cache service, deletes cached font data and restarts it. Fixes stale font rendering.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Storage";Action={Invoke-Cmd -Cmd "Stop-Service FontCache -Force -ErrorAction SilentlyContinue; Remove-Item 'C:\Windows\ServiceProfiles\LocalService\AppData\Local\FontCache\*' -Recurse -Force -ErrorAction SilentlyContinue; Start-Service FontCache -ErrorAction SilentlyContinue"}},
+    @{Id="cleardxshader";Name="Clear DirectX shader cache";Desc="Deletes the DirectX shader cache. Games rebuild it on next launch.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Storage";Action={Invoke-Cleanup -Paths @("$env:LOCALAPPDATA\D3DSCache") -Label "DirectX shader cache"}},
+    @{Id="clearnvshader";Name="Clear NVIDIA shader cache";Desc="Deletes NVIDIA DX and GL shader caches. Frees space if you change drivers often.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Storage";Action={Invoke-Cleanup -Paths @("$env:LOCALAPPDATA\NVIDIA\DXCache","$env:LOCALAPPDATA\NVIDIA\GLCache") -Label "NVIDIA shader cache"}},
+    @{Id="clearamdshader";Name="Clear AMD shader cache";Desc="Deletes AMD DX and GL shader caches. Frees space if you change drivers often.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Storage";Action={Invoke-Cleanup -Paths @("$env:LOCALAPPDATA\AMD\DxCache","$env:LOCALAPPDATA\AMD\GLCache") -Label "AMD shader cache"}},
+    @{Id="cleardonotcache";Name="Clear Delivery Optimization cache";Desc="Deletes cached update chunks used for peer-to-peer delivery. Frees disk space.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Storage";Action={Invoke-Cmd -Cmd "Delete-DeliveryOptimizationCache -Force -ErrorAction SilentlyContinue"}},
+    @{Id="clearcrashdumps";Name="Clear crash dumps";Desc="Deletes user and system crash dump files. Frees disk space after a crash.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Storage";Action={Invoke-Cleanup -Paths @("$env:LOCALAPPDATA\CrashDumps","C:\Windows\Minidump") -Label "Crash dumps"}},
+    @{Id="clearfortnitecache";Name="Clear Fortnite shader cache";Desc="Deletes Fortnite's generated shader cache. The game rebuilds it on next launch.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Storage";Action={Invoke-Cleanup -Paths @("$env:LOCALAPPDATA\FortniteGame\Saved\ShaderCache") -Label "Fortnite shader cache"}},
+    @{Id="optimizessd";Name="Retrim system drive";Desc="Runs Optimize-Volume with -ReTrim on C: to refresh SSD free blocks. Frees performance on full drives.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Storage";Action={Invoke-Cmd -Cmd "Optimize-Volume -DriveLetter C -ReTrim -ErrorAction SilentlyContinue"}},
+
+    # ---------- v5.3 EXPANSION: FIRMWARE-ADJACENT ----------
+    @{Id="hypervisoroff";Name="Disable Hyper-V hypervisor at boot";Desc="Sets hypervisorlaunchtype off. Removes virtualization overhead for gaming but breaks WSL2, Docker and VBS. Reboot required.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Firmware";Action={Invoke-BcdSet -Setting "hypervisorlaunchtype" -Value "off"}},
+    @{Id="vbsdisable";Name="Disable VBS at boot";Desc="Turns off Virtualization-Based Security. Frees CPU cycles for games; lowers isolation. Reboot required.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Firmware";Action={Invoke-RegGroup -Items @(
+        @{Path="HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard";Name="EnableVirtualizationBasedSecurity";Value=0},
+        @{Path="HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity";Name="Enabled";Value=0}
+    )}},
+    @{Id="memoryintegrityoff";Name="Disable Memory Integrity";Desc="Turns off HVCI/Memory Integrity. Recovers CPU performance at the cost of kernel-level protection. Reboot required.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Firmware";Action={Invoke-RegSet -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity" -Name "Enabled" -Value 0}},
+
+    # ---------- v5.3 EXPANSION: PRIVACY ----------
+    @{Id="suggestedcontentoff";Name="Disable suggested content";Desc="Turns off suggested apps, tips and promotional content across Settings and the shell.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Privacy";Action={Invoke-RegGroup -Items @(
+        @{Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager";Name="SubscribedContent-338393Enabled";Value=0},
+        @{Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager";Name="SubscribedContent-353694Enabled";Value=0},
+        @{Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager";Name="SubscribedContent-353696Enabled";Value=0},
+        @{Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager";Name="SystemPaneSuggestionsEnabled";Value=0}
+    )}},
+    @{Id="silentinstalloff";Name="Disable silent app installs";Desc="Stops Windows from installing promoted apps in the background.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Privacy";Action={Invoke-RegGroup -Items @(
+        @{Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager";Name="SilentInstalledAppsEnabled";Value=0},
+        @{Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager";Name="PreInstalledAppsEnabled";Value=0},
+        @{Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager";Name="OemPreInstalledAppsEnabled";Value=0}
+    )}},
+    @{Id="inkingoff";Name="Disable inking and typing personalization";Desc="Stops Windows collecting handwriting, typing and contact data for suggestions.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Privacy";Action={Invoke-RegGroup -Items @(
+        @{Path="HKCU:\Software\Microsoft\InputPersonalization";Name="RestrictImplicitTextCollection";Value=1},
+        @{Path="HKCU:\Software\Microsoft\InputPersonalization";Name="RestrictImplicitInkCollection";Value=1},
+        @{Path="HKCU:\Software\Microsoft\InputPersonalization\TrainedDataStore";Name="HarvestContacts";Value=0}
+    )}},
+    @{Id="speechoff";Name="Disable online speech recognition";Desc="Turns off cloud speech recognition. Less audio processing and data upload.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Privacy";Action={Invoke-RegSet -Path "HKCU:\Software\Microsoft\Speech_OneCore\Settings\OnlineSpeechPrivacy" -Name "HasAccepted" -Value 0}},
+    @{Id="cloudsearchoff";Name="Disable cloud search";Desc="Keeps Start and search results local instead of querying the cloud.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Privacy";Action={Invoke-RegSet -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Search" -Name "CloudSearchEnabled" -Value 0}},
+    @{Id="remoteassistoff";Name="Disable Remote Assistance";Desc="Blocks unsolicited Remote Assistance invitations. Smaller attack surface.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Privacy";Action={Invoke-RegSet -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Remote Assistance" -Name "fAllowToGetHelp" -Value 0}},
+    @{Id="wifisenseoff";Name="Disable Wi-Fi Sense";Desc="Stops Windows from sharing or connecting to crowdsourced Wi-Fi networks.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Privacy";Action={Invoke-RegGroup -Items @(
+        @{Path="HKLM:\SOFTWARE\Microsoft\WcmSvc\wifinetworkmanager\config";Name="AutoConnectAllowedOEM";Value=0},
+        @{Path="HKCU:\Software\Microsoft\WcmSvc\wifinetworkmanager\config";Name="AutoConnectAllowedOEM";Value=0}
+    )}},
+    @{Id="recentdocsclear";Name="Clear recent documents";Desc="Deletes the Recent Items list and stops Start from tracking documents.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Privacy";Action={Invoke-Cleanup -Paths @("$env:APPDATA\Microsoft\Windows\Recent") -Label "Recent documents"}},
+    @{Id="runhistoryclear";Name="Clear Run dialog history";Desc="Deletes the Win+R history so previous commands are not stored.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Privacy";Action={Invoke-Cmd -Cmd "Remove-Item 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\RunMRU\*' -Force -ErrorAction SilentlyContinue"}},
+    @{Id="mruclear";Name="Clear Explorer MRU lists";Desc="Deletes Explorer's most-recently-used file and folder lists.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Privacy";Action={Invoke-Cmd -Cmd "Remove-Item 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\RecentDocs\*' -Force -ErrorAction SilentlyContinue; Remove-Item 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\TypedPaths\*' -Force -ErrorAction SilentlyContinue"}},
+    @{Id="notificationhistoryoff";Name="Disable notification history";Desc="Stops Windows storing notification history and action-center entries.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Privacy";Action={Invoke-RegSet -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Notifications\Settings" -Name "NOC_GLOBAL_SETTING_TOASTS_ENABLED" -Value 0}},
+
+    # ---------- v5.3 EXPANSION: SERVICE TOGGLES ----------
+    @{Id="svcajrouter";Name="Disable AllJoyn Router";Desc="Stops the AllJoyn Router service used by legacy IoT device discovery.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="AJRouter";Action={Invoke-ServiceDisable -Name "AJRouter"}},
+    @{Id="svcalg";Name="Disable Application Layer Gateway";Desc="Stops the ALG service that helps legacy NAT traversal for some protocols.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="ALG";Action={Invoke-ServiceDisable -Name "ALG"}},
+    @{Id="svcappreadiness";Name="Disable App Readiness";Desc="Stops the service that pre-stages Store apps before login. Faster boot and less background disk work.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="AppReadiness";Action={Invoke-ServiceDisable -Name "AppReadiness"}},
+    @{Id="svcappx";Name="Disable AppX Deployment";Desc="Stops the AppX deployment service used to install and update Store apps. Store app installs will fail.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="AppXSvc";Action={Invoke-ServiceDisable -Name "AppXSvc"}},
+    @{Id="svcassignedaccess";Name="Disable Assigned Access Manager";Desc="Stops the kiosk/assigned-access service. Not needed on a gaming PC.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="AssignedAccessManagerSvc";Action={Invoke-ServiceDisable -Name "AssignedAccessManagerSvc"}},
+    @{Id="svcbthavctp";Name="Disable Bluetooth AVCTP";Desc="Stops Bluetooth audio/video control transport. Disable only if you do not use Bluetooth audio.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="BthAvctpSvc";Action={Invoke-ServiceDisable -Name "BthAvctpSvc"}},
+    @{Id="svcbthhf";Name="Disable Bluetooth Hands-Free";Desc="Stops the Bluetooth hands-free profile. Disable only if you do not use a Bluetooth headset mic.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="BthHFSrv";Action={Invoke-ServiceDisable -Name "BthHFSrv"}},
+    @{Id="svccertprop";Name="Disable Certificate Propagation";Desc="Stops smart-card certificate propagation into the user profile.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="CertPropSvc";Action={Invoke-ServiceDisable -Name "CertPropSvc"}},
+    @{Id="svcclipsvc";Name="Disable Client License Service";Desc="Stops the Store license service. Already-installed apps keep working; Store purchases may not.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="ClipSVC";Action={Invoke-ServiceDisable -Name "ClipSVC"}},
+    @{Id="svccloudbackup";Name="Disable Cloud Backup and Restore";Desc="Stops Windows cloud backup and restore. Less background upload activity.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="CloudBackupRestoreSvc";Action={Invoke-ServiceDisable -Name "CloudBackupRestoreSvc"}},
+    @{Id="svcdsmsvc";Name="Disable Device Setup Manager";Desc="Stops background device metadata and setup downloads. Faster idle.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="DsmSvc";Action={Invoke-ServiceDisable -Name "DsmSvc"}},
+    @{Id="svcdssvc";Name="Disable Data Sharing Service";Desc="Stops the data sharing broker used by some Store apps.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="DsSvc";Action={Invoke-ServiceDisable -Name "DsSvc"}},
+    @{Id="svcdusm";Name="Disable Data Usage service";Desc="Stops the data usage monitor. Network usage reporting in Settings will stop updating.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="DusmSvc";Action={Invoke-ServiceDisable -Name "DusmSvc"}},
+    @{Id="svcefs";Name="Disable Encrypting File System";Desc="Stops EFS. Do not disable if you use EFS-encrypted files.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="EFS";Action={Invoke-ServiceDisable -Name "EFS"}},
+    @{Id="svcentapp";Name="Disable Enterprise App Management";Desc="Stops enterprise app deployment. Not needed on a personal PC.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="EntAppSvc";Action={Invoke-ServiceDisable -Name "EntAppSvc"}},
+    @{Id="svcframeserver";Name="Disable Camera Frame Server";Desc="Stops the shared camera pipeline. Webcams will not work until re-enabled.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="FrameServer";Action={Invoke-ServiceDisable -Name "FrameServer"}},
+    @{Id="svcfhsvc";Name="Disable File History";Desc="Stops the File History backup service. Less background disk and network activity.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="fhsvc";Action={Invoke-ServiceDisable -Name "fhsvc"}},
+    @{Id="svcgraphicsperf";Name="Disable Graphics Performance Monitor";Desc="Stops the graphics performance logging service used by Task Manager graphs.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="GraphicsPerfSvc";Action={Invoke-ServiceDisable -Name "GraphicsPerfSvc"}},
+    @{Id="svchidserv";Name="Disable HID Access";Desc="Stops the Human Interface Device access service. Gamepads and special HID devices may stop working.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="hidserv";Action={Invoke-ServiceDisable -Name "hidserv"}},
+    @{Id="svcinstallservice";Name="Disable Store Install Service";Desc="Stops the Microsoft Store install service. Store installs and updates will fail.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="InstallService";Action={Invoke-ServiceDisable -Name "InstallService"}},
+    @{Id="svcinventory";Name="Disable Inventory Service";Desc="Stops the inventory service used by enterprise management.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="InventorySvc";Action={Invoke-ServiceDisable -Name "InventorySvc"}},
+    @{Id="svcktMRm";Name="Disable KTM RM";Desc="Stops the KTM distributed transaction coordinator helper. Rarely needed on a gaming PC.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="KtmRm";Action={Invoke-ServiceDisable -Name "KtmRm"}},
+    @{Id="svclicensemanager";Name="Disable License Manager";Desc="Stops the Windows license manager service. Activation status is unaffected.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="LicenseManager";Action={Invoke-ServiceDisable -Name "LicenseManager"}},
+    @{Id="svclltd";Name="Disable Link-Layer Topology Discovery";Desc="Stops LLTD network map discovery. Less LAN broadcast chatter.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="lltdsvc";Action={Invoke-ServiceDisable -Name "lltdsvc"}},
+    @{Id="svclmhosts";Name="Disable NetBIOS Helper";Desc="Stops the TCP/IP NetBIOS helper. Less legacy name-resolution traffic.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="lmhosts";Action={Invoke-ServiceDisable -Name "lmhosts"}},
+    @{Id="svclxp";Name="Disable Language Experience";Desc="Stops language pack and input-method background updates.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="LxpSvc";Action={Invoke-ServiceDisable -Name "LxpSvc"}},
+    @{Id="svcmcp";Name="Disable MCP Management";Desc="Stops the Microsoft cloud management service. Not needed on a home PC.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="McpManagementService";Action={Invoke-ServiceDisable -Name "McpManagementService"}},
+    @{Id="svcmessaging";Name="Disable Messaging Service";Desc="Stops the SMS/messaging service. Not needed on a desktop.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="MessagingService";Action={Invoke-ServiceDisable -Name "MessagingService"}},
+    @{Id="svcmixedreality";Name="Disable Mixed Reality OpenXR";Desc="Stops the OpenXR runtime service. VR headsets will not work until re-enabled.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="MixedRealityOpenXRSvc";Action={Invoke-ServiceDisable -Name "MixedRealityOpenXRSvc"}},
+    @{Id="svcmsiscsi";Name="Disable iSCSI Initiator";Desc="Stops the iSCSI initiator service. Not needed unless you boot or store games on iSCSI.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="MSiSCSI";Action={Invoke-ServiceDisable -Name "MSiSCSI"}},
+    @{Id="svcncasvc";Name="Disable Network Connectivity Assistant";Desc="Stops the connectivity assistant that probes network health. Less background traffic.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="NcaSvc";Action={Invoke-ServiceDisable -Name "NcaSvc"}},
+    @{Id="svcncbservice";Name="Disable Network Connection Broker";Desc="Stops the broker used by UWP apps to maintain background network connections.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="NcbService";Action={Invoke-ServiceDisable -Name "NcbService"}},
+    @{Id="svcnetsetup";Name="Disable Network Setup Service";Desc="Stops the network setup service used for driver and adapter setup.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="NetSetupSvc";Action={Invoke-ServiceDisable -Name "NetSetupSvc"}},
+    @{Id="svcnettcp";Name="Disable Net.Tcp Port Sharing";Desc="Stops the WCF port-sharing service. Not needed by games.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="NetTcpPortSharing";Action={Invoke-ServiceDisable -Name "NetTcpPortSharing"}},
+    @{Id="svcnfsclnt";Name="Disable NFS Client";Desc="Stops the Network File System client. Not needed unless you mount NFS shares.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="NfsClnt";Action={Invoke-ServiceDisable -Name "NfsClnt"}},
+    @{Id="svcpeerdist";Name="Disable BranchCache";Desc="Stops peer-to-peer content caching. Less background disk and network use.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="PeerDistSvc";Action={Invoke-ServiceDisable -Name "PeerDistSvc"}},
+    @{Id="svcperceptionsim";Name="Disable Perception Simulation";Desc="Stops the Windows perception simulation service used by mixed reality.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="perceptionsimulation";Action={Invoke-ServiceDisable -Name "perceptionsimulation"}},
+    @{Id="svcpimindex";Name="Disable Contact Data Index";Desc="Stops the contact data indexing service used by People and Mail.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="PimIndexMaintenanceSvc";Action={Invoke-ServiceDisable -Name "PimIndexMaintenanceSvc"}},
+    @{Id="svcpla";Name="Disable Performance Logs and Alerts";Desc="Stops performance counter logging. Less background disk writes.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="pla";Action={Invoke-ServiceDisable -Name "pla"}},
+    @{Id="svcpnrp";Name="Disable Peer Name Resolution";Desc="Stops the PNRP peer name service. Less LAN broadcast traffic.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="PNRPsvc";Action={Invoke-ServiceDisable -Name "PNRPsvc"}},
+    @{Id="svcpolicyagent";Name="Disable IPsec Policy Agent";Desc="Stops the IPsec policy agent. Disable only if you do not use IPsec/VPN policies.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="PolicyAgent";Action={Invoke-ServiceDisable -Name "PolicyAgent"}},
+    @{Id="svcprintnotify";Name="Disable Print Notifications";Desc="Stops print job notifications. Printing still works through the spooler.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="PrintNotify";Action={Invoke-ServiceDisable -Name "PrintNotify"}},
+    @{Id="svcprintworkflow";Name="Disable Print Workflow";Desc="Stops the modern print workflow service. Legacy printing is unaffected.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="PrintWorkflowUserSvc";Action={Invoke-ServiceDisable -Name "PrintWorkflowUserSvc"}},
+    @{Id="svcqwave";Name="Disable QWAVE";Desc="Stops the Quality Windows Audio Video Experience QoS service. Less background network shaping.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="QWAVE";Action={Invoke-ServiceDisable -Name "QWAVE"}},
+    @{Id="svcremoteaccess";Name="Disable Routing and Remote Access";Desc="Stops the RRAS service. Not needed unless this PC is a router or VPN server.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="RemoteAccess";Action={Invoke-ServiceDisable -Name "RemoteAccess"}},
+    @{Id="svcretailemo";Name="Disable Retail Demo";Desc="Stops the retail demo service used in store display PCs.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="RetailDemo";Action={Invoke-ServiceDisable -Name "RetailDemo"}},
+    @{Id="svcrmsvc";Name="Disable Radio Management";Desc="Stops the radio management service for Wi-Fi and mobile broadband. Re-enable before using Wi-Fi.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="RmSvc";Action={Invoke-ServiceDisable -Name "RmSvc"}},
+    @{Id="svcrpclocator";Name="Disable RPC Locator";Desc="Stops the legacy RPC locator service. Not needed on modern Windows.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="RpcLocator";Action={Invoke-ServiceDisable -Name "RpcLocator"}},
+    @{Id="svcscardsvr";Name="Disable Smart Card";Desc="Stops smart-card support. Do not disable if you use a smart card to sign in.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="SCardSvr";Action={Invoke-ServiceDisable -Name "SCardSvr"}},
+    @{Id="svcscpolicy";Name="Disable Smart Card Removal Policy";Desc="Stops the smart-card removal policy service.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="SCPolicySvc";Action={Invoke-ServiceDisable -Name "SCPolicySvc"}},
+    @{Id="svcsdrsvc";Name="Disable Windows Backup";Desc="Stops the Windows Backup service. Scheduled backups will not run.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="SDRSVC";Action={Invoke-ServiceDisable -Name "SDRSVC"}},
+    @{Id="svcsemgr";Name="Disable NFC/SE Manager";Desc="Stops near-field communication and secure-element support. Not needed on most desktops.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="SEMgrSvc";Action={Invoke-ServiceDisable -Name "SEMgrSvc"}},
+    @{Id="svcsensordata";Name="Disable Sensor Data Service";Desc="Stops sensor data aggregation for apps. Less background sensor polling.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="SensorDataService";Action={Invoke-ServiceDisable -Name "SensorDataService"}},
+    @{Id="svcsensorservice";Name="Disable Sensor Service";Desc="Stops the sensor service. Auto-rotate and some laptop sensors will stop working.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="SensorService";Action={Invoke-ServiceDisable -Name "SensorService"}},
+    @{Id="svcsensrsvc";Name="Disable Sensor Monitoring";Desc="Stops sensor monitoring for location and motion. Less background polling.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="SensrSvc";Action={Invoke-ServiceDisable -Name "SensrSvc"}},
+    @{Id="svcsharedreality";Name="Disable Spatial Data Service";Desc="Stops the spatial data service used by mixed reality.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="SharedRealitySvc";Action={Invoke-ServiceDisable -Name "SharedRealitySvc"}},
+    @{Id="svcshpam";Name="Disable Shared PC Account Manager";Desc="Stops the shared-PC account manager used in schools and kiosks.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="shpamsvc";Action={Invoke-ServiceDisable -Name "shpamsvc"}},
+    @{Id="svcsmphost";Name="Disable Storage Spaces SMP";Desc="Stops the Storage Spaces management provider. Not needed without Storage Spaces.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="smphost";Action={Invoke-ServiceDisable -Name "smphost"}},
+    @{Id="svcsmsrouter";Name="Disable SMS Router";Desc="Stops the Windows SMS router service. Not needed without cellular messaging.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="SmsRouter";Action={Invoke-ServiceDisable -Name "SmsRouter"}},
+    @{Id="svcsnmptrap";Name="Disable SNMP Trap";Desc="Stops sending SNMP traps. Not needed on a home network.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="SNMPTRAP";Action={Invoke-ServiceDisable -Name "SNMPTRAP"}},
+    @{Id="svcspectrum";Name="Disable Windows Perception Service";Desc="Stops the perception service used by mixed reality and some camera features.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="spectrum";Action={Invoke-ServiceDisable -Name "spectrum"}},
+    @{Id="svcssdpsrv";Name="Disable SSDP Discovery";Desc="Stops SSDP/UPnP discovery. Less LAN broadcast traffic; some media apps lose device discovery.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="SSDPSRV";Action={Invoke-ServiceDisable -Name "SSDPSRV"}},
+    @{Id="svcsstp";Name="Disable Secure Socket Tunneling";Desc="Stops the SSTP VPN service. Disable only if you do not use SSTP VPNs.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="SstpSvc";Action={Invoke-ServiceDisable -Name "SstpSvc"}},
+    @{Id="svcstisvc";Name="Disable Still Image Acquisition";Desc="Stops scanner and still-camera acquisition events.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="StiSvc";Action={Invoke-ServiceDisable -Name "StiSvc"}},
+    @{Id="svcstorsvc";Name="Disable Storage Service";Desc="Stops the storage service that manages Storage Spaces and disk notifications.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="StorSvc";Action={Invoke-ServiceDisable -Name "StorSvc"}},
+    @{Id="svcsvsvc";Name="Disable Spot Verifier";Desc="Stops the spot verifier service used to validate corrupted files.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="svsvc";Action={Invoke-ServiceDisable -Name "svsvc"}},
+    @{Id="svcswprv";Name="Disable Shadow Copy Provider";Desc="Stops the software shadow copy provider. System Restore and some backups will not work.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="SwPrv";Action={Invoke-ServiceDisable -Name "SwPrv"}},
+    @{Id="svctiering";Name="Disable Storage Tiers Management";Desc="Stops storage tier optimization for tiered volumes.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="TieringEngineService";Action={Invoke-ServiceDisable -Name "TieringEngineService"}},
+    @{Id="svctimebroker";Name="Disable Time Broker";Desc="Stops the time broker that schedules UWP background work.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="TimeBrokerSvc";Action={Invoke-ServiceDisable -Name "TimeBrokerSvc"}},
+    @{Id="svctzauto";Name="Disable Time Zone Updater";Desc="Stops automatic time-zone changes. Set your time zone manually first.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="tzautoupdate";Action={Invoke-ServiceDisable -Name "tzautoupdate"}},
+    @{Id="svcuevagent";Name="Disable User Experience Virtualization";Desc="Stops the UE-V settings roaming service. Not needed on a personal PC.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="UevAgentService";Action={Invoke-ServiceDisable -Name "UevAgentService"}},
+    @{Id="svcumrdp";Name="Disable RDP Port Redirector";Desc="Stops the Remote Desktop user-mode port redirector. Pair with Block Remote Desktop.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="UmRdpService";Action={Invoke-ServiceDisable -Name "UmRdpService"}},
+    @{Id="svcupnphost";Name="Disable UPnP Device Host";Desc="Stops hosting UPnP devices from this PC. Less background discovery traffic.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="upnphost";Action={Invoke-ServiceDisable -Name "upnphost"}},
+    @{Id="svcual";Name="Disable User Access Logging";Desc="Stops user access logging used by Windows Server roles.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="UserAccessLoggingSvc";Action={Invoke-ServiceDisable -Name "UserAccessLoggingSvc"}},
+    @{Id="svcuserdata";Name="Disable User Data Access";Desc="Stops user data access for UWP apps. Some Store apps lose saved data.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="UserDataSvc";Action={Invoke-ServiceDisable -Name "UserDataSvc"}},
+    @{Id="svcusermanager";Name="Disable User Manager";Desc="Stops the user manager service used by multi-user and Store scenarios.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="UserManager";Action={Invoke-ServiceDisable -Name "UserManager"}},
+    @{Id="svcvds";Name="Disable Virtual Disk";Desc="Stops the virtual disk service used by Disk Management and some storage tools.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="vds";Action={Invoke-ServiceDisable -Name "vds"}},
+    @{Id="svcw32time";Name="Disable Windows Time";Desc="Stops automatic clock sync. Your clock can drift; enable before online play if it does.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="W32Time";Action={Invoke-ServiceDisable -Name "W32Time"}},
+    @{Id="svcbio";Name="Disable Biometric Service";Desc="Stops Windows Hello biometric support. Password and PIN sign-in still work.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="WbioSrvc";Action={Invoke-ServiceDisable -Name "WbioSrvc"}},
+    @{Id="svcdiaghost";Name="Disable Diagnostic Service Host";Desc="Stops the diagnostic policy service host. Less background troubleshooting.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="WdiServiceHost";Action={Invoke-ServiceDisable -Name "WdiServiceHost"}},
+    @{Id="svcdiagsystem";Name="Disable Diagnostic System Host";Desc="Stops the diagnostic system host. Less background troubleshooting and logging.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="WdiSystemHost";Action={Invoke-ServiceDisable -Name "WdiSystemHost"}},
+    @{Id="svcwebclient";Name="Disable WebClient";Desc="Stops the WebDAV client service. Not needed unless you open WebDAV shares.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="WebClient";Action={Invoke-ServiceDisable -Name "WebClient"}},
+    @{Id="svcwec";Name="Disable Windows Event Collector";Desc="Stops event collection from other machines. Not needed on a home PC.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="Wecsvc";Action={Invoke-ServiceDisable -Name "Wecsvc"}},
+    @{Id="svcwephost";Name="Disable Encryption Provider Host";Desc="Stops the encryption provider host used by some enterprise security software.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="WEPHOSTSVC";Action={Invoke-ServiceDisable -Name "WEPHOSTSVC"}},
+    @{Id="svcwiarpc";Name="Disable Image Acquisition";Desc="Stops Windows Image Acquisition for scanners and cameras.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="WiaRpc";Action={Invoke-ServiceDisable -Name "WiaRpc"}},
+    @{Id="svcwman";Name="Disable Windows Management Service";Desc="Stops the Windows Management service used by some enterprise management tools.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="WManSvc";Action={Invoke-ServiceDisable -Name "WManSvc"}},
+    @{Id="svcwmiapsrv";Name="Disable WMI Performance Adapter";Desc="Stops the WMI performance adapter. Frees a small amount of background CPU.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="wmiApSrv";Action={Invoke-ServiceDisable -Name "wmiApSrv"}},
+    @{Id="svcwmpnet";Name="Disable WMP Network Sharing";Desc="Stops Windows Media Player network sharing. Less background network activity.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="WMPNetworkSvc";Action={Invoke-ServiceDisable -Name "WMPNetworkSvc"}},
+    @{Id="svcwpcmonsvc";Name="Disable Parental Controls";Desc="Stops the Family Safety monitoring service.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="WpcMonSvc";Action={Invoke-ServiceDisable -Name "WpcMonSvc"}},
+    @{Id="svcwpdbusenum";Name="Disable Portable Device Enumerator";Desc="Stops enumerating portable devices and media players.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="WPDBusEnum";Action={Invoke-ServiceDisable -Name "WPDBusEnum"}},
+    @{Id="svcxbgm";Name="Disable Xbox Game Monitoring";Desc="Stops the Xbox game monitoring helper. Pair with the other Xbox service tweaks.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Services";Svc="xbgm";Action={Invoke-ServiceDisable -Name "xbgm"}},
+
+    # ---------- v5.3 EXPANSION: macOS GENERAL ----------
+    @{Id="macreopenwindows";Name="Disable window restore at login";Desc="Stops macOS reopening every app window after login or reboot. Faster, cleaner login.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="General";Action={Invoke-MacDefaultsGroup -Items @(
+        @{Domain="com.apple.loginwindow";Key="TALLogoutSavesState";Type="bool";Value="false"},
+        @{Domain="NSGlobalDomain";Key="NSQuitAlwaysKeepsWindows";Type="bool";Value="false"}
+    )}},
+    @{Id="maccrashdialog";Name="Disable crash reporter dialog";Desc="Stops the application-quit-unexpectedly dialog from interrupting you. Reports are still logged.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="General";Action={Invoke-MacDefaults -Domain "com.apple.CrashReporter" -Key "DialogType" -Type string -Value "none"}},
+
+    # ---------- v5.3 EXPANSION: macOS INPUT ----------
+    @{Id="macmouseaccel";Name="Disable mouse acceleration (Mac)";Desc="Turns off macOS pointer acceleration for 1:1 mouse movement. Log out and back in to apply.";Risk="Caution";Free=$true;Win=$false;Mac=$true;Cat="Input";Action={Invoke-MacDefaults -Domain ".GlobalPreferences" -Key "com.apple.mouse.scaling" -Type float -Value "-1"}},
+    @{Id="mactrackpadaccel";Name="Disable trackpad acceleration (Mac)";Desc="Turns off trackpad pointer acceleration for linear movement. Log out and back in to apply.";Risk="Caution";Free=$true;Win=$false;Mac=$true;Cat="Input";Action={Invoke-MacDefaults -Domain ".GlobalPreferences" -Key "com.apple.trackpad.scaling" -Type float -Value "-1"}},
+    @{Id="mackeyrepeat";Name="Fast keyboard repeat (Mac)";Desc="Sets the shortest key-repeat delay and fastest repeat rate. Snappier movement and menu navigation.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Input";Action={Invoke-MacDefaultsGroup -Items @(
+        @{Domain="NSGlobalDomain";Key="KeyRepeat";Type="int";Value="2"},
+        @{Domain="NSGlobalDomain";Key="InitialKeyRepeat";Type="int";Value="15"}
+    )}},
+    @{Id="macpresshold";Name="Disable press-and-hold (Mac)";Desc="Stops the accent-character popup from swallowing repeated key presses.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Input";Action={Invoke-MacDefaults -Domain "NSGlobalDomain" -Key "ApplePressAndHoldEnabled" -Type bool -Value "false"}},
+    @{Id="macscrollanim";Name="Disable smooth scrolling (Mac)";Desc="Turns off animated scrolling for instant, lower-overhead scrolling.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Input";Action={Invoke-MacDefaults -Domain "NSGlobalDomain" -Key "NSScrollAnimationEnabled" -Type bool -Value "false"}},
+    @{Id="macrubberband";Name="Disable rubber-band scrolling (Mac)";Desc="Stops the elastic overscroll bounce. Less compositor work while scrolling.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Input";Action={Invoke-MacDefaults -Domain "NSGlobalDomain" -Key "NSScrollViewRubberbanding" -Type bool -Value "false"}},
+
+    # ---------- v5.3 EXPANSION: macOS NETWORK ----------
+    @{Id="macdnscloud";Name="Cloudflare DNS (Mac)";Desc="Sets 1.1.1.1 and 1.0.0.1 on every network service and flushes DNS.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Network";Action={Invoke-MacDns -Servers @("1.1.1.1","1.0.0.1")}},
+    @{Id="macdnsgoogle";Name="Google DNS (Mac)";Desc="Sets 8.8.8.8 and 8.8.4.4 on every network service and flushes DNS.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Network";Action={Invoke-MacDns -Servers @("8.8.8.8","8.8.4.4")}},
+    @{Id="macdnsauto";Name="Reset DNS to automatic (Mac)";Desc="Clears manual DNS servers on every network service and returns to DHCP.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Network";Action={Invoke-MacDns -Servers @("Empty")}},
+    @{Id="macipv6off";Name="Disable IPv6 (Mac)";Desc="Turns off IPv6 on every network service. Less background traffic on IPv4-only networks.";Risk="Caution";Free=$true;Win=$false;Mac=$true;Cat="Network";Action={if($IsMac){$services=& networksetup -listallnetworkservices 2>$null | Select-Object -Skip 1; foreach($s in $services){if($s -and $s -notmatch '^\*'){& networksetup -setv6off $s 2>$null}}; Write-Log "IPv6 disabled on network services." "OK"}}},
+    @{Id="macairdropoff";Name="Disable AirDrop (Mac)";Desc="Turns off AirDrop advertising and receiving. Less background radio activity.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Network";Action={Invoke-MacDefaults -Domain "com.apple.NetworkBrowser" -Key "DisableAirDrop" -Type bool -Value "true"}},
+    @{Id="macflushdns";Name="Flush DNS cache (Mac)";Desc="Clears the macOS DNS cache and restarts mDNSResponder. Fixes stale lookups.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Network";Action={if($IsMac){& dscacheutil -flushcache 2>$null; & killall -HUP mDNSResponder 2>$null; Write-Log "DNS cache flushed." "OK"}}},
+
+    # ---------- v5.3 EXPANSION: macOS POWER ----------
+    @{Id="macpowernap";Name="Disable Power Nap (Mac)";Desc="Stops background mail, backup and update work while the Mac sleeps.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Power";Action={Invoke-MacPmset -Arguments "-a powernap 0"}},
+    @{Id="macwomp";Name="Disable wake on network (Mac)";Desc="Stops network access from waking the Mac. Less surprise wake activity.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Power";Action={Invoke-MacPmset -Arguments "-a womp 0"}},
+    @{Id="machibernate";Name="Disable hibernation (Mac)";Desc="Sets hibernatemode 0 so the Mac uses normal sleep instead of writing RAM to disk.";Risk="Caution";Free=$true;Win=$false;Mac=$true;Cat="Power";Action={Invoke-MacPmset -Arguments "-a hibernatemode 0"}},
+    @{Id="macstandby";Name="Disable standby (Mac)";Desc="Stops the deeper standby state after sleep. Faster wake, slightly more standby power.";Risk="Caution";Free=$true;Win=$false;Mac=$true;Cat="Power";Action={Invoke-MacPmset -Arguments "-a standby 0"}},
+    @{Id="macdisplaysleep";Name="Disable display sleep (Mac)";Desc="Stops the display from sleeping. Useful for long sessions and benchmarks.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Power";Action={Invoke-MacPmset -Arguments "-a displaysleep 0"}},
+    @{Id="macgpuswitch";Name="Force discrete GPU (Mac)";Desc="Forces the discrete GPU on dual-GPU Intel Macs. More performance, more heat and battery drain.";Risk="Caution";Free=$true;Win=$false;Mac=$true;Cat="Power";Action={Invoke-MacPmset -Arguments "-a gpuswitch 1"}},
+    @{Id="maclowpoweroff";Name="Disable Low Power Mode (Mac)";Desc="Turns off Low Power Mode throttling so clocks stay high.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Power";Action={Invoke-MacPmset -Arguments "-a lowpowermode 0"}},
+
+    # ---------- v5.3 EXPANSION: macOS VISUAL ----------
+    @{Id="macreducemotion";Name="Reduce motion (Mac)";Desc="Turns off parallax, zoom and window motion effects. Less compositor work.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Visual";Action={Invoke-MacDefaults -Domain "com.apple.universalaccess" -Key "reduceMotion" -Type bool -Value "true"}},
+    @{Id="macfinderanim";Name="Disable Finder animations (Mac)";Desc="Removes Finder open/close animations. Snappier file browsing.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Visual";Action={Invoke-MacDefaults -Domain "com.apple.finder" -Key "DisableAllAnimations" -Type bool -Value "true"; Invoke-MacRefresh -Names @("Finder")}},
+    @{Id="macdockbounce";Name="Disable Dock bounce (Mac)";Desc="Stops app icons from bouncing when launched.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Visual";Action={Invoke-MacDefaults -Domain "com.apple.dock" -Key "no-bouncing" -Type bool -Value "true"; Invoke-MacRefresh -Names @("Dock")}},
+    @{Id="macdocklaunch";Name="Disable Dock launch animation (Mac)";Desc="Removes the Dock app-launch animation.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Visual";Action={Invoke-MacDefaults -Domain "com.apple.dock" -Key "launchanim" -Type bool -Value "false"; Invoke-MacRefresh -Names @("Dock")}},
+    @{Id="macdockminimize";Name="Use scale minimize effect (Mac)";Desc="Switches the minimize effect from genie to scale. Less animation work.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Visual";Action={Invoke-MacDefaults -Domain "com.apple.dock" -Key "mineffect" -Type string -Value "scale"; Invoke-MacRefresh -Names @("Dock")}},
+    @{Id="macmissioncontrol";Name="Speed up Mission Control (Mac)";Desc="Shortens the Mission Control animation for an almost instant transition.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Visual";Action={Invoke-MacDefaults -Domain "com.apple.dock" -Key "expose-animation-duration" -Type float -Value "0.1"; Invoke-MacRefresh -Names @("Dock")}},
+    @{Id="macdockmagnifyoff";Name="Disable Dock magnification (Mac)";Desc="Turns off Dock icon magnification. Less redraw work as the pointer moves.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Visual";Action={Invoke-MacDefaults -Domain "com.apple.dock" -Key "magnification" -Type bool -Value "false"; Invoke-MacRefresh -Names @("Dock")}},
+
+    # ---------- v5.3 EXPANSION: macOS SERVICES ----------
+    @{Id="macappstoreauto";Name="Disable App Store auto-updates (Mac)";Desc="Stops the App Store from downloading and installing updates in the background.";Risk="Caution";Free=$true;Win=$false;Mac=$true;Cat="Services";Action={Invoke-MacDefaultsGroup -Items @(
+        @{Domain="com.apple.commerce";Key="AutoUpdate";Type="bool";Value="false"},
+        @{Domain="com.apple.SoftwareUpdate";Key="AutomaticDownload";Type="bool";Value="false"}
+    )}},
+    @{Id="macdashboardoff";Name="Disable Dashboard (Mac)";Desc="Turns off the legacy Dashboard layer and its background widgets.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Services";Action={Invoke-MacDefaults -Domain "com.apple.dashboard" -Key "mcx-disabled" -Type bool -Value "true"; Invoke-MacRefresh -Names @("Dashboard")}},
+
+    # ---------- v5.3 EXPANSION: macOS STORAGE ----------
+    @{Id="maclocalsnapshots";Name="Disable local Time Machine snapshots (Mac)";Desc="Stops macOS keeping local APFS snapshots for Time Machine. Frees disk space.";Risk="Caution";Free=$true;Win=$false;Mac=$true;Cat="Storage";Action={Invoke-Cmd -Cmd "tmutil disablelocal"}},
+    @{Id="macquicklookcache";Name="Clear Quick Look cache (Mac)";Desc="Clears the Quick Look thumbnail cache so previews rebuild cleanly.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Storage";Action={Invoke-MacCleanup -Paths @("$env:HOME/Library/Caches/com.apple.QuickLook.thumbnailcache") -Label "Quick Look cache"}},
+    @{Id="maclaunchservices";Name="Rebuild LaunchServices database (Mac)";Desc="Rebuilds the app-launch database. Fixes duplicate Open With entries and stale app associations.";Risk="Caution";Free=$true;Win=$false;Mac=$true;Cat="Storage";Action={Invoke-Cmd -Cmd "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -kill -r -domain local -domain system -domain user"}},
+    @{Id="maclogclear";Name="Clear user logs (Mac)";Desc="Deletes user-level log files. Frees disk space; system logs are untouched.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Storage";Action={Invoke-MacCleanup -Paths @("$env:HOME/Library/Logs") -Label "User logs"}},
+    @{Id="maccacheclear";Name="Clear user caches (Mac)";Desc="Deletes user cache folders. Apps rebuild them; first launches may be slower.";Risk="Caution";Free=$true;Win=$false;Mac=$true;Cat="Storage";Action={Invoke-MacCleanup -Paths @("$env:HOME/Library/Caches") -Label "User caches"}},
+
+    # ---------- v5.3 EXPANSION: macOS FIRMWARE-ADJACENT ----------
+    @{Id="macautopoweron";Name="Disable auto power-on after power loss";Desc="Clears the NVRAM AutoBoot flag so the Mac stays off when power returns. Intel Macs only.";Risk="Caution";Free=$true;Win=$false;Mac=$true;Cat="Firmware";Action={Invoke-MacNvram -Setting "AutoBoot" -Value "%00"}},
+    @{Id="macbootchime";Name="Disable boot chime";Desc="Clears the NVRAM BootAudio flag to silence the startup chime. Firmware-level, reversible with nvram -d BootAudio.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Firmware";Action={Invoke-MacNvram -Setting "BootAudio" -Value "%00"}},
+
+    # ---------- v5.3 EXPANSION: macOS PRIVACY ----------
+    @{Id="maclocationoff";Name="Disable Location Services (Mac)";Desc="Turns off macOS Location Services. Apps lose location access.";Risk="Caution";Free=$true;Win=$false;Mac=$true;Cat="Privacy";Action={Invoke-MacDefaults -Domain "com.apple.locationd" -Key "LocationServicesEnabled" -Type bool -Value "false"}},
+    @{Id="macanalytics";Name="Disable analytics submission (Mac)";Desc="Stops macOS from automatically submitting diagnostic and usage data.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Privacy";Action={Invoke-MacDefaultsGroup -Items @(
+        @{Domain="com.apple.SubmitDiagInfo";Key="AutoSubmit";Type="bool";Value="false"},
+        @{Domain="com.apple.SubmitDiagInfo";Key="AutoSubmitVersion";Type="int";Value="0"}
+    )}},
+    @{Id="macadlib";Name="Disable personalized ads (Mac)";Desc="Turns off Apple's personalized advertising and ad identifier.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Privacy";Action={Invoke-MacDefaultsGroup -Items @(
+        @{Domain="com.apple.AdLib";Key="allowApplePersonalizedAdvertising";Type="bool";Value="false"},
+        @{Domain="com.apple.AdLib";Key="allowIdentifierForAdvertising";Type="bool";Value="false"}
+    )}},
+    @{Id="macspotlightsuggest";Name="Disable Spotlight suggestions (Mac)";Desc="Stops Spotlight from sending search terms to Apple for suggestions.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Privacy";Action={Invoke-MacDefaults -Domain "com.apple.lookup.shared" -Key "LookupSuggestionsDisabled" -Type bool -Value "true"}},
+    @{Id="macrecentoff";Name="Disable recent items (Mac)";Desc="Stops macOS tracking recently used documents and apps.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Privacy";Action={Invoke-MacDefaults -Domain "NSGlobalDomain" -Key "NSRecentDocumentsLimit" -Type int -Value "0"}},
+    @{Id="macsafarisuggest";Name="Disable Safari search suggestions (Mac)";Desc="Stops Safari from sending search terms to Apple and other providers for suggestions.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Privacy";Action={Invoke-MacDefaultsGroup -Items @(
+        @{Domain="com.apple.Safari";Key="SuppressSearchSuggestions";Type="bool";Value="true"},
+        @{Domain="com.apple.Safari";Key="UniversalSearchEnabled";Type="bool";Value="false"}
+    )}},
+
+    # ---------- v5.3 EXPANSION: macOS GAME ----------
+    @{Id="macgamecenter";Name="Disable Game Center (Mac)";Desc="Stops the Game Center daemon from running in the background.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Game";Action={Invoke-MacDefaults -Domain "com.apple.gamed" -Key "Disabled" -Type bool -Value "true"; Invoke-MacRefresh -Names @("gamed")}},
+    @{Id="macfortnitecache";Name="Clear Fortnite cache (Mac)";Desc="Deletes Fortnite shader and log caches. The game rebuilds them on next launch.";Risk="Caution";Free=$true;Win=$false;Mac=$true;Cat="Game";Action={Invoke-MacCleanup -Paths @("$env:HOME/Library/Application Support/Epic/FortniteGame/Saved/ShaderCache","$env:HOME/Library/Application Support/Epic/FortniteGame/Saved/Logs") -Label "Fortnite cache"}}
 )
 
 if (-not $Script:Config.TweakStates) { $Script:Config.TweakStates = @{} }
@@ -2577,6 +3068,12 @@ function Invoke-NovaApi {
             if ($desired) {
                 try { & $tw.Action; $msg = "Applied: $($tw.Name)" }
                 catch { $msg = "Failed: $($_.Exception.Message)" }
+            } elseif ($tw.Off) {
+                try { & $tw.Off; $msg = "Reverted: $($tw.Name)" }
+                catch { $msg = "Reverted state; restore may be partial: $($_.Exception.Message)" }
+            } elseif ($tw.Svc) {
+                Invoke-ServiceRestore -Name $tw.Svc
+                $msg = "Reverted: $($tw.Name)"
             }
             return (ConvertTo-NovaJson @{ message = $msg })
         }

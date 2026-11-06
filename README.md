@@ -2,17 +2,24 @@
 
 Safe, EAC-friendly Fortnite performance suite. Native app on Windows and macOS, built by Kyle Bonebrake.
 
-**156 working tweaks** across General, Input, Network, Power, Visual, Services, Game, Storage, Firmware and
+**375 working tweaks** across General, Input, Network, Power, Visual, Services, Game, Storage, Firmware and
 Privacy. Every tweak in the shipped build changes the system — there are no log-only placeholders — and each
-one has a risk label, an OS badge (Windows/macOS/Both) and a one-click switch. 141 apply on Windows and 20 on
-macOS (5 are cross-platform); the app includes all 156 and the Windows/Mac tabs show every one.
+one has a risk label, an OS badge (Windows/macOS/Both) and a one-click switch. 315 apply on Windows and 65 on
+macOS (5 are cross-platform); the app includes all 375 and the Windows/Mac tabs show every one.
 `tools/Check-Tweaks.ps1` enforces this in CI.
 
-v5.2 adds a Windows **Drag Macro** (capture start/end, adjustable swipe duration, hold time, repeat and loop)
+v5.3 expands the catalog from 156 to 375 tweaks. New coverage includes per-service Windows toggles, DNS
+providers, Teredo/ISATAP/6to4 and NIC tuning, CPU idle and wake controls, update/shader/crash cleanup, VBS and
+Hyper-V boot options, deeper privacy controls, and a large macOS set covering pointer acceleration, key repeat,
+scroll behavior, Dock/Finder animations, Power Nap, GPU switching, local snapshots, LaunchServices, analytics,
+advertising, and more. Every entry still performs a real registry, service, power, network, or macOS
+`defaults` change.
+
+v5.2 added a Windows **Drag Macro** (capture start/end, adjustable swipe duration, hold time, repeat and loop)
 and a **BIOS / UEFI** page that detects firmware, memory speed, XMP/EXPO, Secure Boot, boot mode, VBS/HVCI and
 TPM. Nova Tweaks never flashes or silently edits firmware; it reports what is set, gives UEFI guidance, and can
 restart straight into firmware settings. The utility pages now live in a top toolbar under a vibrant red sweep
-outline, and the new Storage, Firmware and Privacy categories cover DNS, power, services, telemetry, privacy and
+outline, and the Storage, Firmware and Privacy categories cover DNS, power, services, telemetry, privacy and
 firmware-adjacent OS settings.
 
 ## How the Windows app works
@@ -58,7 +65,7 @@ Invoke-PS2EXE `
   -Description "Nova Tweaks performance suite - by Kyle Bonebrake" `
   -Company "Nova Tweaks" `
   -Product "Nova Tweaks" `
-  -Version "5.2.0.0" `
+  -Version "5.3.0.0" `
   -RequireAdmin `
   -NoConsole `
   -STA `
