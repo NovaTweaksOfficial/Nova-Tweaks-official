@@ -6,7 +6,7 @@
     WinForms application. Compile to .exe with PS2EXE.
     All tweaks: Input Response Accelerator, Network Spike Smoother, Mouse Precision,
     Keyboard Latency, USB Polling, BCDEDIT, Game Booster, Potato Graphics, etc.
-    Everyone gets Pro. Credits: Nova Tweaks & XRT.
+    Everyone gets Pro. Credits: Nova Tweaks.
 .NOTES
     Run as Administrator. All tweaks reversible.
 #>
@@ -1103,7 +1103,7 @@ $txtRegPass = New-Object System.Windows.Forms.TextBox; $txtRegPass.Location=New-
 $btnReg = New-Object System.Windows.Forms.Button; $btnReg.Text="CREATE ACCOUNT"; $btnReg.Size=New-Object System.Drawing.Size(400,42); $btnReg.Location=New-Object System.Drawing.Point(0,180); $btnReg.BackColor=$C.Red; $btnReg.ForeColor=[System.Drawing.Color]::White; $btnReg.FlatStyle="Flat"; $btnReg.Font=$FontHead; $pnlReg.Controls.Add($btnReg)
 $lblRegErr = New-Object System.Windows.Forms.Label; $lblRegErr.Text=""; $lblRegErr.ForeColor=$C.Danger; $lblRegErr.Location=New-Object System.Drawing.Point(0,228); $lblRegErr.Size=New-Object System.Drawing.Size(400,20); $lblRegErr.TextAlign="MiddleCenter"; $pnlReg.Controls.Add($lblRegErr)
 
-$lblFooter = New-Object System.Windows.Forms.Label; $lblFooter.Text="Auto-login enabled · Session saved locally · Everyone gets Pro · Credits: Nova Tweaks & XRT"; $lblFooter.ForeColor=$C.TextMuted; $lblFooter.Location=New-Object System.Drawing.Point(0,455); $lblFooter.Size=New-Object System.Drawing.Size(440,20); $lblFooter.TextAlign="MiddleCenter"; $loginForm.Controls.Add($lblFooter)
+$lblFooter = New-Object System.Windows.Forms.Label; $lblFooter.Text="Auto-login enabled · Session saved locally · Everyone gets Pro · Credits: Nova Tweaks"; $lblFooter.ForeColor=$C.TextMuted; $lblFooter.Location=New-Object System.Drawing.Point(0,455); $lblFooter.Size=New-Object System.Drawing.Size(440,20); $lblFooter.TextAlign="MiddleCenter"; $loginForm.Controls.Add($lblFooter)
 $lblStats = New-Object System.Windows.Forms.Label; $lblStats.Text="700+ tweaks  |  All reversible  |  Everyone gets Pro`nUpgrade to Pro for exclusive tweaks, crosshair overlay & priority support"; $lblStats.Font=New-Object System.Drawing.Font("Segoe UI",8); $lblStats.ForeColor=$C.Red; $lblStats.Location=New-Object System.Drawing.Point(0,395); $lblStats.Size=New-Object System.Drawing.Size(440,40); $lblStats.TextAlign="MiddleCenter"; $loginForm.Controls.Add($lblStats)
 
 $tabLogin.Add_Click({ $pnlLogin.Visible=$true; $pnlReg.Visible=$false; $tabLogin.BackColor=$C.Red; $tabLogin.ForeColor=[System.Drawing.Color]::White; $tabReg.BackColor=$C.Card; $tabReg.ForeColor=$C.TextDim })
@@ -1152,7 +1152,7 @@ function Show-MainForm {
     $btnLogout = New-Object System.Windows.Forms.Button; $btnLogout.Text="Sign Out"; $btnLogout.Size=New-Object System.Drawing.Size(198,30); $btnLogout.Location=New-Object System.Drawing.Point(16,660); $btnLogout.FlatStyle="Flat"; $btnLogout.FlatAppearance.BorderSize=1; $btnLogout.FlatAppearance.BorderColor=$C.Border; $btnLogout.BackColor=$C.Sidebar; $btnLogout.ForeColor=$C.TextDim; $btnLogout.Font=$FontSmall; $sidebar.Controls.Add($btnLogout)
     $btnLogout.Add_Click({ Logout; $form.Close(); $loginForm.Show() })
 
-    $lblCredits = New-Object System.Windows.Forms.Label; $lblCredits.Text="Credits: Nova Tweaks & XRT"; $lblCredits.Font=New-Object System.Drawing.Font("Segoe UI",7.5); $lblCredits.ForeColor=$C.TextMuted; $lblCredits.Location=New-Object System.Drawing.Point(16,700); $lblCredits.AutoSize=$true; $sidebar.Controls.Add($lblCredits)
+    $lblCredits = New-Object System.Windows.Forms.Label; $lblCredits.Text="Credits: Nova Tweaks"; $lblCredits.Font=New-Object System.Drawing.Font("Segoe UI",7.5); $lblCredits.ForeColor=$C.TextMuted; $lblCredits.Location=New-Object System.Drawing.Point(16,700); $lblCredits.AutoSize=$true; $sidebar.Controls.Add($lblCredits)
 
     # Content area
     $content = New-Object System.Windows.Forms.Panel; $content.Size=New-Object System.Drawing.Size(1020,780); $content.Location=New-Object System.Drawing.Point(250,20); $content.BackColor=$C.Bg; $form.Controls.Add($content)
@@ -1363,7 +1363,7 @@ function Show-MainForm {
     $btnRP.Add_Click({ New-RestorePoint | Out-Null; [System.Windows.Forms.MessageBox]::Show("Restore point created (if supported).","Nova Tweaks") | Out-Null })
     $btnRevertAll=New-Object System.Windows.Forms.Button; $btnRevertAll.Text="REVERT ALL CHANGES"; $btnRevertAll.Size=New-Object System.Drawing.Size(240,40); $btnRevertAll.Location=New-Object System.Drawing.Point(0,110); $btnRevertAll.BackColor=$C.Danger; $btnRevertAll.ForeColor=[System.Drawing.Color]::White; $btnRevertAll.FlatStyle="Flat"; $btnRevertAll.Font=$FontHead; $pgRestore.Controls.Add($btnRevertAll)
     $btnRevertAll.Add_Click({ $r=[System.Windows.Forms.MessageBox]::Show("Revert ALL changes? Reboot recommended after.","Confirm",[System.Windows.Forms.MessageBoxButtons]::YesNo); if($r -eq "Yes"){ Revert-All; [System.Windows.Forms.MessageBox]::Show("Reverted. Reboot recommended.","Nova Tweaks") | Out-Null } })
-    $lblRInfo=New-Object System.Windows.Forms.Label; $lblRInfo.Text="Every tweak is reversible. Restore points + backups created automatically before changes. Credits: Nova Tweaks & XRT"; $lblRInfo.Font=$FontSmall; $lblRInfo.ForeColor=$C.TextDim; $lblRInfo.Location=New-Object System.Drawing.Point(0,165); $lblRInfo.AutoSize=$true; $pgRestore.Controls.Add($lblRInfo)
+    $lblRInfo=New-Object System.Windows.Forms.Label; $lblRInfo.Text="Every tweak is reversible. Restore points + backups created automatically before changes. Credits: Nova Tweaks"; $lblRInfo.Font=$FontSmall; $lblRInfo.ForeColor=$C.TextDim; $lblRInfo.Location=New-Object System.Drawing.Point(0,165); $lblRInfo.AutoSize=$true; $pgRestore.Controls.Add($lblRInfo)
 
     # ---------- LOG ----------
     $pgLog=New-Page "log"
@@ -1393,7 +1393,7 @@ function Show-MainForm {
         [System.Windows.Forms.MessageBox]::Show("Appearance applied.","Nova Tweaks") | Out-Null
     })
 
-    $lblPlanInfo=New-Object System.Windows.Forms.Label; $lblPlanInfo.Text="Everyone gets Pro plan. All tweaks + Input Response Accelerator + Network Spike Smoother + Potato Graphics + full Game Booster unlocked. Credits: Nova Tweaks & XRT."; $lblPlanInfo.Font=$FontSmall; $lblPlanInfo.ForeColor=$C.TextDim; $lblPlanInfo.Location=New-Object System.Drawing.Point(0,180); $lblPlanInfo.AutoSize=$true; $pgSettings.Controls.Add($lblPlanInfo)
+    $lblPlanInfo=New-Object System.Windows.Forms.Label; $lblPlanInfo.Text="Everyone gets Pro plan. All tweaks + Input Response Accelerator + Network Spike Smoother + Potato Graphics + full Game Booster unlocked. Credits: Nova Tweaks."; $lblPlanInfo.Font=$FontSmall; $lblPlanInfo.ForeColor=$C.TextDim; $lblPlanInfo.Location=New-Object System.Drawing.Point(0,180); $lblPlanInfo.AutoSize=$true; $pgSettings.Controls.Add($lblPlanInfo)
 
     # Navigation
     function Show-Page($key) { foreach ($p in $pages.Values) { $p.Visible=$false }; $pages[$key].Visible=$true; foreach ($btn in $navBtns.Values) { if ($btn.Tag -eq $key) { $btn.BackColor=$C.Red; $btn.ForeColor=[System.Drawing.Color]::White } else { $btn.BackColor=$C.Sidebar; $btn.ForeColor=$C.TextDim } } }
@@ -1426,7 +1426,7 @@ function Show-MainForm {
     Show-Page "home"
     $h=(Get-Date).Hour
     $lblHomeTitle.Text=if ($h -lt 12) { "Good morning" } elseif ($h -lt 18) { "Good afternoon" } else { "Good evening" }
-    $Script:LogBox.AppendText("Nova Tweaks started. Plan: Pro`r`nCredits: Nova Tweaks & XRT`r`n")
+    $Script:LogBox.AppendText("Nova Tweaks started. Plan: Pro`r`nCredits: Nova Tweaks`r`n")
     Write-Log "Application started. Plan: Pro. User: $($Script:CurrentUser.Email)" "OK"
 
     # ---------- Rotating outline + snowfall (visual polish) ----------
