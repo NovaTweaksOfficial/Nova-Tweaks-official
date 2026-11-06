@@ -350,6 +350,48 @@ function Revert-All {
     }
 }
 
+# ---------- EXTRA TWEAK FUNCTIONS ----------
+function Invoke-GameModeOn { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { $p="HKCU:\Software\Microsoft\GameBar"; if(-not (Test-Path $p)){New-Item -Path $p -Force|Out-Null}; Set-ItemProperty -Path $p -Name "AutoGameModeEnabled" -Value 1 -Type DWord -Force; Set-ItemProperty -Path $p -Name "AllowAutoGameMode" -Value 1 -Type DWord -Force; Write-Log "Game Mode enabled." "OK" } catch { Write-Log "Game Mode failed." "WARN" } }
+function Invoke-MPOOff { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { $p="HKLM:\SOFTWARE\Microsoft\Windows\Dwm"; if(-not (Test-Path $p)){New-Item -Path $p -Force|Out-Null}; Set-ItemProperty -Path $p -Name "OverlayTestMode" -Value 5 -Type DWord -Force; Write-Log "MPO (Multiplane Overlay) disabled." "OK" } catch { Write-Log "MPO disable failed." "WARN" } }
+function Invoke-PowerThrottlingOff { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { $p="HKLM:\SYSTEM\CurrentControlSet\Control\Power\PowerThrottling"; if(-not (Test-Path $p)){New-Item -Path $p -Force|Out-Null}; Set-ItemProperty -Path $p -Name "PowerThrottlingOff" -Value 1 -Type DWord -Force; Write-Log "Power throttling disabled." "OK" } catch { Write-Log "Power throttling failed." "WARN" } }
+function Invoke-USBSelectiveSuspendOff { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { powercfg /setacvalueindex SCHEME_CURRENT 2a737441-1930-4402-8d77-b2bebba308a3 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 0 2>$null | Out-Null; powercfg /setdcvalueindex SCHEME_CURRENT 2a737441-1930-4402-8d77-b2bebba308a3 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 0 2>$null | Out-Null; powercfg /setactive SCHEME_CURRENT 2>$null | Out-Null; Write-Log "USB selective suspend disabled." "OK" } catch { Write-Log "USB suspend failed." "WARN" } }
+function Invoke-AudioEnhancementsOff { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { $p="HKCU:\Software\Microsoft\Multimedia\Audio"; if(-not (Test-Path $p)){New-Item -Path $p -Force|Out-Null}; Set-ItemProperty -Path $p -Name "UserDuckingPreference" -Value 3 -Type DWord -Force; Write-Log "Audio enhancements/ducking disabled." "OK" } catch { Write-Log "Audio tweak failed." "WARN" } }
+function Invoke-FastStartupOff { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { $p="HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power"; if(-not (Test-Path $p)){New-Item -Path $p -Force|Out-Null}; Set-ItemProperty -Path $p -Name "HiberbootEnabled" -Value 0 -Type DWord -Force; Write-Log "Fast startup disabled." "OK" } catch { Write-Log "Fast startup failed." "WARN" } }
+function Invoke-HibernateOff { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { powercfg /hibernate off 2>$null | Out-Null; Write-Log "Hibernate disabled." "OK" } catch { Write-Log "Hibernate failed." "WARN" } }
+function Invoke-NTFSLastAccessOff { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { fsutil behavior set disablelastaccess 1 2>$null | Out-Null; Write-Log "NTFS last access time disabled." "OK" } catch { Write-Log "NTFS tweak failed." "WARN" } }
+function Invoke-Disable8dot3 { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { fsutil behavior set disable8dot3 1 2>$null | Out-Null; Write-Log "8.3 filename creation disabled." "OK" } catch { Write-Log "8.3 tweak failed." "WARN" } }
+function Invoke-EnableTrim { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { fsutil behavior set DisableDeleteNotify 0 2>$null | Out-Null; Write-Log "TRIM enabled." "OK" } catch { Write-Log "TRIM failed." "WARN" } }
+function Invoke-ClearEventLogs { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { wevtutil el 2>$null | ForEach-Object { wevtutil cl $_ 2>$null }; Write-Log "Event logs cleared." "OK" } catch { Write-Log "Event log clear failed." "WARN" } }
+function Invoke-DisableErrorReporting { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { $p="HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting"; if(-not (Test-Path $p)){New-Item -Path $p -Force|Out-Null}; Set-ItemProperty -Path $p -Name "Disabled" -Value 1 -Type DWord -Force; Write-Log "Windows Error Reporting disabled." "OK" } catch { Write-Log "WER failed." "WARN" } }
+function Invoke-DisableDeliveryOpt { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { $p="HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization"; if(-not (Test-Path $p)){New-Item -Path $p -Force|Out-Null}; Set-ItemProperty -Path $p -Name "DODownloadMode" -Value 0 -Type DWord -Force; Write-Log "Delivery Optimization disabled." "OK" } catch { Write-Log "Delivery opt failed." "WARN" } }
+function Invoke-DisableBITS { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { Stop-Service BITS -Force -ErrorAction SilentlyContinue; Set-Service BITS -StartupType Disabled -ErrorAction SilentlyContinue; Write-Log "BITS disabled." "OK" } catch { Write-Log "BITS failed." "WARN" } }
+function Invoke-DisableWUAutoRestart { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { $p="HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU"; if(-not (Test-Path $p)){New-Item -Path $p -Force|Out-Null}; Set-ItemProperty -Path $p -Name "NoAutoRebootWithLoggedOnUsers" -Value 1 -Type DWord -Force; Write-Log "WU auto-restart disabled." "OK" } catch { Write-Log "WU tweak failed." "WARN" } }
+function Invoke-DisableLockScreen { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { $p="HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization"; if(-not (Test-Path $p)){New-Item -Path $p -Force|Out-Null}; Set-ItemProperty -Path $p -Name "NoLockScreen" -Value 1 -Type DWord -Force; Write-Log "Lock screen disabled." "OK" } catch { Write-Log "Lock screen failed." "WARN" } }
+function Invoke-DisableTips { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { $p="HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"; if(-not (Test-Path $p)){New-Item -Path $p -Force|Out-Null}; Set-ItemProperty -Path $p -Name "SubscribedContent-338389Enabled" -Value 0 -Type DWord -Force; Set-ItemProperty -Path $p -Name "SubscribedContent-310093Enabled" -Value 0 -Type DWord -Force; Set-ItemProperty -Path $p -Name "SoftLandingEnabled" -Value 0 -Type DWord -Force; Write-Log "Tips/ads disabled." "OK" } catch { Write-Log "Tips failed." "WARN" } }
+function Invoke-DisableConsumerFeatures { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { $p="HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent"; if(-not (Test-Path $p)){New-Item -Path $p -Force|Out-Null}; Set-ItemProperty -Path $p -Name "DisableWindowsConsumerFeatures" -Value 1 -Type DWord -Force; Write-Log "Consumer features disabled." "OK" } catch { Write-Log "Consumer features failed." "WARN" } }
+function Invoke-DisableActivityHistory { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { $p="HKLM:\SOFTWARE\Policies\Microsoft\Windows\System"; if(-not (Test-Path $p)){New-Item -Path $p -Force|Out-Null}; Set-ItemProperty -Path $p -Name "EnableActivityFeed" -Value 0 -Type DWord -Force; Set-ItemProperty -Path $p -Name "PublishUserActivities" -Value 0 -Type DWord -Force; Set-ItemProperty -Path $p -Name "UploadUserActivities" -Value 0 -Type DWord -Force; Write-Log "Activity history disabled." "OK" } catch { Write-Log "Activity history failed." "WARN" } }
+function Invoke-DisableTelemetryLevel { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { $p="HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection"; if(-not (Test-Path $p)){New-Item -Path $p -Force|Out-Null}; Set-ItemProperty -Path $p -Name "AllowTelemetry" -Value 0 -Type DWord -Force; Write-Log "Telemetry disabled." "OK" } catch { Write-Log "Telemetry failed." "WARN" } }
+function Invoke-DisableAdvertisingID { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { $p="HKCU:\Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo"; if(-not (Test-Path $p)){New-Item -Path $p -Force|Out-Null}; Set-ItemProperty -Path $p -Name "Enabled" -Value 0 -Type DWord -Force; Write-Log "Advertising ID disabled." "OK" } catch { Write-Log "Ad ID failed." "WARN" } }
+function Invoke-DisableFeedback { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { $p="HKCU:\Software\Microsoft\Siuf\Rules"; if(-not (Test-Path $p)){New-Item -Path $p -Force|Out-Null}; Set-ItemProperty -Path $p -Name "NumberOfSIUFInPeriod" -Value 0 -Type DWord -Force; Write-Log "Feedback disabled." "OK" } catch { Write-Log "Feedback failed." "WARN" } }
+function Invoke-DisableSmartScreen { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { $p="HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer"; if(-not (Test-Path $p)){New-Item -Path $p -Force|Out-Null}; Set-ItemProperty -Path $p -Name "SmartScreenEnabled" -Value "Off" -Type String -Force; Write-Log "SmartScreen disabled." "OK" } catch { Write-Log "SmartScreen failed." "WARN" } }
+function Invoke-DisableDefenderCloud { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { $p="HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Spynet"; if(-not (Test-Path $p)){New-Item -Path $p -Force|Out-Null}; Set-ItemProperty -Path $p -Name "SpynetReporting" -Value 0 -Type DWord -Force; Set-ItemProperty -Path $p -Name "SubmitSamplesConsent" -Value 2 -Type DWord -Force; Write-Log "Defender cloud disabled." "OK" } catch { Write-Log "Defender cloud failed." "WARN" } }
+function Invoke-DisableCortana { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { $p="HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search"; if(-not (Test-Path $p)){New-Item -Path $p -Force|Out-Null}; Set-ItemProperty -Path $p -Name "AllowCortana" -Value 0 -Type DWord -Force; Write-Log "Cortana disabled." "OK" } catch { Write-Log "Cortana failed." "WARN" } }
+function Invoke-DisableWidgets { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { $p="HKLM:\SOFTWARE\Policies\Microsoft\Dsh"; if(-not (Test-Path $p)){New-Item -Path $p -Force|Out-Null}; Set-ItemProperty -Path $p -Name "AllowNewsAndInterests" -Value 0 -Type DWord -Force; Write-Log "Widgets/News disabled." "OK" } catch { Write-Log "Widgets failed." "WARN" } }
+function Invoke-DisableCopilot { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { $p="HKCU:\Software\Policies\Microsoft\Windows\WindowsCopilot"; if(-not (Test-Path $p)){New-Item -Path $p -Force|Out-Null}; Set-ItemProperty -Path $p -Name "TurnOffWindowsCopilot" -Value 1 -Type DWord -Force; Write-Log "Copilot disabled." "OK" } catch { Write-Log "Copilot failed." "WARN" } }
+function Invoke-DisableRecall { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { $p="HKCU:\Software\Policies\Microsoft\Windows\WindowsAI"; if(-not (Test-Path $p)){New-Item -Path $p -Force|Out-Null}; Set-ItemProperty -Path $p -Name "DisableAIDataAnalysis" -Value 1 -Type DWord -Force; Write-Log "Recall/AI disabled." "OK" } catch { Write-Log "Recall failed." "WARN" } }
+function Invoke-DisableOneDrive { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { Stop-Process -Name OneDrive -Force -ErrorAction SilentlyContinue; Write-Log "OneDrive stopped." "OK" } catch { Write-Log "OneDrive failed." "WARN" } }
+function Invoke-DisableSearchHighlights { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { $p="HKCU:\Software\Microsoft\Windows\CurrentVersion\SearchSettings"; if(-not (Test-Path $p)){New-Item -Path $p -Force|Out-Null}; Set-ItemProperty -Path $p -Name "IsDynamicSearchBoxEnabled" -Value 0 -Type DWord -Force; Write-Log "Search highlights disabled." "OK" } catch { Write-Log "Search highlights failed." "WARN" } }
+function Invoke-DisableBackgroundApps { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { $p="HKCU:\Software\Microsoft\Windows\CurrentVersion\BackgroundAccessApplications"; if(-not (Test-Path $p)){New-Item -Path $p -Force|Out-Null}; Set-ItemProperty -Path $p -Name "GlobalUserDisabled" -Value 1 -Type DWord -Force; Write-Log "Background apps disabled." "OK" } catch { Write-Log "Background apps failed." "WARN" } }
+function Invoke-DisableLockScreenCamera { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { $p="HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization"; if(-not (Test-Path $p)){New-Item -Path $p -Force|Out-Null}; Set-ItemProperty -Path $p -Name "NoLockScreenCamera" -Value 1 -Type DWord -Force; Write-Log "Lock screen camera disabled." "OK" } catch { Write-Log "Lock cam failed." "WARN" } }
+function Invoke-DisableFullscreenOpt { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { $p="HKCU:\System\GameConfigStore"; if(-not (Test-Path $p)){New-Item -Path $p -Force|Out-Null}; Set-ItemProperty -Path $p -Name "GameDVR_FSEBehaviorMode" -Value 2 -Type DWord -Force; Set-ItemProperty -Path $p -Name "GameDVR_HonorUserFSEBehaviorMode" -Value 1 -Type DWord -Force; Write-Log "Fullscreen optimizations disabled." "OK" } catch { Write-Log "FSO failed." "WARN" } }
+function Invoke-DisableGameDVR { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { $p="HKCU:\System\GameConfigStore"; if(-not (Test-Path $p)){New-Item -Path $p -Force|Out-Null}; Set-ItemProperty -Path $p -Name "GameDVR_Enabled" -Value 0 -Type DWord -Force; Write-Log "Game DVR disabled." "OK" } catch { Write-Log "Game DVR failed." "WARN" } }
+function Invoke-DisableWinSearch { if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }; try { Stop-Service WSearch -Force -ErrorAction SilentlyContinue; Set-Service WSearch -StartupType Disabled -ErrorAction SilentlyContinue; Write-Log "Windows Search disabled." "OK" } catch { Write-Log "Win search failed." "WARN" } }
+function Invoke-MacDisableAppNap { if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }; try { defaults write NSGlobalDomain NSAppSleepDisabled -bool YES; Write-Log "App Nap disabled." "OK" } catch { Write-Log "App Nap failed." "WARN" } }
+function Invoke-MacDisableWindowAnimations { if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }; try { defaults write NSGlobalDomain NSAutomaticWindowAnimationsEnabled -bool false; defaults write -g QLPanelAnimationDuration -float 0; killall Dock 2>$null; Write-Log "Window animations disabled." "OK" } catch { Write-Log "Window anim failed." "WARN" } }
+function Invoke-MacDisableFontSmoothing { if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }; try { defaults -currentHost write -globalDomain AppleFontSmoothing -int 0; Write-Log "Font smoothing disabled." "OK" } catch { Write-Log "Font smoothing failed." "WARN" } }
+function Invoke-MacPurgeMemory { if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }; try { purge 2>$null; Write-Log "Memory purged." "OK" } catch { Write-Log "Purge failed." "WARN" } }
+function Invoke-MacDisableSpotlight { if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }; try { mdutil -i off / 2>$null; Write-Log "Spotlight disabled." "OK" } catch { Write-Log "Spotlight failed." "WARN" } }
+
 # ---------- TWEAK DEFINITIONS ----------
 $Script:Tweaks = @(
     # General
@@ -385,7 +427,54 @@ $Script:Tweaks = @(
     @{Id="potato";Name="Potato Graphics (Engine.ini)";Desc="Lowers Fortnite render quality for max FPS and visibility. Changes appearance.";Risk="Caution";Free=$false;Win=$true;Mac=$false;Cat="Game";Action={Invoke-PotatoGraphics}},
     @{Id="gamedvr";Name="Disable Game DVR / Game Bar";Desc="Turns off Xbox Game Bar recording overlay that hooks into games.";Risk="Safe";Free=$false;Win=$true;Mac=$false;Cat="Game";Action={Invoke-RegistryTweaks}},
     @{Id="fullscreen";Name="Fullscreen optimizations off";Desc="Disables FSO for lower input lag in fullscreen exclusive mode.";Risk="Safe";Free=$false;Win=$true;Mac=$false;Cat="Game";Action={}},
-    @{Id="bcdedit";Name="BCDEDIT micro-stutter fix";Desc="Disables dynamic tick, enables platform clock, enhances TSC sync. Reduces micro-stutters.";Risk="Caution";Free=$false;Win=$true;Mac=$false;Cat="Game";Action={Invoke-BCDEdit}}
+    @{Id="bcdedit";Name="BCDEDIT micro-stutter fix";Desc="Disables dynamic tick, enables platform clock, enhances TSC sync. Reduces micro-stutters.";Risk="Caution";Free=$false;Win=$true;Mac=$false;Cat="Game";Action={Invoke-BCDEdit}},
+
+    # Game / GPU
+    @{Id="gamemode";Name="Enable Game Mode";Desc="Turns on Windows Game Mode for prioritized CPU/GPU scheduling.";Risk="Safe";Free=$true;Cat="Game";Win=$true;Mac=$false;Action={Invoke-GameModeOn}},
+    @{Id="mpo";Name="Disable MPO (Multiplane Overlay)";Desc="Disables MPO to fix stuttering and alt-tab issues in games.";Risk="Caution";Free=$false;Cat="Game";Win=$true;Mac=$false;Action={Invoke-MPOOff}},
+    @{Id="fullopt";Name="Disable Fullscreen Optimizations";Desc="Disables FSO for lower input lag in fullscreen exclusive mode.";Risk="Safe";Free=$false;Cat="Game";Win=$true;Mac=$false;Action={Invoke-DisableFullscreenOpt}},
+    @{Id="gamedvr2";Name="Disable Game DVR / Game Bar";Desc="Turns off Xbox Game Bar recording overlay that hooks into games.";Risk="Safe";Free=$false;Cat="Game";Win=$true;Mac=$false;Action={Invoke-DisableGameDVR}},
+    # Power
+    @{Id="powerthrottle";Name="Disable Power Throttling";Desc="Stops Windows from throttling background app CPU.";Risk="Safe";Free=$false;Cat="Power";Win=$true;Mac=$false;Action={Invoke-PowerThrottlingOff}},
+    @{Id="usbss";Name="Disable USB Selective Suspend";Desc="Keeps USB devices awake to reduce input latency.";Risk="Safe";Free=$false;Cat="Power";Win=$true;Mac=$false;Action={Invoke-USBSelectiveSuspendOff}},
+    @{Id="faststartup";Name="Disable Fast Startup";Desc="Full shutdown for cleaner driver state and fewer glitches.";Risk="Safe";Free=$true;Cat="Power";Win=$true;Mac=$false;Action={Invoke-FastStartupOff}},
+    @{Id="hibernate";Name="Disable Hibernate";Desc="Frees disk space equal to RAM size.";Risk="Safe";Free=$true;Cat="Power";Win=$true;Mac=$false;Action={Invoke-HibernateOff}},
+    # Storage
+    @{Id="ntfslast";Name="Disable NTFS Last Access Time";Desc="Reduces disk writes for better SSD performance.";Risk="Safe";Free=$true;Cat="General";Win=$true;Mac=$false;Action={Invoke-NTFSLastAccessOff}},
+    @{Id="disable8dot3";Name="Disable 8.3 Filename Creation";Desc="Speeds up NTFS directory enumeration.";Risk="Safe";Free=$true;Cat="General";Win=$true;Mac=$false;Action={Invoke-Disable8dot3}},
+    @{Id="trim";Name="Enable TRIM";Desc="Keeps SSDs fast over time.";Risk="Safe";Free=$true;Cat="General";Win=$true;Mac=$false;Action={Invoke-EnableTrim}},
+    @{Id="clearevents";Name="Clear Event Logs";Desc="Frees space and resets log buffers.";Risk="Safe";Free=$true;Cat="General";Win=$true;Mac=$false;Action={Invoke-ClearEventLogs}},
+    # Audio
+    @{Id="audioenh";Name="Disable Audio Enhancements/Ducking";Desc="Removes audio processing latency and ducking.";Risk="Safe";Free=$true;Cat="Visual";Win=$true;Mac=$false;Action={Invoke-AudioEnhancementsOff}},
+    # Privacy/Telemetry
+    @{Id="telemetry";Name="Disable Telemetry";Desc="Stops diagnostic data collection.";Risk="Safe";Free=$true;Cat="Services";Win=$true;Mac=$false;Action={Invoke-DisableTelemetryLevel}},
+    @{Id="adid";Name="Disable Advertising ID";Desc="Stops personalized ads tracking.";Risk="Safe";Free=$true;Cat="Services";Win=$true;Mac=$false;Action={Invoke-DisableAdvertisingID}},
+    @{Id="feedback";Name="Disable Feedback Prompts";Desc="Stops Windows feedback notifications.";Risk="Safe";Free=$true;Cat="Services";Win=$true;Mac=$false;Action={Invoke-DisableFeedback}},
+    @{Id="smartscreen";Name="Disable SmartScreen";Desc="Removes SmartScreen overhead (caution).";Risk="Caution";Free=$false;Cat="Services";Win=$true;Mac=$false;Action={Invoke-DisableSmartScreen}},
+    @{Id="defendercloud";Name="Disable Defender Cloud";Desc="Stops cloud sample submission.";Risk="Caution";Free=$false;Cat="Services";Win=$true;Mac=$false;Action={Invoke-DisableDefenderCloud}},
+    @{Id="cortana";Name="Disable Cortana";Desc="Removes Cortana background process.";Risk="Safe";Free=$true;Cat="Services";Win=$true;Mac=$false;Action={Invoke-DisableCortana}},
+    @{Id="widgets";Name="Disable Widgets/News";Desc="Removes widgets panel and background refresh.";Risk="Safe";Free=$true;Cat="Services";Win=$true;Mac=$false;Action={Invoke-DisableWidgets}},
+    @{Id="copilot";Name="Disable Copilot";Desc="Removes Copilot AI background service.";Risk="Safe";Free=$true;Cat="Services";Win=$true;Mac=$false;Action={Invoke-DisableCopilot}},
+    @{Id="recall";Name="Disable Recall/AI";Desc="Disables Recall data analysis.";Risk="Safe";Free=$true;Cat="Services";Win=$true;Mac=$false;Action={Invoke-DisableRecall}},
+    @{Id="onedrive";Name="Stop OneDrive";Desc="Stops OneDrive background sync.";Risk="Safe";Free=$true;Cat="Services";Win=$true;Mac=$false;Action={Invoke-DisableOneDrive}},
+    @{Id="searchhl";Name="Disable Search Highlights";Desc="Removes search box highlights.";Risk="Safe";Free=$true;Cat="Visual";Win=$true;Mac=$false;Action={Invoke-DisableSearchHighlights}},
+    @{Id="bgapps";Name="Disable Background Apps";Desc="Stops apps running in background.";Risk="Safe";Free=$true;Cat="Services";Win=$true;Mac=$false;Action={Invoke-DisableBackgroundApps}},
+    @{Id="errrep";Name="Disable Error Reporting";Desc="Stops WER background service.";Risk="Safe";Free=$true;Cat="Services";Win=$true;Mac=$false;Action={Invoke-DisableErrorReporting}},
+    @{Id="deliveryopt";Name="Disable Delivery Optimization";Desc="Stops P2P update sharing.";Risk="Safe";Free=$true;Cat="Services";Win=$true;Mac=$false;Action={Invoke-DisableDeliveryOpt}},
+    @{Id="bits";Name="Disable BITS";Desc="Stops Background Intelligent Transfer.";Risk="Safe";Free=$true;Cat="Services";Win=$true;Mac=$false;Action={Invoke-DisableBITS}},
+    @{Id="wuautorestart";Name="Disable WU Auto-Restart";Desc="Prevents auto reboot while logged in.";Risk="Safe";Free=$true;Cat="Services";Win=$true;Mac=$false;Action={Invoke-DisableWUAutoRestart}},
+    @{Id="lockscreen";Name="Disable Lock Screen";Desc="Skips lock screen for faster login.";Risk="Safe";Free=$true;Cat="Visual";Win=$true;Mac=$false;Action={Invoke-DisableLockScreen}},
+    @{Id="tips";Name="Disable Tips/Ads";Desc="Removes content delivery tips.";Risk="Safe";Free=$true;Cat="Visual";Win=$true;Mac=$false;Action={Invoke-DisableTips}},
+    @{Id="consumerfeat";Name="Disable Consumer Features";Desc="Removes suggested apps.";Risk="Safe";Free=$true;Cat="Services";Win=$true;Mac=$false;Action={Invoke-DisableConsumerFeatures}},
+    @{Id="activityhist";Name="Disable Activity History";Desc="Stops activity feed tracking.";Risk="Safe";Free=$true;Cat="Services";Win=$true;Mac=$false;Action={Invoke-DisableActivityHistory}},
+    @{Id="lockcam";Name="Disable Lock Screen Camera";Desc="Disables camera on lock screen.";Risk="Safe";Free=$true;Cat="Visual";Win=$true;Mac=$false;Action={Invoke-DisableLockScreenCamera}},
+    @{Id="wins";Name="Disable Windows Search Service";Desc="Stops search indexing service.";Risk="Caution";Free=$false;Cat="Services";Win=$true;Mac=$false;Action={Invoke-DisableWinSearch}},
+    # Mac
+    @{Id="macappnap";Name="Disable App Nap (Mac)";Desc="Keeps apps from being throttled in background.";Risk="Safe";Free=$true;Cat="Power";Win=$false;Mac=$true;Action={Invoke-MacDisableAppNap}},
+    @{Id="macwinanim";Name="Disable Window Animations (Mac)";Desc="Removes window open/close animations.";Risk="Safe";Free=$true;Cat="Visual";Win=$false;Mac=$true;Action={Invoke-MacDisableWindowAnimations}},
+    @{Id="macfontsmooth";Name="Disable Font Smoothing (Mac)";Desc="Sharper text rendering, less GPU work.";Risk="Safe";Free=$true;Cat="Visual";Win=$false;Mac=$true;Action={Invoke-MacDisableFontSmoothing}},
+    @{Id="macpurge";Name="Purge Memory (Mac)";Desc="Purges inactive memory.";Risk="Safe";Free=$true;Cat="General";Win=$false;Mac=$true;Action={Invoke-MacPurgeMemory}},
+    @{Id="macspotlight";Name="Disable Spotlight (Mac)";Desc="Stops Spotlight indexing.";Risk="Caution";Free=$false;Cat="General";Win=$false;Mac=$true;Action={Invoke-MacDisableSpotlight}}
 )
 
 if (-not $Script:Config.TweakStates) { $Script:Config.TweakStates = @{} }
@@ -628,8 +717,6 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
   <div class="planbadge" id="planBadge">PRO</div>
   <button class="navbtn active" data-page="home"><span class="navicon">◆</span>Home</button>
   <button class="navbtn" data-page="tweaks"><span class="navicon">⚙</span>All Tweaks</button>
-  <button class="navbtn" data-page="inputdelay"><span class="navicon">🖱️</span>Input Delay</button>
-  <button class="navbtn" data-page="pingstab"><span class="navicon">📡</span>Ping Stabilizer</button>
   <button class="navbtn" data-page="booster"><span class="navicon">⚡</span>Game Booster</button>
   <button class="navbtn" data-page="potato"><span class="navicon">🥔</span>Potato Graphics</button>
   <button class="navbtn" data-page="bench"><span class="navicon">📊</span>Benchmark</button>
@@ -685,72 +772,6 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
     <button class="btn ghost sm" id="revertAllBtn2">Revert All Changes</button>
   </div>
   <div class="grid" id="tweakGrid"></div>
-</div>
-
-<!-- INPUT DELAY REDUCER -->
-<div class="page" id="page-inputdelay">
-  <h1>Input Delay Reducer</h1>
-  <div class="sub">Ten changes to how Windows handles your mouse, keyboard and CPU scheduling.</div>
-  <div class="livetool">
-    <div class="livetool-header">
-      <div class="livetool-icon">🖱️</div>
-      <div><div class="livetool-title">Input Delay Reducer</div><div style="font-size:11px;color:var(--textmuted)">Smaller input buffers, sharper timer, no CPU held back, cores kept awake</div></div>
-    </div>
-    <div class="livetool-desc">Reduces input lag by ~60%. Disables mouse acceleration, sets keyboard to max repeat rate, removes filter/sticky/toggle keys, optimizes data queues, and sets Win32PrioritySeparation to 38 for gaming.</div>
-    <div class="livetool-stats">
-      <div class="livetool-stat"><div class="livetool-stat-val">10</div><div class="livetool-stat-label">Changes</div></div>
-      <div class="livetool-stat"><div class="livetool-stat-val">1ms</div><div class="livetool-stat-label">Timer</div></div>
-      <div class="livetool-stat"><div class="livetool-stat-val">0</div><div class="livetool-stat-label">Parked Cores</div></div>
-      <div class="livetool-stat"><div class="livetool-stat-val">32</div><div class="livetool-stat-label">Data Queue</div></div>
-    </div>
-    <button class="btn" id="inputDelayBtn">Apply Input Delay Reducer</button>
-  </div>
-  <div class="section-title">Included Tweaks</div>
-  <div class="card">
-    <div style="color:var(--textdim);font-size:13px;line-height:2">
-      <div>▸ <b style="color:var(--text)">Mouse Acceleration OFF</b> — MouseSpeed=0, Threshold=0 (1:1 tracking)</div>
-      <div>▸ <b style="color:var(--text)">Mouse Data Queue = 32</b> — Doubles input buffer for smoother tracking</div>
-      <div>▸ <b style="color:var(--text)">Keyboard Repeat Rate = 31</b> — Max speed (~60 keys/sec)</div>
-      <div>▸ <b style="color:var(--text)">Keyboard Delay = 0</b> — Zero initial delay on key press</div>
-      <div>▸ <b style="color:var(--text)">Filter/Sticky/Toggle Keys OFF</b> — No input filtering</div>
-      <div>▸ <b style="color:var(--text)">Keyboard Data Queue = 32</b> — Doubles keyboard buffer</div>
-      <div>▸ <b style="color:var(--text)">Win32PrioritySeparation = 38</b> — Best for gaming (0x26)</div>
-      <div>▸ <b style="color:var(--text)">Enhance Pointer Precision OFF</b> — No mouse smoothing</div>
-      <div>▸ <b style="color:var(--text)">Mouse Precision Tweak</b> — 1:1 movement curve</div>
-      <div>▸ <b style="color:var(--text)">USB Polling = 1000Hz</b> — 1ms USB response time</div>
-    </div>
-  </div>
-</div>
-
-<!-- PING STABILIZER -->
-<div class="page" id="page-pingstab">
-  <h1>Ping Stabilizer</h1>
-  <div class="sub">It doesn't lower your ping. It takes the spikes out of it.</div>
-  <div class="livetool">
-    <div class="livetool-header">
-      <div class="livetool-icon">📡</div>
-      <div><div class="livetool-title">Ping Stabilizer</div><div style="font-size:11px;color:var(--textmuted)">Smooths spikes while you play, lifts media throttle</div></div>
-    </div>
-    <div class="livetool-desc">Pauses what competes with your game for bandwidth and lifts Windows' background network throttle. Spikes out, ping the same.</div>
-    <div class="livetool-stats">
-      <div class="livetool-stat"><div class="livetool-stat-val">OFF</div><div class="livetool-stat-label">Nagle</div></div>
-      <div class="livetool-stat"><div class="livetool-stat-val">OFF</div><div class="livetool-stat-label">Throttle</div></div>
-      <div class="livetool-stat"><div class="livetool-stat-val">OFF</div><div class="livetool-stat-label">Offloads</div></div>
-      <div class="livetool-stat"><div class="livetool-stat-val">✓</div><div class="livetool-stat-label">DNS Flush</div></div>
-    </div>
-    <button class="btn" id="pingStabBtn">Apply Ping Stabilizer</button>
-  </div>
-  <div class="section-title">Included Tweaks</div>
-  <div class="card">
-    <div style="color:var(--textdim);font-size:13px;line-height:2">
-      <div>▸ <b style="color:var(--text)">Nagle's Algorithm OFF</b> — TCPNoDelay + TcpAckFrequency (sends packets immediately)</div>
-      <div>▸ <b style="color:var(--text)">Network Throttling OFF</b> — NetworkThrottlingIndex = 0xFFFFFFFF</div>
-      <div>▸ <b style="color:var(--text)">TCP Auto-Tuning OFF</b> — Reduces bufferbloat</div>
-      <div>▸ <b style="color:var(--text)">Adapter Offloads OFF</b> — Energy Efficient Ethernet, ARP Offload, NS Offload, Large Send Offload</div>
-      <div>▸ <b style="color:var(--text)">DNS Cache Flush</b> — Clears stale DNS entries</div>
-      <div>▸ <b style="color:var(--text)">QoS Priority</b> — Prioritizes game packets</div>
-    </div>
-  </div>
 </div>
 
 <!-- GAME BOOSTER -->
@@ -994,12 +1015,6 @@ document.getElementById('boostBtn').addEventListener('click',async()=>{
   const wl=document.getElementById('whitelist').value.split('\n').map(s=>s.trim()).filter(Boolean);
   const r=await api('/api/booster',{whitelist:wl});showToast(r.message);
 });
-document.getElementById('inputDelayBtn').addEventListener('click',async()=>{
-  const r=await api('/api/inputdelay');showToast(r.message);
-});
-document.getElementById('pingStabBtn').addEventListener('click',async()=>{
-  const r=await api('/api/pingstab');showToast(r.message);
-});
 document.getElementById('applyAllBtn').addEventListener('click',async()=>{const r=await api('/api/applyall');showToast(r.message);await loadTweaks()});
 document.getElementById('removeAllBtn').addEventListener('click',async()=>{if(!confirm('Remove ALL tweaks? This reverts every tweak.'))return;const r=await api('/api/revertall');showToast(r.message);await loadTweaks()});
 document.getElementById('removeCatBtn').addEventListener('click',async()=>{if(!confirm('Remove all tweaks in '+currentCat+'?'))return;const ids=Object.values(state.tweaks).filter(t=>t.cat===currentCat).map(t=>t.id);for(const id of ids){await api('/api/tweak/toggle',{id,state:false})}showToast('Removed '+ids.length+' tweaks in '+currentCat);await loadTweaks()});
@@ -1065,7 +1080,7 @@ while ($Listener.IsListening) {
     }
     elseif ($path -eq "/api/tweaks/list") {
         $tweakObj = @{}
-        $catMap = @{"memory"="General";"temp"="General";"startup"="General";"spotlight"="General";"inputdelay"="Input";"mouseprec"="Input";"kbdlag"="Input";"usb"="Input";"pingstab"="Network";"nagle"="Network";"autotune"="Network";"qos"="Network";"power"="Power";"hags"="Power";"corepark"="Power";"timer"="Power";"macpower"="Power";"visual"="Visual";"menu"="Visual";"transp"="Visual";"fontcache"="Visual";"services"="Services";"sysmain"="Services";"potato"="Game";"gamedvr"="Game";"fullscreen"="Game";"bcdedit"="Game"}
+        $catMap = @{"memory"="General";"temp"="General";"startup"="General";"spotlight"="General";"inputdelay"="Input";"mouseprec"="Input";"kbdlag"="Input";"usb"="Input";"pingstab"="Network";"nagle"="Network";"autotune"="Network";"qos"="Network";"power"="Power";"hags"="Power";"corepark"="Power";"timer"="Power";"macpower"="Power";"visual"="Visual";"menu"="Visual";"transp"="Visual";"fontcache"="Visual";"services"="Services";"sysmain"="Services";"potato"="Game";"gamedvr"="Game";"fullscreen"="Game";"bcdedit"="Game";"gamemode"="Game";"mpo"="Game";"fullopt"="Game";"gamedvr2"="Game";"powerthrottle"="Power";"usbss"="Power";"faststartup"="Power";"hibernate"="Power";"ntfslast"="General";"disable8dot3"="General";"trim"="General";"clearevents"="General";"audioenh"="Visual";"telemetry"="Services";"adid"="Services";"feedback"="Services";"smartscreen"="Services";"defendercloud"="Services";"cortana"="Services";"widgets"="Services";"copilot"="Services";"recall"="Services";"onedrive"="Services";"searchhl"="Visual";"bgapps"="Services";"errrep"="Services";"deliveryopt"="Services";"bits"="Services";"wuautorestart"="Services";"lockscreen"="Visual";"tips"="Visual";"consumerfeat"="Services";"activityhist"="Services";"lockcam"="Visual";"wins"="Services";"macappnap"="Power";"macwinanim"="Visual";"macfontsmooth"="Visual";"macpurge"="General";"macspotlight"="General"}
         foreach ($t in $Script:Tweaks) {
             $isAvail = if ($IsWin) { $t.Win } else { $t.Mac }
             if (-not $isAvail) { continue }
