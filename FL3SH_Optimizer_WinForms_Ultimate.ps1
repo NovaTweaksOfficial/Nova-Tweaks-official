@@ -286,11 +286,11 @@ function Invoke-MacDisableSpotlight { if (-not $IsMac) { Write-Log "macOS only."
 
 # ---------- Tweak definitions ----------
 $Script:Tweaks = @(
-  @{Id="inputdelay";Name="Input Delay Reducer";Desc="10 changes: mouse accel off, max keyboard repeat, no filter keys, priority separation, data queues. Reduces input lag ~60%.";Risk="Safe";Free=$false;Cat="Input";OS="Windows";Action={Invoke-InputDelayReducer}},
+  @{Id="inputdelay";Name="Input Response Accelerator";Desc="10 changes: mouse accel off, max keyboard repeat, no filter keys, priority separation, data queues. Reduces input lag ~60%.";Risk="Safe";Free=$false;Cat="Input";OS="Windows";Action={Invoke-InputDelayReducer}},
   @{Id="mouseprec";Name="Mouse Precision";Desc="Disables mouse acceleration for 1:1 tracking. Essential for aim consistency.";Risk="Safe";Free=$true;Cat="Input";OS="Windows";Action={Invoke-MousePrecision}},
   @{Id="kbdlag";Name="Keyboard Latency Fix";Desc="Max repeat rate (31), zero delay, no filter/sticky/toggle keys, 32 data queue. ~60% faster response.";Risk="Safe";Free=$false;Cat="Input";OS="Windows";Action={Invoke-KeyboardLatency}},
   @{Id="usb";Name="USB Polling Optimization";Desc="Sets USB data queue to 32 for 1000Hz polling. Reduces USB input delay to 1ms.";Risk="Safe";Free=$false;Cat="Input";OS="Windows";Action={Invoke-USBPolling}},
-  @{Id="pingstab";Name="Ping Stabilizer";Desc="Nagle off, network throttling off, adapter offloads disabled, TCP auto-tuning off, DNS flush. Smooths ping spikes.";Risk="Safe";Free=$false;Cat="Network";OS="Windows";Action={Invoke-PingStabilizer}},
+  @{Id="pingstab";Name="Network Spike Smoother";Desc="Nagle off, network throttling off, adapter offloads disabled, TCP auto-tuning off, DNS flush. Smooths ping spikes.";Risk="Safe";Free=$false;Cat="Network";OS="Windows";Action={Invoke-PingStabilizer}},
   @{Id="nagle";Name="Disable Nagle's algorithm";Desc="TCPNoDelay + TcpAckFrequency. Lowers network latency.";Risk="Safe";Free=$false;Cat="Network";OS="Windows";Action={Invoke-RegistryTweaks}},
   @{Id="autotune";Name="Disable TCP auto-tuning";Desc="Sets autotuninglevel=disabled. Reduces bufferbloat.";Risk="Safe";Free=$false;Cat="Network";OS="Windows";Action={Invoke-NetworkTweaks}},
   @{Id="qos";Name="Network QoS priority";Desc="Prioritizes game packets over background traffic.";Risk="Safe";Free=$false;Cat="Network";OS="Windows";Action={}},
@@ -440,7 +440,7 @@ function Show-MainForm {
     $lblBrandSub = New-Object System.Windows.Forms.Label; $lblBrandSub.Text="OPTIMIZER ULTIMATE"; $lblBrandSub.Font=New-Object System.Drawing.Font("Segoe UI",8.5); $lblBrandSub.ForeColor=$C.TextMuted; $lblBrandSub.Location=New-Object System.Drawing.Point(18,50); $lblBrandSub.AutoSize=$true; $sidebar.Controls.Add($lblBrandSub)
     $lblPlan = New-Object System.Windows.Forms.Label; $lblPlan.Text="  PRO  "; $lblPlan.Font=New-Object System.Drawing.Font("Segoe UI",9,[System.Drawing.FontStyle]::Bold); $lblPlan.ForeColor=[System.Drawing.Color]::White; $lblPlan.BackColor=$C.Red; $lblPlan.Location=New-Object System.Drawing.Point(16,76); $lblPlan.AutoSize=$true; $lblPlan.Padding=New-Object System.Windows.Forms.Padding(10,3,10,3); $sidebar.Controls.Add($lblPlan)
 
-    $navItems = @(@{Text="Home";Key="home";Y=120;Icon="◆"},@{Text="All Tweaks";Key="tweaks";Y=162;Icon="⚙"},@{Text="Game Booster";Key="booster";Y=204;Icon="⚡"},@{Text="Potato Graphics";Key="potato";Y=246;Icon="🥔"},@{Text="Benchmark";Key="bench";Y=288;Icon="📊"},@{Text="Restore";Key="restore";Y=330;Icon="↺"},@{Text="Log";Key="log";Y=372;Icon="☰"},@{Text="Settings";Key="settings";Y=414;Icon="✦"})
+    $navItems = @(@{Text="Home";Key="home";Y=120;Icon="◆"},@{Text="All Tweaks";Key="tweaks";Y=162;Icon="⚙"},@{Text="Crosshair";Key="crosshair";Y=204;Icon="🎯"},@{Text="Game Booster";Key="booster";Y=246;Icon="⚡"},@{Text="Potato Graphics";Key="potato";Y=288;Icon="🥔"},@{Text="Benchmark";Key="bench";Y=330;Icon="📊"},@{Text="Restore";Key="restore";Y=372;Icon="↺"},@{Text="Log";Key="log";Y=414;Icon="☰"},@{Text="Settings";Key="settings";Y=456;Icon="✦"},@{Text="Potato Graphics";Key="potato";Y=246;Icon="🥔"},@{Text="Benchmark";Key="bench";Y=288;Icon="📊"},@{Text="Restore";Key="restore";Y=330;Icon="↺"},@{Text="Log";Key="log";Y=372;Icon="☰"},@{Text="Settings";Key="settings";Y=414;Icon="✦"})
     $navBtns = @{}
     foreach ($n in $navItems) {
         $btn = New-Object System.Windows.Forms.Button; $btn.Text="  $($n.Icon)  $($n.Text)"; $btn.Size=New-Object System.Drawing.Size(198,36); $btn.Location=New-Object System.Drawing.Point(16,$n.Y); $btn.FlatStyle="Flat"; $btn.FlatAppearance.BorderSize=0; $btn.BackColor=$C.Sidebar; $btn.ForeColor=$C.TextDim; $btn.Font=$FontBody; $btn.TextAlign="MiddleLeft"; $btn.Cursor=[System.Windows.Forms.Cursors]::Hand; $btn.Tag=$n.Key; $sidebar.Controls.Add($btn); $navBtns[$n.Key]=$btn
@@ -541,6 +541,82 @@ function Show-MainForm {
         $lblHomeSub.Text="$applied of $($Script:Tweaks.Count) tweaks on · Pro plan"
         [System.Windows.Forms.MessageBox]::Show("Removed all tweaks in $cat category.","FL3SH") | Out-Null
     })
+
+    # ---------- CROSSHAIR ----------
+    $pgCross = New-Page "crosshair"
+    $lblCH=New-Object System.Windows.Forms.Label; $lblCH.Text="Crosshair Overlay"; $lblCH.Font=$FontTitle; $lblCH.ForeColor=$C.Text; $lblCH.Location=New-Object System.Drawing.Point(0,0); $lblCH.AutoSize=$true; $pgCross.Controls.Add($lblCH)
+    $lblCHSub=New-Object System.Windows.Forms.Label; $lblCHSub.Text="In-game style crosshair overlay with multiple styles."; $lblCHSub.Font=$FontBody; $lblCHSub.ForeColor=$C.TextDim; $lblCHSub.Location=New-Object System.Drawing.Point(0,38); $lblCHSub.AutoSize=$true; $pgCross.Controls.Add($lblCHSub)
+    $cardCH=New-Object System.Windows.Forms.Panel; $cardCH.Size=New-Object System.Drawing.Size(500,300); $cardCH.Location=New-Object System.Drawing.Point(0,80); $cardCH.BackColor=$C.Card; $pgCross.Controls.Add($cardCH)
+    $lblCHStyle=New-Object System.Windows.Forms.Label; $lblCHStyle.Text="Style:"; $lblCHStyle.Font=$FontBody; $lblCHStyle.ForeColor=$C.Text; $lblCHStyle.Location=New-Object System.Drawing.Point(15,15); $lblCHStyle.AutoSize=$true; $cardCH.Controls.Add($lblCHStyle)
+    $cmbCH=New-Object System.Windows.Forms.ComboBox; $cmbCH.Location=New-Object System.Drawing.Point(80,12); $cmbCH.Size=New-Object System.Drawing.Size(200,28); $cmbCH.DropDownStyle="DropDownList"; @("cross","dot","circle","t","chevron","square","x","crosscircle") | ForEach-Object { $cmbCH.Items.Add($_) | Out-Null }; $cmbCH.SelectedIndex=0; $cardCH.Controls.Add($cmbCH)
+    $lblCHColor=New-Object System.Windows.Forms.Label; $lblCHColor.Text="Color:"; $lblCHColor.Font=$FontBody; $lblCHColor.ForeColor=$C.Text; $lblCHColor.Location=New-Object System.Drawing.Point(15,55); $lblCHColor.AutoSize=$true; $cardCH.Controls.Add($lblCHColor)
+    $txtCHColor=New-Object System.Windows.Forms.TextBox; $txtCHColor.Location=New-Object System.Drawing.Point(80,52); $txtCHColor.Size=New-Object System.Drawing.Size(120,26); $txtCHColor.Text="#00ff88"; $txtCHColor.BackColor=$C.Bg; $txtCHColor.ForeColor=$C.Text; $cardCH.Controls.Add($txtCHColor)
+    $lblCHSize=New-Object System.Windows.Forms.Label; $lblCHSize.Text="Size:"; $lblCHSize.Font=$FontBody; $lblCHSize.ForeColor=$C.Text; $lblCHSize.Location=New-Object System.Drawing.Point(15,95); $lblCHSize.AutoSize=$true; $cardCH.Controls.Add($lblCHSize)
+    $trkCHSize=New-Object System.Windows.Forms.TrackBar; $trkCHSize.Location=New-Object System.Drawing.Point(80,90); $trkCHSize.Size=New-Object System.Drawing.Size(200,40); $trkCHSize.Minimum=4; $trkCHSize.Maximum=40; $trkCHSize.Value=12; $cardCH.Controls.Add($trkCHSize)
+    $lblCHThick=New-Object System.Windows.Forms.Label; $lblCHThick.Text="Thickness:"; $lblCHThick.Font=$FontBody; $lblCHThick.ForeColor=$C.Text; $lblCHThick.Location=New-Object System.Drawing.Point(15,140); $lblCHThick.AutoSize=$true; $cardCH.Controls.Add($lblCHThick)
+    $trkCHThick=New-Object System.Windows.Forms.TrackBar; $trkCHThick.Location=New-Object System.Drawing.Point(110,135); $trkCHThick.Size=New-Object System.Drawing.Size(170,40); $trkCHThick.Minimum=1; $trkCHThick.Maximum=6; $trkCHThick.Value=2; $cardCH.Controls.Add($trkCHThick)
+    $btnCHToggle=New-Object System.Windows.Forms.Button; $btnCHToggle.Text="Toggle Overlay"; $btnCHToggle.Size=New-Object System.Drawing.Size(140,36); $btnCHToggle.Location=New-Object System.Drawing.Point(15,185); $btnCHToggle.BackColor=$C.Red; $btnCHToggle.ForeColor=[System.Drawing.Color]::White; $btnCHToggle.FlatStyle="Flat"; $cardCH.Controls.Add($btnCHToggle)
+    $btnCHHide=New-Object System.Windows.Forms.Button; $btnCHHide.Text="Hide"; $btnCHHide.Size=New-Object System.Drawing.Size(80,36); $btnCHHide.Location=New-Object System.Drawing.Point(165,185); $btnCHHide.BackColor=$C.Card; $btnCHHide.ForeColor=$C.Text; $btnCHHide.FlatStyle="Flat"; $cardCH.Controls.Add($btnCHHide)
+
+    # Overlay form
+    $Script:CHForm = $null
+    $Script:CHState = @{ On=$false; Style="cross"; Color="#00ff88"; Size=12; Thick=2 }
+    function Update-CHState {
+        $Script:CHState.Style = $cmbCH.SelectedItem.ToString()
+        $Script:CHState.Color = $txtCHColor.Text
+        $Script:CHState.Size = $trkCHSize.Value
+        $Script:CHState.Thick = $trkCHThick.Value
+        if ($Script:CHForm) { $Script:CHForm.Invalidate() }
+    }
+    $cmbCH.Add_SelectedIndexChanged({ Update-CHState })
+    $txtCHColor.Add_TextChanged({ Update-CHState })
+    $trkCHSize.Add_ValueChanged({ Update-CHState })
+    $trkCHThick.Add_ValueChanged({ Update-CHState })
+
+    function Show-CHOverlay {
+        if ($Script:CHForm) { return }
+        $Script:CHState.On = $true
+        $f2 = New-Object System.Windows.Forms.Form
+        $f2.FormBorderStyle = "None"
+        $f2.TopMost = $true
+        $f2.ShowInTaskbar = $false
+        $f2.StartPosition = "Manual"
+        $f2.Bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+        $f2.BackColor = [System.Drawing.Color]::Magenta
+        $f2.TransparencyKey = [System.Drawing.Color]::Magenta
+        $f2.Opacity = 1.0
+        # click-through
+        $ex = [Win32Ex]::GetWindowLong($f2.Handle, [Win32Ex]::GWL_EXSTYLE)
+        [Win32Ex]::SetWindowLong($f2.Handle, [Win32Ex]::GWL_EXSTYLE, $ex -bor 0x20 -bor 0x80000) | Out-Null
+        $f2.Add_Paint({
+            $g = $_.Graphics
+            $cx = $f2.Width/2; $cy = $f2.Height/2
+            $s = $Script:CHState.Size; $t = $Script:CHState.Thick
+            $col = [System.Drawing.ColorTranslator]::FromHtml($Script:CHState.Color)
+            $pen = New-Object System.Drawing.Pen($col, $t)
+            $brush = New-Object System.Drawing.SolidBrush($col)
+            $st = $Script:CHState.Style
+            if ($st -eq "cross" -or $st -eq "crosscircle") {
+                $g.DrawLine($pen,$cx-$s,$cy,$cx-$s/2,$cy); $g.DrawLine($pen,$cx+$s/2,$cy,$cx+$s,$cy)
+                $g.DrawLine($pen,$cx,$cy-$s,$cx,$cy-$s/2); $g.DrawLine($pen,$cx,$cy+$s/2,$cx,$cy+$s)
+            }
+            if ($st -eq "dot") { $g.FillEllipse($brush,$cx-$t*2,$cy-$t*2,$t*4,$t*4) }
+            if ($st -eq "circle" -or $st -eq "crosscircle") { $g.DrawEllipse($pen,$cx-$s,$cy-$s,$s*2,$s*2) }
+            if ($st -eq "t") { $g.DrawLine($pen,$cx-$s,$cy,$cx+$s,$cy); $g.DrawLine($pen,$cx,$cy,$cx,$cy+$s) }
+            if ($st -eq "chevron") { $g.DrawLine($pen,$cx-$s,$cy+$s,$cx,$cy); $g.DrawLine($pen,$cx,$cy,$cx+$s,$cy+$s) }
+            if ($st -eq "square") { $g.DrawRectangle($pen,$cx-$s,$cy-$s,$s*2,$s*2) }
+            if ($st -eq "x") { $g.DrawLine($pen,$cx-$s,$cy-$s,$cx+$s,$cy+$s); $g.DrawLine($pen,$cx+$s,$cy-$s,$cx-$s,$cy+$s) }
+            $pen.Dispose(); $brush.Dispose()
+        })
+        $Script:CHForm = $f2
+        $f2.Show()
+    }
+    function Hide-CHOverlay {
+        $Script:CHState.On = $false
+        if ($Script:CHForm) { $Script:CHForm.Close(); $Script:CHForm = $null }
+    }
+    $btnCHToggle.Add_Click({ if ($Script:CHState.On) { Hide-CHOverlay } else { Update-CHState; Show-CHOverlay } })
+    $btnCHHide.Add_Click({ Hide-CHOverlay })
 
     # ---------- GAME BOOSTER ----------
     $pgBooster=New-Page "booster"

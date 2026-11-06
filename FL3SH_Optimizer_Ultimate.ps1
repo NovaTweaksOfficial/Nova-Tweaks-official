@@ -400,12 +400,12 @@ $Script:Tweaks = @(
     @{Id="startup";Name="Disable startup delay";Desc="Removes the artificial startup app delay timer for faster boot.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="General";Action={}},
     @{Id="spotlight";Name="Disable Spotlight indexing";Desc="Stops Spotlight from indexing. Frees disk I/O. Reversible.";Risk="Caution";Free=$false;Win=$false;Mac=$true;Cat="General";Action={try{mdutil -i off / 2>$null;Write-Log "Spotlight disabled on /." "OK"}catch{Write-Log "Spotlight tweak failed." "WARN"}}},
     # Input
-    @{Id="inputdelay";Name="Input Delay Reducer";Desc="10 changes: mouse accel off, max keyboard repeat, no filter keys, priority separation, data queues. Reduces input lag ~60%.";Risk="Safe";Free=$false;Win=$true;Mac=$false;Cat="Input";Action={Invoke-InputDelayReducer}},
+    @{Id="inputdelay";Name="Input Response Accelerator";Desc="10 changes: mouse accel off, max keyboard repeat, no filter keys, priority separation, data queues. Reduces input lag ~60%.";Risk="Safe";Free=$false;Win=$true;Mac=$false;Cat="Input";Action={Invoke-InputDelayReducer}},
     @{Id="mouseprec";Name="Mouse Precision";Desc="Disables mouse acceleration for 1:1 tracking. Essential for aim consistency.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Input";Action={Invoke-MousePrecision}},
     @{Id="kbdlag";Name="Keyboard Latency Fix";Desc="Max repeat rate (31), zero delay, no filter/sticky/toggle keys, 32 data queue. ~60% faster response.";Risk="Safe";Free=$false;Win=$true;Mac=$false;Cat="Input";Action={Invoke-KeyboardLatency}},
     @{Id="usb";Name="USB Polling Optimization";Desc="Sets USB data queue to 32 for 1000Hz polling. Reduces USB input delay to 1ms.";Risk="Safe";Free=$false;Win=$true;Mac=$false;Cat="Input";Action={Invoke-USBPolling}},
     # Network
-    @{Id="pingstab";Name="Ping Stabilizer";Desc="Nagle off, network throttling off, adapter offloads disabled, TCP auto-tuning off, DNS flush. Smooths ping spikes.";Risk="Safe";Free=$false;Win=$true;Mac=$true;Cat="Network";Action={Invoke-PingStabilizer}},
+    @{Id="pingstab";Name="Network Spike Smoother";Desc="Nagle off, network throttling off, adapter offloads disabled, TCP auto-tuning off, DNS flush. Smooths ping spikes.";Risk="Safe";Free=$false;Win=$true;Mac=$true;Cat="Network";Action={Invoke-PingStabilizer}},
     @{Id="nagle";Name="Disable Nagle's algorithm";Desc="TCPNoDelay + TcpAckFrequency. Lowers network latency.";Risk="Safe";Free=$false;Win=$true;Mac=$false;Cat="Network";Action={Invoke-RegistryTweaks}},
     @{Id="autotune";Name="Disable TCP auto-tuning";Desc="Sets autotuninglevel=disabled. Reduces bufferbloat.";Risk="Safe";Free=$false;Win=$true;Mac=$true;Cat="Network";Action={Invoke-NetworkTweaks}},
     @{Id="qos";Name="Network QoS priority";Desc="Prioritizes game packets over background traffic.";Risk="Safe";Free=$false;Win=$true;Mac=$false;Cat="Network";Action={}},

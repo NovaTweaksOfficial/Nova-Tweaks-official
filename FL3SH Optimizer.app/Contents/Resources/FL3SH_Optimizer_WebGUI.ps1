@@ -400,12 +400,12 @@ $Script:Tweaks = @(
     @{Id="startup";Name="Disable startup delay";Desc="Removes the artificial startup app delay timer for faster boot.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="General";Action={}},
     @{Id="spotlight";Name="Disable Spotlight indexing";Desc="Stops Spotlight from indexing. Frees disk I/O. Reversible.";Risk="Caution";Free=$false;Win=$false;Mac=$true;Cat="General";Action={try{mdutil -i off / 2>$null;Write-Log "Spotlight disabled on /." "OK"}catch{Write-Log "Spotlight tweak failed." "WARN"}}},
     # Input
-    @{Id="inputdelay";Name="Input Delay Reducer";Desc="10 changes: mouse accel off, max keyboard repeat, no filter keys, priority separation, data queues. Reduces input lag ~60%.";Risk="Safe";Free=$false;Win=$true;Mac=$false;Cat="Input";Action={Invoke-InputDelayReducer}},
+    @{Id="inputdelay";Name="Input Response Accelerator";Desc="10 changes: mouse accel off, max keyboard repeat, no filter keys, priority separation, data queues. Reduces input lag ~60%.";Risk="Safe";Free=$false;Win=$true;Mac=$false;Cat="Input";Action={Invoke-InputDelayReducer}},
     @{Id="mouseprec";Name="Mouse Precision";Desc="Disables mouse acceleration for 1:1 tracking. Essential for aim consistency.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Input";Action={Invoke-MousePrecision}},
     @{Id="kbdlag";Name="Keyboard Latency Fix";Desc="Max repeat rate (31), zero delay, no filter/sticky/toggle keys, 32 data queue. ~60% faster response.";Risk="Safe";Free=$false;Win=$true;Mac=$false;Cat="Input";Action={Invoke-KeyboardLatency}},
     @{Id="usb";Name="USB Polling Optimization";Desc="Sets USB data queue to 32 for 1000Hz polling. Reduces USB input delay to 1ms.";Risk="Safe";Free=$false;Win=$true;Mac=$false;Cat="Input";Action={Invoke-USBPolling}},
     # Network
-    @{Id="pingstab";Name="Ping Stabilizer";Desc="Nagle off, network throttling off, adapter offloads disabled, TCP auto-tuning off, DNS flush. Smooths ping spikes.";Risk="Safe";Free=$false;Win=$true;Mac=$true;Cat="Network";Action={Invoke-PingStabilizer}},
+    @{Id="pingstab";Name="Network Spike Smoother";Desc="Nagle off, network throttling off, adapter offloads disabled, TCP auto-tuning off, DNS flush. Smooths ping spikes.";Risk="Safe";Free=$false;Win=$true;Mac=$true;Cat="Network";Action={Invoke-PingStabilizer}},
     @{Id="nagle";Name="Disable Nagle's algorithm";Desc="TCPNoDelay + TcpAckFrequency. Lowers network latency.";Risk="Safe";Free=$false;Win=$true;Mac=$false;Cat="Network";Action={Invoke-RegistryTweaks}},
     @{Id="autotune";Name="Disable TCP auto-tuning";Desc="Sets autotuninglevel=disabled. Reduces bufferbloat.";Risk="Safe";Free=$false;Win=$true;Mac=$true;Cat="Network";Action={Invoke-NetworkTweaks}},
     @{Id="qos";Name="Network QoS priority";Desc="Prioritizes game packets over background traffic.";Risk="Safe";Free=$false;Win=$true;Mac=$false;Cat="Network";Action={}},
@@ -717,6 +717,7 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
   <div class="planbadge" id="planBadge">PRO</div>
   <button class="navbtn active" data-page="home"><span class="navicon">◆</span>Home</button>
   <button class="navbtn" data-page="tweaks"><span class="navicon">⚙</span>All Tweaks</button>
+  <button class="navbtn" data-page="crosshair"><span class="navicon">🎯</span>Crosshair</button>
   <button class="navbtn" data-page="booster"><span class="navicon">⚡</span>Game Booster</button>
   <button class="navbtn" data-page="potato"><span class="navicon">🥔</span>Potato Graphics</button>
   <button class="navbtn" data-page="bench"><span class="navicon">📊</span>Benchmark</button>
@@ -772,6 +773,40 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
     <button class="btn ghost sm" id="revertAllBtn2">Revert All Changes</button>
   </div>
   <div class="grid" id="tweakGrid"></div>
+</div>
+
+<!-- CROSSHAIR -->
+<div class="page" id="page-crosshair">
+  <h1>Crosshair Overlay</h1>
+  <div class="sub">In-window crosshair overlay with multiple styles. Pick a style, color and size.</div>
+  <div class="cardrow">
+    <div class="card" style="flex:1;min-width:300px">
+      <h3 style="margin-bottom:10px;font-size:14px">Style</h3>
+      <select class="input" id="chStyle">
+        <option value="cross">Classic Cross</option>
+        <option value="dot">Dot</option>
+        <option value="circle">Circle</option>
+        <option value="t">T-Shape</option>
+        <option value="chevron">Chevron</option>
+        <option value="square">Square</option>
+        <option value="x">X</option>
+        <option value="crosscircle">Cross + Circle</option>
+      </select>
+      <h3 style="margin:14px 0 6px;font-size:14px">Color</h3>
+      <input type="color" id="chColor" value="#00ff88" style="width:60px;height:32px;border:none;background:none">
+      <h3 style="margin:14px 0 6px;font-size:14px">Size</h3>
+      <input type="range" id="chSize" min="4" max="40" value="12" style="width:100%">
+      <h3 style="margin:14px 0 6px;font-size:14px">Thickness</h3>
+      <input type="range" id="chThick" min="1" max="6" value="2" style="width:100%">
+      <div style="margin-top:14px;display:flex;gap:8px">
+        <button class="btn" id="chToggle">Toggle Overlay</button>
+        <button class="btn ghost" id="chHide">Hide</button>
+      </div>
+    </div>
+    <div class="card" style="flex:1;min-width:300px;position:relative;height:260px;overflow:hidden;background:#000">
+      <canvas id="chPreview" style="position:absolute;inset:0;width:100%;height:100%"></canvas>
+    </div>
+  </div>
 </div>
 
 <!-- GAME BOOSTER -->
@@ -1031,6 +1066,55 @@ document.getElementById('activateBtn').addEventListener('click',async()=>{
   if(r.success){state.plan='Pro';document.getElementById('planBadge').textContent='PRO';showToast('License activated! Plan: Pro')}
   else showToast(r.message||'Invalid key');
 });
+
+
+// Crosshair overlay
+const chState={on:false,style:'cross',color:'#00ff88',size:12,thick:2};
+function drawCrosshair(canvas){
+  const ctx=canvas.getContext('2d');
+  const w=canvas.width=canvas.offsetWidth*devicePixelRatio;
+  const h=canvas.height=canvas.offsetHeight*devicePixelRatio;
+  ctx.clearRect(0,0,w,h);
+  if(!chState.on) return;
+  const cx=w/2,cy=h/2,s=chState.size*devicePixelRatio,t=chState.thick*devicePixelRatio;
+  ctx.strokeStyle=chState.color;ctx.fillStyle=chState.color;ctx.lineWidth=t;ctx.lineCap='round';
+  const st=chState.style;
+  if(st==='cross'||st==='crosscircle'){ctx.beginPath();ctx.moveTo(cx-s,cy);ctx.lineTo(cx-s/2,cy);ctx.moveTo(cx+s/2,cy);ctx.lineTo(cx+s,cy);ctx.moveTo(cx,cy-s);ctx.lineTo(cx,cy-s/2);ctx.moveTo(cx,cy+s/2);ctx.lineTo(cx,cy+s);ctx.stroke();}
+  if(st==='dot'){ctx.beginPath();ctx.arc(cx,cy,t*2,0,Math.PI*2);ctx.fill();}
+  if(st==='circle'||st==='crosscircle'){ctx.beginPath();ctx.arc(cx,cy,s,0,Math.PI*2);ctx.stroke();}
+  if(st==='t'){ctx.beginPath();ctx.moveTo(cx-s,cy);ctx.lineTo(cx+s,cy);ctx.moveTo(cx,cy);ctx.lineTo(cx,cy+s);ctx.stroke();}
+  if(st==='chevron'){ctx.beginPath();ctx.moveTo(cx-s,cy+s);ctx.lineTo(cx,cy);ctx.lineTo(cx+s,cy+s);ctx.stroke();}
+  if(st==='square'){ctx.strokeRect(cx-s,cy-s,s*2,s*2);}
+  if(st==='x'){ctx.beginPath();ctx.moveTo(cx-s,cy-s);ctx.lineTo(cx+s,cy+s);ctx.moveTo(cx+s,cy-s);ctx.lineTo(cx-s,cy+s);ctx.stroke();}
+}
+function chPreviewLoop(){const c=document.getElementById('chPreview');if(c)drawCrosshair(c);requestAnimationFrame(chPreviewLoop)}
+chPreviewLoop();
+document.getElementById('chStyle').addEventListener('change',e=>{chState.style=e.target.value;});
+document.getElementById('chColor').addEventListener('input',e=>{chState.color=e.target.value;});
+document.getElementById('chSize').addEventListener('input',e=>{chState.size=+e.target.value;});
+document.getElementById('chThick').addEventListener('input',e=>{chState.thick=+e.target.value;});
+document.getElementById('chToggle').addEventListener('click',()=>{chState.on=!chState.on;if(chState.on)enableOverlay();else disableOverlay();});
+document.getElementById('chHide').addEventListener('click',()=>{chState.on=false;disableOverlay();});
+
+// fullscreen overlay canvas
+let overlayCanvas=null;
+function enableOverlay(){
+  if(overlayCanvas) return;
+  overlayCanvas=document.createElement('canvas');
+  overlayCanvas.style.cssText='position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:99999;';
+  document.body.appendChild(overlayCanvas);
+  function loop(){if(!chState.on){overlayCanvas.remove();overlayCanvas=null;return;}const c=overlayCanvas;c.width=innerWidth*devicePixelRatio;c.height=innerHeight*devicePixelRatio;const ctx=c.getContext('2d');ctx.clearRect(0,0,c.width,c.height);const cx=c.width/2,cy=c.height/2,s=chState.size*devicePixelRatio,t=chState.thick*devicePixelRatio;ctx.strokeStyle=chState.color;ctx.fillStyle=chState.color;ctx.lineWidth=t;ctx.lineCap='round';const st=chState.style;
+  if(st==='cross'||st==='crosscircle'){ctx.beginPath();ctx.moveTo(cx-s,cy);ctx.lineTo(cx-s/2,cy);ctx.moveTo(cx+s/2,cy);ctx.lineTo(cx+s,cy);ctx.moveTo(cx,cy-s);ctx.lineTo(cx,cy-s/2);ctx.moveTo(cx,cy+s/2);ctx.lineTo(cx,cy+s);ctx.stroke();}
+  if(st==='dot'){ctx.beginPath();ctx.arc(cx,cy,t*2,0,Math.PI*2);ctx.fill();}
+  if(st==='circle'||st==='crosscircle'){ctx.beginPath();ctx.arc(cx,cy,s,0,Math.PI*2);ctx.stroke();}
+  if(st==='t'){ctx.beginPath();ctx.moveTo(cx-s,cy);ctx.lineTo(cx+s,cy);ctx.moveTo(cx,cy);ctx.lineTo(cx,cy+s);ctx.stroke();}
+  if(st==='chevron'){ctx.beginPath();ctx.moveTo(cx-s,cy+s);ctx.lineTo(cx,cy);ctx.lineTo(cx+s,cy+s);ctx.stroke();}
+  if(st==='square'){ctx.strokeRect(cx-s,cy-s,s*2,s*2);}
+  if(st==='x'){ctx.beginPath();ctx.moveTo(cx-s,cy-s);ctx.lineTo(cx+s,cy+s);ctx.moveTo(cx+s,cy-s);ctx.lineTo(cx-s,cy+s);ctx.stroke();}
+  requestAnimationFrame(loop);}
+  loop();
+}
+function disableOverlay(){chState.on=false;if(overlayCanvas){overlayCanvas.remove();overlayCanvas=null;}}
 
 renderStats();renderCatBar();loadTweaks();
 const h=new Date().getHours();document.getElementById('greeting').textContent=h<12?'Good morning':h<18?'Good afternoon':'Good evening';
