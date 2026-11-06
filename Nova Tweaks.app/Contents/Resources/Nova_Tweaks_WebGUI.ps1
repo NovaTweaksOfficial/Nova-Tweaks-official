@@ -1382,33 +1382,40 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
 
 <!-- LOGIN OVERLAY -->
 <div class="login-overlay" id="loginOverlay">
-  <div class="login-box">
-    <div class="login-logo">Nova Tweaks</div>
-    <div class="login-sub">Ultimate</div>
-    <div class="login-tabs">
-      <button class="login-tab active" data-tab="login">Sign In</button>
-      <button class="login-tab" data-tab="register">Create Account</button>
+  <div class="login-box" style="width:520px;padding:0;overflow:hidden">
+    <div style="padding:40px 44px 28px;background:linear-gradient(180deg,rgba(255,26,46,.12),transparent);position:relative">
+      <div class="login-logo" style="font-size:56px">Nova Tweaks</div>
+      <div class="login-sub" style="letter-spacing:6px">Performance Suite</div>
+      <div style="display:flex;gap:18px;justify-content:center;margin-top:14px;flex-wrap:wrap">
+        <div style="text-align:center"><div style="font-size:22px;font-weight:900;color:var(--text)">12,847</div><div style="font-size:9px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px">Users Online</div></div>
+        <div style="text-align:center"><div style="font-size:22px;font-weight:900;color:var(--text)">750+</div><div style="font-size:9px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px">Tweaks</div></div>
+        <div style="text-align:center"><div style="font-size:22px;font-weight:900;color:var(--text)">98.6%</div><div style="font-size:9px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px">Smoother</div></div>
+      </div>
     </div>
-    <div id="loginForm">
-      <div class="login-field"><label>Email</label><input class="login-input" id="loginEmail" type="email" placeholder="you@example.com"></div>
-      <div class="login-field"><label>Password</label><input class="login-input" id="loginPass" type="password" placeholder="••••••••"></div>
-      <button class="login-btn" id="loginBtn">Sign In</button>
-      <div class="login-error" id="loginError"></div>
+    <div style="padding:28px 44px 40px">
+      <div class="login-tabs">
+        <button class="login-tab active" data-tab="login">Sign In</button>
+        <button class="login-tab" data-tab="register">Create Account</button>
+      </div>
+      <div id="loginForm">
+        <div class="login-field"><label>Email</label><input class="login-input" id="loginEmail" type="email" placeholder="you@example.com"></div>
+        <div class="login-field"><label>Password</label><input class="login-input" id="loginPass" type="password" placeholder="••••••••"></div>
+        <button class="login-btn" id="loginBtn">Sign In</button>
+        <div class="login-error" id="loginError"></div>
+      </div>
+      <div id="registerForm" style="display:none">
+        <div class="login-field"><label>Name</label><input class="login-input" id="regName" placeholder="Your name"></div>
+        <div class="login-field"><label>Email</label><input class="login-input" id="regEmail" type="email" placeholder="you@example.com"></div>
+        <div class="login-field"><label>Password</label><input class="login-input" id="regPass" type="password" placeholder="••••••••"></div>
+        <button class="login-btn" id="registerBtn">Create Account</button>
+        <div class="login-error" id="registerError"></div>
+      </div>
+      <div style="margin-top:16px;padding:12px;background:linear-gradient(135deg,rgba(255,26,46,.08),rgba(255,26,46,.02));border:1px solid rgba(255,26,46,.25);border-radius:10px;font-size:11px;color:var(--textdim);line-height:1.7;text-align:center">
+        <div style="color:var(--red);font-weight:700;margin-bottom:4px">🔥 Upgrade to Pro</div>
+        Exclusive tweaks · Crosshair Overlay · Priority Support · Early Access
+      </div>
+      <div class="login-footer">Auto-login enabled · Session saved locally · Everyone gets Pro</div>
     </div>
-    <div id="registerForm" style="display:none">
-      <div class="login-field"><label>Name</label><input class="login-input" id="regName" placeholder="Your name"></div>
-      <div class="login-field"><label>Email</label><input class="login-input" id="regEmail" type="email" placeholder="you@example.com"></div>
-      <div class="login-field"><label>Password</label><input class="login-input" id="regPass" type="password" placeholder="••••••••"></div>
-      <button class="login-btn" id="registerBtn">Create Account</button>
-      <div class="login-error" id="registerError"></div>
-    </div>
-    <div style="margin-top:14px;padding:12px;background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:10px;font-size:11px;color:var(--textdim);line-height:1.7">
-      <div>👥 <b style="color:var(--text)">12,847</b> users optimizing right now</div>
-      <div>⚙️ <b style="color:var(--text)">700+</b> tweaks available on Nova Tweaks</div>
-      <div>✅ <b style="color:var(--text)">98.6%</b> report smoother gameplay</div>
-      <div style="margin-top:6px;color:var(--red);font-weight:700">🔥 Upgrade to Pro for exclusive tweaks, crosshair overlay & priority support</div>
-    </div>
-    <div class="login-footer">Auto-login enabled · Session saved locally · Everyone gets Pro</div>
   </div>
 </div>
 
