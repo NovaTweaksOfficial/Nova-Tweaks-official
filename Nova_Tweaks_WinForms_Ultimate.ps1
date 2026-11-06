@@ -14,6 +14,7 @@
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 [System.Windows.Forms.Application]::EnableVisualStyles()
+[System.Windows.Forms.Application]::SetCompatibleTextRenderingDefault($false)
 
 # ---------- Theme (Vibrant Red) ----------
 $C = @{
@@ -62,6 +63,16 @@ public class Win32Ex2 {
 # alias
 $script:RoundRgn = [Win32Ex2]
 
+
+# ---------- Modern Button Styling ----------
+function Style-Button($btn,$bg,$fg) {
+    $btn.FlatStyle = "Flat"
+    $btn.FlatAppearance.BorderSize = 0
+    $btn.BackColor = $bg
+    $btn.ForeColor = $fg
+    $btn.Cursor = [System.Windows.Forms.Cursors]::Hand
+    $btn.Font = $FontBody
+}
 # ---------- Paths ----------
 $Script:Root      = Join-Path $env:USERPROFILE "NovaTweaks"
 $Script:BackupDir = Join-Path $Script:Root "backups"
@@ -1146,13 +1157,27 @@ function Show-MainForm {
     $form.StartPosition = "CenterScreen"
     $form.BackColor = $C.Bg
     $form.ForeColor = $C.Text
-    $form.FormBorderStyle = "Sizable"
+    # Custom title bar
+    $titleBar = New-Object System.Windows.Forms.Panel; $titleBar.Size=New-Object System.Drawing.Size(1280,40); $titleBar.Location=New-Object System.Drawing.Point(0,0); $titleBar.BackColor=$C.Sidebar; $form.Controls.Add($titleBar)
+    $lblTitleBar = New-Object System.Windows.Forms.Label; $lblTitleBar.Text="Nova Tweaks"; $lblTitleBar.Font=$FontHead; $lblTitleBar.ForeColor=$C.Text; $lblTitleBar.Location=New-Object System.Drawing.Point(16,8); $lblTitleBar.AutoSize=$true; $titleBar.Controls.Add($lblTitleBar)
+    $btnClose = New-Object System.Windows.Forms.Button; $btnClose.Text="✕"; $btnClose.Size=New-Object System.Drawing.Size(40,40); $btnClose.Location=New-Object System.Drawing.Point(1240,0); $btnClose.FlatStyle="Flat"; $btnClose.FlatAppearance.BorderSize=0; $btnClose.BackColor=$C.Sidebar; $btnClose.ForeColor=$C.TextDim; $btnClose.Font=$FontHead; $titleBar.Controls.Add($btnClose)
+    $btnClose.Add_Click({ $form.Close() })
+    $btnMax = New-Object System.Windows.Forms.Button; $btnMax.Text="□"; $btnMax.Size=New-Object System.Drawing.Size(40,40); $btnMax.Location=New-Object System.Drawing.Point(1200,0); $btnMax.FlatStyle="Flat"; $btnMax.FlatAppearance.BorderSize=0; $btnMax.BackColor=$C.Sidebar; $btnMax.ForeColor=$C.TextDim; $btnMax.Font=$FontHead; $titleBar.Controls.Add($btnMax)
+    $btnMax.Add_Click({ if ($form.WindowState -eq "Maximized") { $form.WindowState="Normal" } else { $form.WindowState="Maximized" } })
+    $btnMin = New-Object System.Windows.Forms.Button; $btnMin.Text="─"; $btnMin.Size=New-Object System.Drawing.Size(40,40); $btnMin.Location=New-Object System.Drawing.Point(1160,0); $btnMin.FlatStyle="Flat"; $btnMin.FlatAppearance.BorderSize=0; $btnMin.BackColor=$C.Sidebar; $btnMin.ForeColor=$C.TextDim; $btnMin.Font=$FontHead; $titleBar.Controls.Add($btnMin)
+    $btnMin.Add_Click({ $form.WindowState="Minimized" })
+    # Drag title bar
+    $titleBar.Add_MouseDown({ $Script:DragStart=[System.Windows.Forms.Cursor]::Position })
+    $titleBar.Add_MouseMove({ if ($Script:DragStart -ne $null -and $_.Button -eq [System.Windows.Forms.MouseButtons]::Left) { $cur=[System.Windows.Forms.Cursor]::Position; $form.Location=New-Object System.Drawing.Point(($form.Location.X+$cur.X-$Script:DragStart.X),($form.Location.Y+$cur.Y-$Script:DragStart.Y)); $Script:DragStart=$cur } })
+    $titleBar.Add_MouseUp({ $Script:DragStart=$null })
+    $form.FormBorderStyle = "None"
+    $form.StartPosition = "CenterScreen"
     $form.MinimumSize = New-Object System.Drawing.Size(1100,700)
     $form.MaximizeBox = $false
     $form.Font = $FontBody
 
     # Sidebar
-    $sidebar = New-Object System.Windows.Forms.Panel; $sidebar.Size=New-Object System.Drawing.Size(240,820); $sidebar.Location=New-Object System.Drawing.Point(0,0); $sidebar.BackColor=$C.Sidebar; $form.Controls.Add($sidebar)
+    $sidebar = New-Object System.Windows.Forms.Panel; $sidebar.Size=New-Object System.Drawing.Size(240,780); $sidebar.Location=New-Object System.Drawing.Point(0,40); $sidebar.BackColor=$C.Sidebar; $form.Controls.Add($sidebar)
     $lblBrand = New-Object System.Windows.Forms.Label; $lblBrand.Text="Nova Tweaks"; $lblBrand.Font=New-Object System.Drawing.Font("Segoe UI",26,[System.Drawing.FontStyle]::Bold); $lblBrand.ForeColor=$C.Red; $lblBrand.Location=New-Object System.Drawing.Point(16,16); $lblBrand.AutoSize=$true; $sidebar.Controls.Add($lblBrand)
     $lblBrandSub = New-Object System.Windows.Forms.Label; $lblBrandSub.Text="NOVA TWEAKS"; $lblBrandSub.Font=New-Object System.Drawing.Font("Segoe UI",8.5); $lblBrandSub.ForeColor=$C.TextMuted; $lblBrandSub.Location=New-Object System.Drawing.Point(18,50); $lblBrandSub.AutoSize=$true; $sidebar.Controls.Add($lblBrandSub)
     $lblPlan = New-Object System.Windows.Forms.Label; $lblPlan.Text="  PRO  "; $lblPlan.Font=New-Object System.Drawing.Font("Segoe UI",9,[System.Drawing.FontStyle]::Bold); $lblPlan.ForeColor=[System.Drawing.Color]::White; $lblPlan.BackColor=$C.Red; $lblPlan.Location=New-Object System.Drawing.Point(16,76); $lblPlan.AutoSize=$true; $lblPlan.Padding=New-Object System.Windows.Forms.Padding(10,3,10,3); $sidebar.Controls.Add($lblPlan)
@@ -1163,20 +1188,20 @@ function Show-MainForm {
         $btn = New-Object System.Windows.Forms.Button; $btn.Text="  $($n.Icon)  $($n.Text)"; $btn.Size=New-Object System.Drawing.Size(198,36); $btn.Location=New-Object System.Drawing.Point(16,$n.Y); $btn.FlatStyle="Flat"; $btn.FlatAppearance.BorderSize=0; $btn.BackColor=$C.Sidebar; $btn.ForeColor=$C.TextDim; $btn.Font=$FontBody; $btn.TextAlign="MiddleLeft"; $btn.Cursor=[System.Windows.Forms.Cursors]::Hand; $btn.Tag=$n.Key; $sidebar.Controls.Add($btn); $navBtns[$n.Key]=$btn
     }
 
-    $pnlAcct = New-Object System.Windows.Forms.Panel; $pnlAcct.Size=New-Object System.Drawing.Size(198,52); $pnlAcct.Location=New-Object System.Drawing.Point(16,600); $pnlAcct.BackColor=[System.Drawing.Color]::FromArgb(28,18,20); $sidebar.Controls.Add($pnlAcct)
+    $pnlAcct = New-Object System.Windows.Forms.Panel; $pnlAcct.Size=New-Object System.Drawing.Size(208,52); $pnlAcct.Location=New-Object System.Drawing.Point(16,560); $pnlAcct.BackColor=[System.Drawing.Color]::FromArgb(28,18,20); $sidebar.Controls.Add($pnlAcct)
     $lblAvatar = New-Object System.Windows.Forms.Label; $lblAvatar.Text=($Script:CurrentUser.Name).Substring(0,1).ToUpper(); $lblAvatar.Font=New-Object System.Drawing.Font("Segoe UI",12,[System.Drawing.FontStyle]::Bold); $lblAvatar.ForeColor=[System.Drawing.Color]::White; $lblAvatar.BackColor=$C.Red; $lblAvatar.Location=New-Object System.Drawing.Point(8,9); $lblAvatar.Size=New-Object System.Drawing.Size(34,34); $lblAvatar.TextAlign="MiddleCenter"; $pnlAcct.Controls.Add($lblAvatar)
     $lblAcctName = New-Object System.Windows.Forms.Label; $lblAcctName.Text=$Script:CurrentUser.Name; $lblAcctName.Font=$FontSmall; $lblAcctName.ForeColor=$C.Text; $lblAcctName.Location=New-Object System.Drawing.Point(50,9); $lblAcctName.AutoSize=$true; $pnlAcct.Controls.Add($lblAcctName)
     $lblAcctPlan = New-Object System.Windows.Forms.Label; $lblAcctPlan.Text="Pro Plan"; $lblAcctPlan.Font=New-Object System.Drawing.Font("Segoe UI",8); $lblAcctPlan.ForeColor=$C.Red; $lblAcctPlan.Location=New-Object System.Drawing.Point(50,30); $lblAcctPlan.AutoSize=$true; $pnlAcct.Controls.Add($lblAcctPlan)
 
-    $btnLogout = New-Object System.Windows.Forms.Button; $btnLogout.Text="Sign Out"; $btnLogout.Size=New-Object System.Drawing.Size(198,30); $btnLogout.Location=New-Object System.Drawing.Point(16,660); $btnLogout.FlatStyle="Flat"; $btnLogout.FlatAppearance.BorderSize=1; $btnLogout.FlatAppearance.BorderColor=$C.Border; $btnLogout.BackColor=$C.Sidebar; $btnLogout.ForeColor=$C.TextDim; $btnLogout.Font=$FontSmall; $sidebar.Controls.Add($btnLogout)
+    $btnLogout = New-Object System.Windows.Forms.Button; $btnLogout.Text="Sign Out"; $btnLogout.Size=New-Object System.Drawing.Size(208,30); $btnLogout.Location=New-Object System.Drawing.Point(16,620); $btnLogout.FlatStyle="Flat"; $btnLogout.FlatAppearance.BorderSize=1; $btnLogout.FlatAppearance.BorderColor=$C.Border; $btnLogout.BackColor=$C.Sidebar; $btnLogout.ForeColor=$C.TextDim; $btnLogout.Font=$FontSmall; $sidebar.Controls.Add($btnLogout)
     $btnLogout.Add_Click({ Logout; $form.Close(); $loginForm.Show() })
 
-    $lblCredits = New-Object System.Windows.Forms.Label; $lblCredits.Text="Credits: Nova Tweaks"; $lblCredits.Font=New-Object System.Drawing.Font("Segoe UI",7.5); $lblCredits.ForeColor=$C.TextMuted; $lblCredits.Location=New-Object System.Drawing.Point(16,700); $lblCredits.AutoSize=$true; $sidebar.Controls.Add($lblCredits)
+    $lblCredits = New-Object System.Windows.Forms.Label; $lblCredits.Text="Credits: Nova Tweaks"; $lblCredits.Font=New-Object System.Drawing.Font("Segoe UI",7.5); $lblCredits.ForeColor=$C.TextMuted; $lblCredits.Location=New-Object System.Drawing.Point(16,660); $lblCredits.AutoSize=$true; $sidebar.Controls.Add($lblCredits)
 
     # Content area
-    $content = New-Object System.Windows.Forms.Panel; $content.Size=New-Object System.Drawing.Size(1020,780); $content.Location=New-Object System.Drawing.Point(250,20); $content.BackColor=$C.Bg; $form.Controls.Add($content)
+    $content = New-Object System.Windows.Forms.Panel; $content.Size=New-Object System.Drawing.Size(1020,740); $content.Location=New-Object System.Drawing.Point(250,60); $content.BackColor=$C.Bg; $form.Controls.Add($content)
     $pages = @{}
-    function New-Page($key) { $p=New-Object System.Windows.Forms.Panel; $p.Size=New-Object System.Drawing.Size(1020,780); $p.Location=New-Object System.Drawing.Point(0,0); $p.BackColor=$C.Bg; $p.Visible=$false; $p.AutoScroll=$true; $content.Controls.Add($p); $pages[$key]=$p; return $p }
+    function New-Page($key) { $p=New-Object System.Windows.Forms.Panel; $p.Size=New-Object System.Drawing.Size(1020,740); $p.Location=New-Object System.Drawing.Point(0,0); $p.BackColor=$C.Bg; $p.Visible=$false; $p.AutoScroll=$true; $content.Controls.Add($p); $pages[$key]=$p; return $p }
 
     # ---------- HOME ----------
     $pgHome = New-Page "home"
