@@ -63,7 +63,7 @@ in one place. Keep the app's plan prices in `Get-NovaPlanPriceCents` in
 `Nova_Tweaks_WebGUI.ps1` in sync.
 
 After payment, issue a license key and send it to the buyer. The buyer pastes it into
-**Account → License key** in the app.
+**Settings → Account → License key** in the app.
 
 ## Issue license keys and gift codes
 

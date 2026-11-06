@@ -182,7 +182,7 @@
       );
     } else {
       setNote(
-        "After payment you receive a license key. Paste it in the app under <b>Account → License key</b> to activate your plan. Giveaway balance from your account can be applied before paying."
+        "After payment you receive a license key. Paste it in the app under <b>Settings → Account → License key</b> to activate your plan. Giveaway balance from your account can be applied before paying."
       );
     }
 
