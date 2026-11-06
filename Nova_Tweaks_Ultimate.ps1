@@ -1,4 +1,5 @@
 #Requires -RunAsAdministrator
+# ARCHIVED PROTOTYPE - superseded by Nova_Tweaks_WebGUI.ps1. Not built or shipped.
 <#
 .SYNOPSIS
     Nova Tweaks ULTIMATE - Red Theme + All Tweaks + Accounts + Auto-Login
@@ -1444,7 +1445,7 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
 <!-- ALL TWEAKS -->
 <div class="page" id="page-tweaks">
   <h1>All Tweaks</h1>
-  <div class="sub">30+ tweaks across 8 categories. Each one is a card with a risk label and a switch.</div>
+  <div class="sub">Archived prototype. The shipped app has 111 working tweaks across 7 categories.</div>
   <div class="catbar" id="catBar"></div>
   <div class="grid" id="tweakGrid"></div>
 </div>

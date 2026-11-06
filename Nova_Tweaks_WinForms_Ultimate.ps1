@@ -1,4 +1,5 @@
 #Requires -RunAsAdministrator
+# ARCHIVED PROTOTYPE - superseded by Nova_Tweaks_WebGUI.ps1. Not built or shipped.
 <#
 .SYNOPSIS
     Nova Tweaks - Native Windows GUI (Red Theme)
@@ -1133,7 +1134,7 @@ $btnReg = New-Object System.Windows.Forms.Button; $btnReg.Text="CREATE ACCOUNT";
 $lblRegErr = New-Object System.Windows.Forms.Label; $lblRegErr.Text=""; $lblRegErr.ForeColor=$C.Danger; $lblRegErr.Location=New-Object System.Drawing.Point(0,228); $lblRegErr.Size=New-Object System.Drawing.Size(400,20); $lblRegErr.TextAlign="MiddleCenter"; $pnlReg.Controls.Add($lblRegErr)
 
 $lblFooter = New-Object System.Windows.Forms.Label; $lblFooter.Text="Auto-login enabled · Session saved locally · Everyone gets Pro · Credits: Nova Tweaks"; $lblFooter.ForeColor=$C.TextMuted; $lblFooter.Location=New-Object System.Drawing.Point(0,455); $lblFooter.Size=New-Object System.Drawing.Size(440,20); $lblFooter.TextAlign="MiddleCenter"; $loginForm.Controls.Add($lblFooter)
-$lblStats = New-Object System.Windows.Forms.Label; $lblStats.Text="700+ tweaks  |  All reversible  |  Everyone gets Pro`nUpgrade to Pro for exclusive tweaks, crosshair overlay & priority support"; $lblStats.Font=New-Object System.Drawing.Font("Segoe UI",8); $lblStats.ForeColor=$C.Red; $lblStats.Location=New-Object System.Drawing.Point(0,395); $lblStats.Size=New-Object System.Drawing.Size(440,40); $lblStats.TextAlign="MiddleCenter"; $loginForm.Controls.Add($lblStats)
+$lblStats = New-Object System.Windows.Forms.Label; $lblStats.Text="Archived prototype  |  Shipped app: 111 tweaks  |  All reversible  |  Everyone gets Pro`nUpgrade to Pro for exclusive tweaks, crosshair overlay & priority support"; $lblStats.Font=New-Object System.Drawing.Font("Segoe UI",8); $lblStats.ForeColor=$C.Red; $lblStats.Location=New-Object System.Drawing.Point(0,395); $lblStats.Size=New-Object System.Drawing.Size(440,40); $lblStats.TextAlign="MiddleCenter"; $loginForm.Controls.Add($lblStats)
 
 $tabLogin.Add_Click({ $pnlLogin.Visible=$true; $pnlReg.Visible=$false; $tabLogin.BackColor=$C.Red; $tabLogin.ForeColor=[System.Drawing.Color]::White; $tabReg.BackColor=$C.Card; $tabReg.ForeColor=$C.TextDim })
 $tabReg.Add_Click({ $pnlLogin.Visible=$false; $pnlReg.Visible=$true; $tabReg.BackColor=$C.Red; $tabReg.ForeColor=[System.Drawing.Color]::White; $tabLogin.BackColor=$C.Card; $tabLogin.ForeColor=$C.TextDim })
@@ -1237,14 +1238,14 @@ function Show-MainForm {
     # What's inside card
     $cardWN=New-Object System.Windows.Forms.Panel; $cardWN.Size=New-Object System.Drawing.Size(980,70); $cardWN.Location=New-Object System.Drawing.Point(0,440); $cardWN.BackColor=$C.Card; $pgHome.Controls.Add($cardWN)
     $lw=New-Object System.Windows.Forms.Label; $lw.Text="What's inside Nova Tweaks"; $lw.Font=$FontHead; $lw.ForeColor=$C.Text; $lw.Location=New-Object System.Drawing.Point(15,8); $lw.AutoSize=$true; $cardWN.Controls.Add($lw)
-    $lw2=New-Object System.Windows.Forms.Label; $lw2.Text="700+ tweaks across Input, Network, Power, Visual, Services, Game, General and Mac categories. Input Response Accelerator, Network Spike Smoother, Mouse Precision, Keyboard Latency Fix, USB Polling, BCDEDIT fix, Crosshair Overlay, Game Booster, Potato Graphics, and 600+ system optimizations. All reversible."; $lw2.Font=$FontSmall; $lw2.ForeColor=$C.TextDim; $lw2.Location=New-Object System.Drawing.Point(15,32); $lw2.Size=New-Object System.Drawing.Size(950,34); $cardWN.Controls.Add($lw2)
+    $lw2=New-Object System.Windows.Forms.Label; $lw2.Text="Archived prototype. The shipped Nova Tweaks app has 111 working tweaks across General, Input, Network, Power, Visual, Services and Game. Input Response Accelerator, Network Spike Smoother, Mouse Precision, Keyboard Latency Fix, USB Polling, BCDEDIT fix, Crosshair Overlay, Game Booster, Potato Graphics and safe system optimizations. All reversible."; $lw2.Font=$FontSmall; $lw2.ForeColor=$C.TextDim; $lw2.Location=New-Object System.Drawing.Point(15,32); $lw2.Size=New-Object System.Drawing.Size(950,34); $cardWN.Controls.Add($lw2)
 
     # ---------- ALL TWEAKS ----------
     $pgTweaks=New-Page "tweaks"
     # ---------- ALL TWEAKS ----------
     $pgTweaks=New-Page "tweaks"
     $lblTW=New-Object System.Windows.Forms.Label; $lblTW.Text="All Tweaks"; $lblTW.Font=$FontTitle; $lblTW.ForeColor=$C.Text; $lblTW.Location=New-Object System.Drawing.Point(0,0); $lblTW.AutoSize=$true; $pgTweaks.Controls.Add($lblTW)
-    $lblTWS=New-Object System.Windows.Forms.Label; $lblTWS.Text="30+ tweaks across 8 categories. Each card shows OS compatibility."; $lblTWS.Font=$FontBody; $lblTWS.ForeColor=$C.TextDim; $lblTWS.Location=New-Object System.Drawing.Point(0,38); $lblTWS.AutoSize=$true; $pgTweaks.Controls.Add($lblTWS)
+    $lblTWS=New-Object System.Windows.Forms.Label; $lblTWS.Text="Archived prototype. The shipped app has 111 tweaks across 7 categories. Each card shows OS compatibility."; $lblTWS.Font=$FontBody; $lblTWS.ForeColor=$C.TextDim; $lblTWS.Location=New-Object System.Drawing.Point(0,38); $lblTWS.AutoSize=$true; $pgTweaks.Controls.Add($lblTWS)
     $catPanel=New-Object System.Windows.Forms.Panel; $catPanel.Size=New-Object System.Drawing.Size(910,40); $catPanel.Location=New-Object System.Drawing.Point(0,70); $catPanel.BackColor=$C.Bg; $pgTweaks.Controls.Add($catPanel)
     $tweakCats=@("General","Input","Network","Power","Visual","Services","Game","Windows","Mac")
     $catBtns=@{}; $cx=0
