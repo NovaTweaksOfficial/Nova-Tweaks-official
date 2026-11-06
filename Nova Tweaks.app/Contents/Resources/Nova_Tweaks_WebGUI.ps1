@@ -1440,28 +1440,63 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
 <div class="content">
 <!-- HOME -->
 <div class="page active" id="page-home">
-  <h1 id="greeting">Good evening</h1>
-  <div class="sub" id="homeSub">0 tweaks on · Pro plan · All features unlocked</div>
-  <div class="cardrow" id="statsRow"></div>
-  <div class="cardrow" style="margin-top:16px">
-    <div class="card" style="flex:1;min-width:300px">
-      <h3 style="margin-bottom:10px;font-size:16px">Suggested next</h3>
-      <div style="color:var(--textdim);font-size:13px;margin-bottom:14px" id="sugText">0% optimized</div>
-      <button class="btn" id="applyAllBtn">Apply everything</button>
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:6px">
+    <div>
+      <h1 id="greeting" style="font-size:34px">Good evening</h1>
+      <div class="sub" id="homeSub" style="margin-bottom:0">0 tweaks on · Pro plan · All features unlocked</div>
     </div>
-    <div class="card" style="flex:1;min-width:300px">
+    <div style="display:flex;gap:8px">
+      <button class="btn" id="applyAllBtn">⚡ Apply All</button>
+      <button class="btn danger" id="revertAllBtn">↺ Revert All</button>
+    </div>
+  </div>
+  <div class="cardrow" id="statsRow" style="margin-top:16px"></div>
+  <div class="cardrow" style="margin-top:16px">
+    <div class="card" style="flex:2;min-width:300px;position:relative;overflow:hidden">
+      <div style="position:absolute;inset:0;background:radial-gradient(circle at 80% 20%,rgba(255,26,46,.15),transparent 60%);pointer-events:none"></div>
+      <h3 style="margin-bottom:6px;font-size:16px">Optimization Progress</h3>
+      <div id="sugText" style="color:var(--textdim);font-size:13px;margin-bottom:12px">0% optimized</div>
+      <div style="height:10px;background:var(--border);border-radius:5px;overflow:hidden">
+        <div id="homeProgress" style="height:100%;width:0%;background:linear-gradient(90deg,var(--red),var(--red3),#ff8a95);border-radius:5px;transition:width .6s"></div>
+      </div>
+      <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn ghost sm" onclick="document.querySelector('[data-page=tweaks]').click()">Browse tweaks</button>
+        <button class="btn ghost sm" onclick="document.querySelector('[data-page=crosshair]').click()">Crosshair</button>
+        <button class="btn ghost sm" onclick="document.querySelector('[data-page=bench]').click()">Benchmark</button>
+      </div>
+    </div>
+    <div class="card" style="flex:1;min-width:260px">
       <h3 style="margin-bottom:10px;font-size:16px">Quickstart</h3>
       <div style="color:var(--textdim);font-size:13px;line-height:2">
         <div>▸ Create a restore point</div>
         <div>▸ Enable Input Response Accelerator</div>
         <div>▸ Enable Network Spike Smoother</div>
         <div>▸ Turn on Game Booster</div>
+        <div>▸ Apply Potato Graphics</div>
       </div>
     </div>
   </div>
+  <div class="cardrow" style="margin-top:16px">
+    <div class="card" style="flex:1;min-width:200px;text-align:center">
+      <div style="font-size:32px;font-weight:900;background:linear-gradient(135deg,var(--red),var(--red3));-webkit-background-clip:text;-webkit-text-fill-color:transparent" id="statTweaks">0</div>
+      <div style="font-size:11px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px;margin-top:4px">Tweaks Available</div>
+    </div>
+    <div class="card" style="flex:1;min-width:200px;text-align:center">
+      <div style="font-size:32px;font-weight:900;background:linear-gradient(135deg,var(--green),#00cc6a);-webkit-background-clip:text;-webkit-text-fill-color:transparent" id="statApplied">0</div>
+      <div style="font-size:11px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px;margin-top:4px">Applied</div>
+    </div>
+    <div class="card" style="flex:1;min-width:200px;text-align:center">
+      <div style="font-size:32px;font-weight:900;background:linear-gradient(135deg,var(--blue),#0088cc);-webkit-background-clip:text;-webkit-text-fill-color:transparent" id="statCats">8</div>
+      <div style="font-size:11px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px;margin-top:4px">Categories</div>
+    </div>
+    <div class="card" style="flex:1;min-width:200px;text-align:center">
+      <div style="font-size:32px;font-weight:900;background:linear-gradient(135deg,var(--purple),#8833cc);-webkit-background-clip:text;-webkit-text-fill-color:transparent">PRO</div>
+      <div style="font-size:11px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px;margin-top:4px">Your Plan</div>
+    </div>
+  </div>
   <div class="card" style="margin-top:16px">
-    <h3 style="margin-bottom:10px;font-size:16px">What's new in Ultimate</h3>
-    <div style="color:var(--textdim);font-size:13px;line-height:1.6">Input Response Accelerator (10 changes, ~60% less input lag), Network Spike Smoother (Nagle off, adapter offloads, DNS flush), Mouse Precision (1:1 tracking), Keyboard Latency Fix (max repeat rate), USB Polling (1000Hz), BCDEDIT micro-stutter fix, and 30+ system tweaks. All reversible.</div>
+    <h3 style="margin-bottom:10px;font-size:16px">What's inside Nova Tweaks</h3>
+    <div style="color:var(--textdim);font-size:13px;line-height:1.7">700+ tweaks across Input, Network, Power, Visual, Services, Game, General and Mac categories. Input Response Accelerator (10 changes, ~60% less input lag), Network Spike Smoother (Nagle off, adapter offloads, DNS flush), Mouse Precision (1:1 tracking), Keyboard Latency Fix, USB Polling (1000Hz), BCDEDIT micro-stutter fix, Crosshair Overlay, Game Booster, Potato Graphics, and 600+ system optimizations. All reversible.</div>
   </div>
 </div>
 
@@ -1751,6 +1786,10 @@ function updateCounts(){
   document.getElementById('homeSub').textContent=applied+' of '+total+' tweaks on · Pro plan · All features unlocked';
   document.getElementById('sugText').textContent=Math.round(applied/total*100)+'% optimized · '+applied+' of '+total+' on.';
   document.getElementById('progressFill').style.width=Math.round(applied/total*100)+'%';
+  const hp=document.getElementById('homeProgress'); if(hp) hp.style.width=Math.round(applied/total*100)+'%';
+  const sa=document.getElementById('statApplied'); if(sa) sa.textContent=applied;
+  const st=document.getElementById('statTweaks'); if(st) st.textContent=total;
+  const sc=document.getElementById('statCats'); if(sc) sc.textContent=Object.keys(state.tweaks).length? (new Set(Object.values(state.tweaks).map(t=>t.cat))).size : 8;
 }
 
 const profiles=[{name:'Fortnite',desc:'DX11 and Performance mode',plan:'Pro',icon:'FN'},{name:'Fortnite Competitive',desc:'Fixed floor (lowest settings)',plan:'Pro',icon:'FC'},{name:'Marvel Rivals',desc:'Low-graphics competitive profile',plan:'Pro',icon:'MR'},{name:'AMD/Intel Potato',desc:'Works on any GPU. Removes texture packs.',plan:'Pro',icon:'AI'}];
