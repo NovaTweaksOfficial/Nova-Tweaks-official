@@ -1124,7 +1124,7 @@ $btnReg.Add_Click({
 function Show-MainForm {
     $form = New-Object System.Windows.Forms.Form
     $form.Text = "Nova Tweaks"
-    $form.Size = New-Object System.Drawing.Size(1180,760)
+    $form.Size = New-Object System.Drawing.Size(1280,820)
     $form.StartPosition = "CenterScreen"
     $form.BackColor = $C.Bg
     $form.ForeColor = $C.Text
@@ -1133,7 +1133,7 @@ function Show-MainForm {
     $form.Font = $FontBody
 
     # Sidebar
-    $sidebar = New-Object System.Windows.Forms.Panel; $sidebar.Size=New-Object System.Drawing.Size(230,760); $sidebar.Location=New-Object System.Drawing.Point(0,0); $sidebar.BackColor=$C.Sidebar; $form.Controls.Add($sidebar)
+    $sidebar = New-Object System.Windows.Forms.Panel; $sidebar.Size=New-Object System.Drawing.Size(240,820); $sidebar.Location=New-Object System.Drawing.Point(0,0); $sidebar.BackColor=$C.Sidebar; $form.Controls.Add($sidebar)
     $lblBrand = New-Object System.Windows.Forms.Label; $lblBrand.Text="Nova Tweaks"; $lblBrand.Font=New-Object System.Drawing.Font("Segoe UI",26,[System.Drawing.FontStyle]::Bold); $lblBrand.ForeColor=$C.Red; $lblBrand.Location=New-Object System.Drawing.Point(16,16); $lblBrand.AutoSize=$true; $sidebar.Controls.Add($lblBrand)
     $lblBrandSub = New-Object System.Windows.Forms.Label; $lblBrandSub.Text="NOVA TWEAKS"; $lblBrandSub.Font=New-Object System.Drawing.Font("Segoe UI",8.5); $lblBrandSub.ForeColor=$C.TextMuted; $lblBrandSub.Location=New-Object System.Drawing.Point(18,50); $lblBrandSub.AutoSize=$true; $sidebar.Controls.Add($lblBrandSub)
     $lblPlan = New-Object System.Windows.Forms.Label; $lblPlan.Text="  PRO  "; $lblPlan.Font=New-Object System.Drawing.Font("Segoe UI",9,[System.Drawing.FontStyle]::Bold); $lblPlan.ForeColor=[System.Drawing.Color]::White; $lblPlan.BackColor=$C.Red; $lblPlan.Location=New-Object System.Drawing.Point(16,76); $lblPlan.AutoSize=$true; $lblPlan.Padding=New-Object System.Windows.Forms.Padding(10,3,10,3); $sidebar.Controls.Add($lblPlan)
@@ -1155,9 +1155,9 @@ function Show-MainForm {
     $lblCredits = New-Object System.Windows.Forms.Label; $lblCredits.Text="Credits: Nova Tweaks & XRT"; $lblCredits.Font=New-Object System.Drawing.Font("Segoe UI",7.5); $lblCredits.ForeColor=$C.TextMuted; $lblCredits.Location=New-Object System.Drawing.Point(16,700); $lblCredits.AutoSize=$true; $sidebar.Controls.Add($lblCredits)
 
     # Content area
-    $content = New-Object System.Windows.Forms.Panel; $content.Size=New-Object System.Drawing.Size(930,720); $content.Location=New-Object System.Drawing.Point(240,20); $content.BackColor=$C.Bg; $form.Controls.Add($content)
+    $content = New-Object System.Windows.Forms.Panel; $content.Size=New-Object System.Drawing.Size(1020,780); $content.Location=New-Object System.Drawing.Point(250,20); $content.BackColor=$C.Bg; $form.Controls.Add($content)
     $pages = @{}
-    function New-Page($key) { $p=New-Object System.Windows.Forms.Panel; $p.Size=$content.Size; $p.Location=New-Object System.Drawing.Point(0,0); $p.BackColor=$C.Bg; $p.Visible=$false; $p.AutoScroll=$true; $content.Controls.Add($p); $pages[$key]=$p; return $p }
+    function New-Page($key) { $p=New-Object System.Windows.Forms.Panel; $p.Size=New-Object System.Drawing.Size(1020,780); $p.Location=New-Object System.Drawing.Point(0,0); $p.BackColor=$C.Bg; $p.Visible=$false; $p.AutoScroll=$true; $content.Controls.Add($p); $pages[$key]=$p; return $p }
 
     # ---------- HOME ----------
     $pgHome = New-Page "home"
