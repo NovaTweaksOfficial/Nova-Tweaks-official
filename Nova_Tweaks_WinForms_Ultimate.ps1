@@ -1419,7 +1419,7 @@ function Show-MainForm {
     foreach ($btn in $navBtns.Values) { $btn.Add_Click({ Show-Page $this.Tag }) }
 
     # Apply All
-    $btnApplyAll.Add_Click({
+    $btnApplyAll2.Add_Click({
         $applied=0
         foreach ($t in $Script:Tweaks) { $Script:TweakStates2[$t.Id]=$true; $Script:Config.TweakStates.$($t.Id)=$true; & $t.Action; $applied++ }
         Save-Config
@@ -1427,15 +1427,6 @@ function Show-MainForm {
         $lblHomeSub.Text="$applied of $($Script:Tweaks.Count) tweaks on · Pro plan"
         Render-TweakList $Script:CurrentCat
         [System.Windows.Forms.MessageBox]::Show("Applied $applied tweaks.","Nova Tweaks") | Out-Null
-    })
-
-    # Remove All button
-    $btnRemoveAll=New-Object System.Windows.Forms.Button; $btnRemoveAll.Text="Remove All Tweaks"; $btnRemoveAll.Size=New-Object System.Drawing.Size(160,36); $btnRemoveAll.Location=New-Object System.Drawing.Point(185,72); $btnRemoveAll.BackColor=$C.Danger; $btnRemoveAll.ForeColor=[System.Drawing.Color]::White; $btnRemoveAll.FlatStyle="Flat"; $btnRemoveAll.Font=$FontBody; $cardSug.Controls.Add($btnRemoveAll)
-    $btnRemoveAll.Add_Click({
-        foreach ($t in $Script:Tweaks) { $Script:TweakStates2[$t.Id]=$false; $Script:Config.TweakStates.$($t.Id)=$false }
-        Save-Config; Render-TweakList $Script:CurrentCat
-        $lblPts.Text="0 tweaks applied"; $lblHomeSub.Text="0 of $($Script:Tweaks.Count) tweaks on · Pro plan"
-        [System.Windows.Forms.MessageBox]::Show("All tweaks removed.","Nova Tweaks") | Out-Null
     })
 
     # Progress + counts
