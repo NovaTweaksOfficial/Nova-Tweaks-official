@@ -1449,20 +1449,11 @@ public class Win32Ex {
     }
     $Script:RotAngle = 0
 
-    $overlay = New-Object System.Windows.Forms.Panel
-    $overlay.Size = $form.ClientSize
-    $overlay.Location = New-Object System.Drawing.Point(0,0)
-    $overlay.BackColor = [System.Drawing.Color]::Transparent
-    $overlay.Enabled = $false
-    $form.Controls.Add($overlay)
-    $overlay.BringToFront()
-
-    $overlay.Add_HandleCreated({
-        $ex = [Win32Ex]::GetWindowLong($overlay.Handle, [Win32Ex]::GWL_EXSTYLE)
-        [Win32Ex]::SetWindowLong($overlay.Handle, [Win32Ex]::GWL_EXSTYLE, $ex -bor [Win32Ex]::WS_EX_TRANSPARENT -bor [Win32Ex]::WS_EX_LAYERED) | Out-Null
-    })
-    $overlay.Add_Paint({
+    $form.Add_Paint({
         $g = $_.Graphics
+        $r = $form.ClientRectangle
+        $Script:RotAngle = ($Script:RotAngle + 3) % 360
+        # snowfall
         foreach ($f in $Script:SnowFlakes) {
             $f.X += $f.Vx; $f.Y += $f.Vy
             if ($f.Y -gt $form.Height) { $f.Y = -4; $f.X = $rng.Next(0,$form.Width) }
@@ -1473,26 +1464,7 @@ public class Win32Ex {
             $g.FillEllipse($brush, [float]$f.X, [float]$f.Y, [float]$f.R, [float]$f.R)
             $brush.Dispose()
         }
-    })
-
-    $form.Add_Paint({
-        $g = $_.Graphics
-        $r = $form.ClientRectangle
-        $Script:RotAngle = ($Script:RotAngle + 3) % 360
-        # rotating outline: draw a conic-ish gradient border using multiple colored segments
-        $colors = @($C.Red, $C.Purple, $C.Blue, $C.Red)
-        $penW = 2
-        for ($i=0; $i -lt 36; $i++) {
-            $a1 = ($Script:RotAngle + $i*10) * [Math]::PI / 180.0
-            $a2 = ($Script:RotAngle + ($i+1)*10) * [Math]::PI / 180.0
-            $ci = [int]($i / 12) % 3
-            $pen = New-Object System.Drawing.Pen($colors[$ci], $penW)
-            # top edge
-            $x1 = $r.Left + ($r.Width/2) + [Math]::Cos($a1)*($r.Width/2-2)
-            # simpler: draw outline segments around rectangle perimeter
-            $pen.Dispose()
-        }
-        # Draw a simple animated dashed border
+        # rotating dashed border
         $dashPen = New-Object System.Drawing.Pen($C.Red, 2)
         $dashPen.DashStyle = [System.Drawing.Drawing2D.DashStyle]::Dash
         $dashPen.DashOffset = $Script:RotAngle / 10.0
@@ -1502,10 +1474,9 @@ public class Win32Ex {
 
     $animTimer = New-Object System.Windows.Forms.Timer
     $animTimer.Interval = 40
-    $animTimer.Add_Tick({ $overlay.Invalidate(); $form.Invalidate() })
+    $animTimer.Add_Tick({ $form.Invalidate() })
     $animTimer.Start()
 
-    $form.Add_Resize({ $overlay.Size = $form.ClientSize })
     $form.Add_FormClosing({ $animTimer.Stop(); Save-Config })
 
     # ---------- Draggable window (move by dragging sidebar) ----------
