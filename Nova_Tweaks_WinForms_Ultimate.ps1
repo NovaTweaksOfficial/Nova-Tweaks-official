@@ -1,12 +1,12 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    FL3SH Optimizer Ultimate - Native Windows GUI (Red Theme)
+    Nova Tweaks - Native Windows GUI (Red Theme)
 .DESCRIPTION
     WinForms application. Compile to .exe with PS2EXE.
-    All tweaks: Input Delay Reducer, Ping Stabilizer, Mouse Precision,
+    All tweaks: Input Response Accelerator, Network Spike Smoother, Mouse Precision,
     Keyboard Latency, USB Polling, BCDEDIT, Game Booster, Potato Graphics, etc.
-    Everyone gets Pro. Credits: FL3SH & XRT.
+    Everyone gets Pro. Credits: Nova Tweaks & XRT.
 .NOTES
     Run as Administrator. All tweaks reversible.
 #>
@@ -45,9 +45,9 @@ $FontMono  = New-Object System.Drawing.Font("Consolas",9)
 $FontBig   = New-Object System.Drawing.Font("Segoe UI",26,[System.Drawing.FontStyle]::Bold)
 
 # ---------- Paths ----------
-$Script:Root      = Join-Path $env:USERPROFILE "FL3SH_Optimizer"
+$Script:Root      = Join-Path $env:USERPROFILE "NovaTweaks"
 $Script:BackupDir = Join-Path $Script:Root "backups"
-$Script:LogPath   = Join-Path $Script:Root "optimizer.log"
+$Script:LogPath   = Join-Path $Script:Root "nova.log"
 $Script:ConfigPath= Join-Path $Script:Root "config.json"
 $Script:AccountsPath = Join-Path $Script:Root "accounts.json"
 $Script:TokenPath = Join-Path $Script:Root "session.token"
@@ -59,7 +59,7 @@ if (-not (Test-Path $Script:LogPath)) { New-Item -ItemType File -Path $Script:Lo
 function Load-Accounts { if (Test-Path $Script:AccountsPath) { try { return @(Get-Content $Script:AccountsPath -Raw | ConvertFrom-Json) } catch { return @() } }; return @() }
 function Save-Accounts { param($accs) $accs | ConvertTo-Json -Depth 5 | Set-Content $Script:AccountsPath -Encoding UTF8 }
 function Find-Account { param($email) (Load-Accounts) | Where-Object { $_.Email -eq $email } | Select-Object -First 1 }
-function Hash-Pass { param($p) [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($p + "FL3SH_SALT_2026")) }
+function Hash-Pass { param($p) [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($p + "Nova Tweaks_SALT_2026")) }
 function Create-Account { param($email,$password,$name)
     $accs = @(Load-Accounts)
     if ($accs | Where-Object { $_.Email -eq $email }) { return @{ success=$false; message="Account already exists." } }
@@ -74,7 +74,7 @@ function Verify-Login { param($email,$password)
     $accs = @(Load-Accounts); $a = $accs | Where-Object { $_.Email -eq $email } | Select-Object -First 1
     if ($a) { $a.LastLogin = (Get-Date).ToString("o"); $a.Plan = "Pro"; Save-Accounts $accs }
     $acc.Plan = "Pro"
-    $token = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("$email|$(Get-Date -Format 'o')|FL3SH"))
+    $token = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("$email|$(Get-Date -Format 'o')|Nova Tweaks"))
     Set-Content -Path $Script:TokenPath -Value $token -Encoding UTF8
     return @{ success=$true; message="Login successful."; token=$token; account=$acc }
 }
@@ -113,7 +113,7 @@ function Ensure-Admin {
 }
 
 # ---------- Tweak Functions ----------
-function New-RestorePoint { try { Checkpoint-Computer -Description "FL3SH Optimizer" -RestorePointType "MODIFY_SETTINGS" -ErrorAction Stop; Write-Log "Restore point created." "OK"; return $true } catch { Write-Log "Restore point failed: $($_.Exception.Message)" "WARN"; return $false } }
+function New-RestorePoint { try { Checkpoint-Computer -Description "Nova Tweaks" -RestorePointType "MODIFY_SETTINGS" -ErrorAction Stop; Write-Log "Restore point created." "OK"; return $true } catch { Write-Log "Restore point failed: $($_.Exception.Message)" "WARN"; return $false } }
 
 function Invoke-InputDelayReducer {
     try {
@@ -134,8 +134,8 @@ function Invoke-InputDelayReducer {
         $priPath = "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl"
         if (-not (Test-Path $priPath)) { New-Item -Path $priPath -Force | Out-Null }
         Set-ItemProperty -Path $priPath -Name "Win32PrioritySeparation" -Value 38 -Type DWord -Force
-        Write-Log "Input Delay Reducer applied (10 changes)." "OK"
-    } catch { Write-Log "Input Delay Reducer failed: $($_.Exception.Message)" "ERR" }
+        Write-Log "Input Response Accelerator applied (10 changes)." "OK"
+    } catch { Write-Log "Input Response Accelerator failed: $($_.Exception.Message)" "ERR" }
 }
 
 function Invoke-MousePrecision {
@@ -190,8 +190,8 @@ function Invoke-PingStabilizer {
             try { Set-NetAdapterAdvancedProperty -Name $name -DisplayName "Large Send Offload V2 (IPv4)" -DisplayValue "Disabled" -ErrorAction SilentlyContinue } catch {}
         }
         ipconfig /flushdns 2>$null | Out-Null
-        Write-Log "Ping Stabilizer applied." "OK"
-    } catch { Write-Log "Ping Stabilizer failed: $($_.Exception.Message)" "ERR" }
+        Write-Log "Network Spike Smoother applied." "OK"
+    } catch { Write-Log "Network Spike Smoother failed: $($_.Exception.Message)" "ERR" }
 }
 
 function Invoke-PowerPlan { try { $hp=(powercfg /list|Select-String "Ultimate Performance"|ForEach-Object{($_-split'\s+')[3]})|Select-Object -First 1; if(-not $hp){$hp=(powercfg /list|Select-String "High performance"|ForEach-Object{($_-split'\s+')[3]})|Select-Object -First 1}; if($hp){powercfg /setactive $hp 2>$null|Out-Null;Write-Log "Power plan: $hp" "OK"}; powercfg /setacvalueindex SCHEME_CURRENT 2a737441-1930-4402-8d77-b2bebba308a3 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 0 2>$null; powercfg /setdcvalueindex SCHEME_CURRENT 2a737441-1930-4402-8d77-b2bebba308a3 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 0 2>$null; Write-Log "USB suspend disabled." "OK" } catch { Write-Log "Power plan failed." "ERR" } }
@@ -1071,7 +1071,7 @@ Ensure-Admin
 
 # Login form
 $loginForm = New-Object System.Windows.Forms.Form
-$loginForm.Text = "FL3SH Optimizer - Sign In"
+$loginForm.Text = "Nova Tweaks - Sign In"
 $loginForm.Size = New-Object System.Drawing.Size(440,500)
 $loginForm.StartPosition = "CenterScreen"
 $loginForm.BackColor = $C.Bg
@@ -1079,8 +1079,8 @@ $loginForm.ForeColor = $C.Text
 $loginForm.FormBorderStyle = "FixedDialog"
 $loginForm.MaximizeBox = $false
 
-$lblLogo = New-Object System.Windows.Forms.Label; $lblLogo.Text="FL3SH"; $lblLogo.Font=New-Object System.Drawing.Font("Segoe UI",36,[System.Drawing.FontStyle]::Bold); $lblLogo.ForeColor=$C.Red; $lblLogo.Location=New-Object System.Drawing.Point(0,25); $lblLogo.Size=New-Object System.Drawing.Size(440,50); $lblLogo.TextAlign="MiddleCenter"; $loginForm.Controls.Add($lblLogo)
-$lblSub = New-Object System.Windows.Forms.Label; $lblSub.Text="OPTIMIZER ULTIMATE"; $lblSub.Font=New-Object System.Drawing.Font("Segoe UI",10); $lblSub.ForeColor=$C.TextMuted; $lblSub.Location=New-Object System.Drawing.Point(0,75); $lblSub.Size=New-Object System.Drawing.Size(440,20); $lblSub.TextAlign="MiddleCenter"; $loginForm.Controls.Add($lblSub)
+$lblLogo = New-Object System.Windows.Forms.Label; $lblLogo.Text="Nova Tweaks"; $lblLogo.Font=New-Object System.Drawing.Font("Segoe UI",36,[System.Drawing.FontStyle]::Bold); $lblLogo.ForeColor=$C.Red; $lblLogo.Location=New-Object System.Drawing.Point(0,25); $lblLogo.Size=New-Object System.Drawing.Size(440,50); $lblLogo.TextAlign="MiddleCenter"; $loginForm.Controls.Add($lblLogo)
+$lblSub = New-Object System.Windows.Forms.Label; $lblSub.Text="NOVA TWEAKS"; $lblSub.Font=New-Object System.Drawing.Font("Segoe UI",10); $lblSub.ForeColor=$C.TextMuted; $lblSub.Location=New-Object System.Drawing.Point(0,75); $lblSub.Size=New-Object System.Drawing.Size(440,20); $lblSub.TextAlign="MiddleCenter"; $loginForm.Controls.Add($lblSub)
 
 $tabLogin = New-Object System.Windows.Forms.Button; $tabLogin.Text="Sign In"; $tabLogin.Size=New-Object System.Drawing.Size(200,36); $tabLogin.Location=New-Object System.Drawing.Point(20,115); $tabLogin.FlatStyle="Flat"; $tabLogin.BackColor=$C.Red; $tabLogin.ForeColor=[System.Drawing.Color]::White; $tabLogin.Font=$FontBody; $loginForm.Controls.Add($tabLogin)
 $tabReg = New-Object System.Windows.Forms.Button; $tabReg.Text="Create Account"; $tabReg.Size=New-Object System.Drawing.Size(200,36); $tabReg.Location=New-Object System.Drawing.Point(220,115); $tabReg.FlatStyle="Flat"; $tabReg.BackColor=$C.Card; $tabReg.ForeColor=$C.TextDim; $tabReg.Font=$FontBody; $loginForm.Controls.Add($tabReg)
@@ -1103,7 +1103,7 @@ $txtRegPass = New-Object System.Windows.Forms.TextBox; $txtRegPass.Location=New-
 $btnReg = New-Object System.Windows.Forms.Button; $btnReg.Text="CREATE ACCOUNT"; $btnReg.Size=New-Object System.Drawing.Size(400,42); $btnReg.Location=New-Object System.Drawing.Point(0,180); $btnReg.BackColor=$C.Red; $btnReg.ForeColor=[System.Drawing.Color]::White; $btnReg.FlatStyle="Flat"; $btnReg.Font=$FontHead; $pnlReg.Controls.Add($btnReg)
 $lblRegErr = New-Object System.Windows.Forms.Label; $lblRegErr.Text=""; $lblRegErr.ForeColor=$C.Danger; $lblRegErr.Location=New-Object System.Drawing.Point(0,228); $lblRegErr.Size=New-Object System.Drawing.Size(400,20); $lblRegErr.TextAlign="MiddleCenter"; $pnlReg.Controls.Add($lblRegErr)
 
-$lblFooter = New-Object System.Windows.Forms.Label; $lblFooter.Text="Auto-login enabled · Session saved locally · Everyone gets Pro · Credits: FL3SH & XRT"; $lblFooter.ForeColor=$C.TextMuted; $lblFooter.Location=New-Object System.Drawing.Point(0,455); $lblFooter.Size=New-Object System.Drawing.Size(440,20); $lblFooter.TextAlign="MiddleCenter"; $loginForm.Controls.Add($lblFooter)
+$lblFooter = New-Object System.Windows.Forms.Label; $lblFooter.Text="Auto-login enabled · Session saved locally · Everyone gets Pro · Credits: Nova Tweaks & XRT"; $lblFooter.ForeColor=$C.TextMuted; $lblFooter.Location=New-Object System.Drawing.Point(0,455); $lblFooter.Size=New-Object System.Drawing.Size(440,20); $lblFooter.TextAlign="MiddleCenter"; $loginForm.Controls.Add($lblFooter)
 
 $tabLogin.Add_Click({ $pnlLogin.Visible=$true; $pnlReg.Visible=$false; $tabLogin.BackColor=$C.Red; $tabLogin.ForeColor=[System.Drawing.Color]::White; $tabReg.BackColor=$C.Card; $tabReg.ForeColor=$C.TextDim })
 $tabReg.Add_Click({ $pnlLogin.Visible=$false; $pnlReg.Visible=$true; $tabReg.BackColor=$C.Red; $tabReg.ForeColor=[System.Drawing.Color]::White; $tabLogin.BackColor=$C.Card; $tabLogin.ForeColor=$C.TextDim })
@@ -1122,7 +1122,7 @@ $btnReg.Add_Click({
 # ---------- Main Form ----------
 function Show-MainForm {
     $form = New-Object System.Windows.Forms.Form
-    $form.Text = "FL3SH Optimizer Ultimate"
+    $form.Text = "Nova Tweaks"
     $form.Size = New-Object System.Drawing.Size(1180,760)
     $form.StartPosition = "CenterScreen"
     $form.BackColor = $C.Bg
@@ -1133,8 +1133,8 @@ function Show-MainForm {
 
     # Sidebar
     $sidebar = New-Object System.Windows.Forms.Panel; $sidebar.Size=New-Object System.Drawing.Size(230,760); $sidebar.Location=New-Object System.Drawing.Point(0,0); $sidebar.BackColor=$C.Sidebar; $form.Controls.Add($sidebar)
-    $lblBrand = New-Object System.Windows.Forms.Label; $lblBrand.Text="FL3SH"; $lblBrand.Font=New-Object System.Drawing.Font("Segoe UI",26,[System.Drawing.FontStyle]::Bold); $lblBrand.ForeColor=$C.Red; $lblBrand.Location=New-Object System.Drawing.Point(16,16); $lblBrand.AutoSize=$true; $sidebar.Controls.Add($lblBrand)
-    $lblBrandSub = New-Object System.Windows.Forms.Label; $lblBrandSub.Text="OPTIMIZER ULTIMATE"; $lblBrandSub.Font=New-Object System.Drawing.Font("Segoe UI",8.5); $lblBrandSub.ForeColor=$C.TextMuted; $lblBrandSub.Location=New-Object System.Drawing.Point(18,50); $lblBrandSub.AutoSize=$true; $sidebar.Controls.Add($lblBrandSub)
+    $lblBrand = New-Object System.Windows.Forms.Label; $lblBrand.Text="Nova Tweaks"; $lblBrand.Font=New-Object System.Drawing.Font("Segoe UI",26,[System.Drawing.FontStyle]::Bold); $lblBrand.ForeColor=$C.Red; $lblBrand.Location=New-Object System.Drawing.Point(16,16); $lblBrand.AutoSize=$true; $sidebar.Controls.Add($lblBrand)
+    $lblBrandSub = New-Object System.Windows.Forms.Label; $lblBrandSub.Text="NOVA TWEAKS"; $lblBrandSub.Font=New-Object System.Drawing.Font("Segoe UI",8.5); $lblBrandSub.ForeColor=$C.TextMuted; $lblBrandSub.Location=New-Object System.Drawing.Point(18,50); $lblBrandSub.AutoSize=$true; $sidebar.Controls.Add($lblBrandSub)
     $lblPlan = New-Object System.Windows.Forms.Label; $lblPlan.Text="  PRO  "; $lblPlan.Font=New-Object System.Drawing.Font("Segoe UI",9,[System.Drawing.FontStyle]::Bold); $lblPlan.ForeColor=[System.Drawing.Color]::White; $lblPlan.BackColor=$C.Red; $lblPlan.Location=New-Object System.Drawing.Point(16,76); $lblPlan.AutoSize=$true; $lblPlan.Padding=New-Object System.Windows.Forms.Padding(10,3,10,3); $sidebar.Controls.Add($lblPlan)
 
     $navItems = @(@{Text="Home";Key="home";Y=120;Icon="◆"},@{Text="All Tweaks";Key="tweaks";Y=162;Icon="⚙"},@{Text="Crosshair";Key="crosshair";Y=204;Icon="🎯"},@{Text="Game Booster";Key="booster";Y=246;Icon="⚡"},@{Text="Potato Graphics";Key="potato";Y=288;Icon="🥔"},@{Text="Benchmark";Key="bench";Y=330;Icon="📊"},@{Text="Restore";Key="restore";Y=372;Icon="↺"},@{Text="Log";Key="log";Y=414;Icon="☰"},@{Text="Settings";Key="settings";Y=456;Icon="✦"},@{Text="Potato Graphics";Key="potato";Y=246;Icon="🥔"},@{Text="Benchmark";Key="bench";Y=288;Icon="📊"},@{Text="Restore";Key="restore";Y=330;Icon="↺"},@{Text="Log";Key="log";Y=372;Icon="☰"},@{Text="Settings";Key="settings";Y=414;Icon="✦"})
@@ -1151,7 +1151,7 @@ function Show-MainForm {
     $btnLogout = New-Object System.Windows.Forms.Button; $btnLogout.Text="Sign Out"; $btnLogout.Size=New-Object System.Drawing.Size(198,30); $btnLogout.Location=New-Object System.Drawing.Point(16,660); $btnLogout.FlatStyle="Flat"; $btnLogout.FlatAppearance.BorderSize=1; $btnLogout.FlatAppearance.BorderColor=$C.Border; $btnLogout.BackColor=$C.Sidebar; $btnLogout.ForeColor=$C.TextDim; $btnLogout.Font=$FontSmall; $sidebar.Controls.Add($btnLogout)
     $btnLogout.Add_Click({ Logout; $form.Close(); $loginForm.Show() })
 
-    $lblCredits = New-Object System.Windows.Forms.Label; $lblCredits.Text="Credits: FL3SH & XRT"; $lblCredits.Font=New-Object System.Drawing.Font("Segoe UI",7.5); $lblCredits.ForeColor=$C.TextMuted; $lblCredits.Location=New-Object System.Drawing.Point(16,700); $lblCredits.AutoSize=$true; $sidebar.Controls.Add($lblCredits)
+    $lblCredits = New-Object System.Windows.Forms.Label; $lblCredits.Text="Credits: Nova Tweaks & XRT"; $lblCredits.Font=New-Object System.Drawing.Font("Segoe UI",7.5); $lblCredits.ForeColor=$C.TextMuted; $lblCredits.Location=New-Object System.Drawing.Point(16,700); $lblCredits.AutoSize=$true; $sidebar.Controls.Add($lblCredits)
 
     # Content area
     $content = New-Object System.Windows.Forms.Panel; $content.Size=New-Object System.Drawing.Size(930,720); $content.Location=New-Object System.Drawing.Point(240,20); $content.BackColor=$C.Bg; $form.Controls.Add($content)
@@ -1171,11 +1171,11 @@ function Show-MainForm {
     $btnApplyAll=New-Object System.Windows.Forms.Button; $btnApplyAll.Text="Apply everything"; $btnApplyAll.Size=New-Object System.Drawing.Size(160,36); $btnApplyAll.Location=New-Object System.Drawing.Point(15,72); $btnApplyAll.BackColor=$C.Red; $btnApplyAll.ForeColor=[System.Drawing.Color]::White; $btnApplyAll.FlatStyle="Flat"; $btnApplyAll.Font=$FontBody; $cardSug.Controls.Add($btnApplyAll)
     $cardQS=New-Object System.Windows.Forms.Panel; $cardQS.Size=New-Object System.Drawing.Size(440,120); $cardQS.Location=New-Object System.Drawing.Point(460,180); $cardQS.BackColor=$C.Card; $pgHome.Controls.Add($cardQS)
     $lq=New-Object System.Windows.Forms.Label; $lq.Text="Quickstart"; $lq.Font=$FontHead; $lq.ForeColor=$C.Text; $lq.Location=New-Object System.Drawing.Point(15,10); $lq.AutoSize=$true; $cardQS.Controls.Add($lq)
-    $qsItems=@("Create a restore point","Enable Input Delay Reducer","Enable Ping Stabilizer","Turn on Game Booster"); $qy=42
+    $qsItems=@("Create a restore point","Enable Input Response Accelerator","Enable Network Spike Smoother","Turn on Game Booster"); $qy=42
     foreach ($q in $qsItems) { $ql=New-Object System.Windows.Forms.Label; $ql.Text="▸  "+$q; $ql.Font=$FontSmall; $ql.ForeColor=$C.TextDim; $ql.Location=New-Object System.Drawing.Point(15,$qy); $ql.AutoSize=$true; $cardQS.Controls.Add($ql); $qy+=18 }
     $cardWN=New-Object System.Windows.Forms.Panel; $cardWN.Size=New-Object System.Drawing.Size(900,80); $cardWN.Location=New-Object System.Drawing.Point(0,320); $cardWN.BackColor=$C.Card; $pgHome.Controls.Add($cardWN)
     $lw=New-Object System.Windows.Forms.Label; $lw.Text="What's new in Ultimate"; $lw.Font=$FontHead; $lw.ForeColor=$C.Text; $lw.Location=New-Object System.Drawing.Point(15,10); $lw.AutoSize=$true; $cardWN.Controls.Add($lw)
-    $lw2=New-Object System.Windows.Forms.Label; $lw2.Text="Input Delay Reducer (10 changes), Ping Stabilizer (Nagle off, adapter offloads), Mouse Precision (1:1), Keyboard Latency Fix, USB Polling (1000Hz), BCDEDIT micro-stutter fix, and 30+ system tweaks. All reversible."; $lw2.Font=$FontSmall; $lw2.ForeColor=$C.TextDim; $lw2.Location=New-Object System.Drawing.Point(15,38); $lw2.Size=New-Object System.Drawing.Size(870,36); $cardWN.Controls.Add($lw2)
+    $lw2=New-Object System.Windows.Forms.Label; $lw2.Text="Input Response Accelerator (10 changes), Network Spike Smoother (Nagle off, adapter offloads), Mouse Precision (1:1), Keyboard Latency Fix, USB Polling (1000Hz), BCDEDIT micro-stutter fix, and 30+ system tweaks. All reversible."; $lw2.Font=$FontSmall; $lw2.ForeColor=$C.TextDim; $lw2.Location=New-Object System.Drawing.Point(15,38); $lw2.Size=New-Object System.Drawing.Size(870,36); $cardWN.Controls.Add($lw2)
 
     # ---------- ALL TWEAKS ----------
     $pgTweaks=New-Page "tweaks"
@@ -1238,7 +1238,7 @@ function Show-MainForm {
         $applied=($Script:TweakStates2.Values | Where-Object { $_ }).Count
         $lblPts.Text="$applied tweaks applied"
         $lblHomeSub.Text="$applied of $($Script:Tweaks.Count) tweaks on · Pro plan"
-        [System.Windows.Forms.MessageBox]::Show("Removed all tweaks in $cat category.","FL3SH") | Out-Null
+        [System.Windows.Forms.MessageBox]::Show("Removed all tweaks in $cat category.","Nova Tweaks") | Out-Null
     })
 
     # ---------- CROSSHAIR ----------
@@ -1325,7 +1325,7 @@ function Show-MainForm {
     $lblBW=New-Object System.Windows.Forms.Label; $lblBW.Text="Whitelist (one app per line)"; $lblBW.Font=$FontHead; $lblBW.ForeColor=$C.Text; $lblBW.Location=New-Object System.Drawing.Point(15,10); $lblBW.AutoSize=$true; $cardB.Controls.Add($lblBW)
     $txtWL=New-Object System.Windows.Forms.TextBox; $txtWL.Location=New-Object System.Drawing.Point(15,42); $txtWL.Size=New-Object System.Drawing.Size(470,120); $txtWL.Multiline=$true; $txtWL.BackColor=$C.Bg; $txtWL.ForeColor=$C.Text; $txtWL.Font=$FontMono; $txtWL.Text="discord.exe`nchrome.exe`nspotify.exe"; $cardB.Controls.Add($txtWL)
     $btnBoost=New-Object System.Windows.Forms.Button; $btnBoost.Text="⚡ BOOST"; $btnBoost.Size=New-Object System.Drawing.Size(200,40); $btnBoost.Location=New-Object System.Drawing.Point(15,172); $btnBoost.BackColor=$C.Red; $btnBoost.ForeColor=[System.Drawing.Color]::White; $btnBoost.FlatStyle="Flat"; $btnBoost.Font=$FontHead; $cardB.Controls.Add($btnBoost)
-    $btnBoost.Add_Click({ $wl=$txtWL.Text -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ }; Invoke-GameBooster; [System.Windows.Forms.MessageBox]::Show("Game Booster complete.","FL3SH") | Out-Null })
+    $btnBoost.Add_Click({ $wl=$txtWL.Text -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ }; Invoke-GameBooster; [System.Windows.Forms.MessageBox]::Show("Game Booster complete.","Nova Tweaks") | Out-Null })
     $cardBS=New-Object System.Windows.Forms.Panel; $cardBS.Size=New-Object System.Drawing.Size(380,230); $cardBS.Location=New-Object System.Drawing.Point(520,80); $cardBS.BackColor=$C.Card; $pgBooster.Controls.Add($cardBS)
     $lblBS=New-Object System.Windows.Forms.Label; $lblBS.Text="Status"; $lblBS.Font=$FontHead; $lblBS.ForeColor=$C.Text; $lblBS.Location=New-Object System.Drawing.Point(15,10); $lblBS.AutoSize=$true; $cardBS.Controls.Add($lblBS)
     $lblBS2=New-Object System.Windows.Forms.Label; $lblBS2.Text="Booster is OFF`n`nPro: unlimited whitelist`nDrivers/services never touched"; $lblBS2.Font=$FontBody; $lblBS2.ForeColor=$C.TextDim; $lblBS2.Location=New-Object System.Drawing.Point(15,42); $lblBS2.AutoSize=$true; $cardBS.Controls.Add($lblBS2)
@@ -1353,16 +1353,16 @@ function Show-MainForm {
     $lblBenchRes=New-Object System.Windows.Forms.Label; $lblBenchRes.Text="Micro-bench: not run"; $lblBenchRes.Font=$FontBody; $lblBenchRes.ForeColor=$C.TextDim; $lblBenchRes.Location=New-Object System.Drawing.Point(0,235); $lblBenchRes.AutoSize=$true; $pgBench.Controls.Add($lblBenchRes)
     $btnBench.Add_Click({ $lblBenchRes.Text="Running..."; [System.Windows.Forms.Application]::DoEvents(); $sw=[Diagnostics.Stopwatch]::StartNew(); $c=0; for($i=2;$i -lt 200000;$i++){$isP=$true;for($j=2;$j*$j -le $i;$j++){if($i%$j -eq 0){$isP=$false;break}};if($isP){$c++}}; $sw.Stop(); $lblBenchRes.Text="Micro-bench: $([math]::Round($sw.Elapsed.TotalMilliseconds,1)) ms (lower = better)" })
     $btnSaveBench=New-Object System.Windows.Forms.Button; $btnSaveBench.Text="Save to CSV"; $btnSaveBench.Size=New-Object System.Drawing.Size(140,32); $btnSaveBench.Location=New-Object System.Drawing.Point(0,265); $btnSaveBench.BackColor=$C.Card; $btnSaveBench.ForeColor=$C.Text; $btnSaveBench.FlatStyle="Flat"; $pgBench.Controls.Add($btnSaveBench)
-    $btnSaveBench.Add_Click({ $row="$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss'),$($txtFB.Text),$($txtFA.Text)"; if(-not (Test-Path $Script:BenchPath)){"Date,FPS_Before,FPS_After"|Set-Content $Script:BenchPath}; Add-Content $Script:BenchPath $row; Write-Log "Benchmark saved." "OK"; [System.Windows.Forms.MessageBox]::Show("Saved to $Script:BenchPath","FL3SH") | Out-Null })
+    $btnSaveBench.Add_Click({ $row="$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss'),$($txtFB.Text),$($txtFA.Text)"; if(-not (Test-Path $Script:BenchPath)){"Date,FPS_Before,FPS_After"|Set-Content $Script:BenchPath}; Add-Content $Script:BenchPath $row; Write-Log "Benchmark saved." "OK"; [System.Windows.Forms.MessageBox]::Show("Saved to $Script:BenchPath","Nova Tweaks") | Out-Null })
 
     # ---------- RESTORE ----------
     $pgRestore=New-Page "restore"
     $lblR=New-Object System.Windows.Forms.Label; $lblR.Text="Restore & Revert"; $lblR.Font=$FontTitle; $lblR.ForeColor=$C.Text; $lblR.Location=New-Object System.Drawing.Point(0,0); $lblR.AutoSize=$true; $pgRestore.Controls.Add($lblR)
     $btnRP=New-Object System.Windows.Forms.Button; $btnRP.Text="Create System Restore Point"; $btnRP.Size=New-Object System.Drawing.Size(240,40); $btnRP.Location=New-Object System.Drawing.Point(0,60); $btnRP.BackColor=$C.Card; $btnRP.ForeColor=$C.Text; $btnRP.FlatStyle="Flat"; $pgRestore.Controls.Add($btnRP)
-    $btnRP.Add_Click({ New-RestorePoint | Out-Null; [System.Windows.Forms.MessageBox]::Show("Restore point created (if supported).","FL3SH") | Out-Null })
+    $btnRP.Add_Click({ New-RestorePoint | Out-Null; [System.Windows.Forms.MessageBox]::Show("Restore point created (if supported).","Nova Tweaks") | Out-Null })
     $btnRevertAll=New-Object System.Windows.Forms.Button; $btnRevertAll.Text="REVERT ALL CHANGES"; $btnRevertAll.Size=New-Object System.Drawing.Size(240,40); $btnRevertAll.Location=New-Object System.Drawing.Point(0,110); $btnRevertAll.BackColor=$C.Danger; $btnRevertAll.ForeColor=[System.Drawing.Color]::White; $btnRevertAll.FlatStyle="Flat"; $btnRevertAll.Font=$FontHead; $pgRestore.Controls.Add($btnRevertAll)
-    $btnRevertAll.Add_Click({ $r=[System.Windows.Forms.MessageBox]::Show("Revert ALL changes? Reboot recommended after.","Confirm",[System.Windows.Forms.MessageBoxButtons]::YesNo); if($r -eq "Yes"){ Revert-All; [System.Windows.Forms.MessageBox]::Show("Reverted. Reboot recommended.","FL3SH") | Out-Null } })
-    $lblRInfo=New-Object System.Windows.Forms.Label; $lblRInfo.Text="Every tweak is reversible. Restore points + backups created automatically before changes. Credits: FL3SH & XRT"; $lblRInfo.Font=$FontSmall; $lblRInfo.ForeColor=$C.TextDim; $lblRInfo.Location=New-Object System.Drawing.Point(0,165); $lblRInfo.AutoSize=$true; $pgRestore.Controls.Add($lblRInfo)
+    $btnRevertAll.Add_Click({ $r=[System.Windows.Forms.MessageBox]::Show("Revert ALL changes? Reboot recommended after.","Confirm",[System.Windows.Forms.MessageBoxButtons]::YesNo); if($r -eq "Yes"){ Revert-All; [System.Windows.Forms.MessageBox]::Show("Reverted. Reboot recommended.","Nova Tweaks") | Out-Null } })
+    $lblRInfo=New-Object System.Windows.Forms.Label; $lblRInfo.Text="Every tweak is reversible. Restore points + backups created automatically before changes. Credits: Nova Tweaks & XRT"; $lblRInfo.Font=$FontSmall; $lblRInfo.ForeColor=$C.TextDim; $lblRInfo.Location=New-Object System.Drawing.Point(0,165); $lblRInfo.AutoSize=$true; $pgRestore.Controls.Add($lblRInfo)
 
     # ---------- LOG ----------
     $pgLog=New-Page "log"
@@ -1376,7 +1376,7 @@ function Show-MainForm {
     $lblSK=New-Object System.Windows.Forms.Label; $lblSK.Text="License key:"; $lblSK.Font=$FontBody; $lblSK.ForeColor=$C.Text; $lblSK.Location=New-Object System.Drawing.Point(0,110); $lblSK.AutoSize=$true; $pgSettings.Controls.Add($lblSK)
     $txtKey=New-Object System.Windows.Forms.TextBox; $txtKey.Location=New-Object System.Drawing.Point(0,135); $txtKey.Width=400; $txtKey.BackColor=$C.Card; $txtKey.ForeColor=$C.Text; $txtKey.Text=$Script:Config.LicenseKey; $pgSettings.Controls.Add($txtKey)
     $btnActivate=New-Object System.Windows.Forms.Button; $btnActivate.Text="Activate"; $btnActivate.Size=New-Object System.Drawing.Size(120,32); $btnActivate.Location=New-Object System.Drawing.Point(410,133); $btnActivate.BackColor=$C.Red; $btnActivate.ForeColor=[System.Drawing.Color]::White; $btnActivate.FlatStyle="Flat"; $pgSettings.Controls.Add($btnActivate)
-    $btnActivate.Add_Click({ $Script:Config.Email=$txtEmail.Text; $Script:Config.LicenseKey=$txtKey.Text; Save-Config; if ($Script:CurrentUser) { $accs=@(Load-Accounts); $a=$accs | Where-Object { $_.Email -eq $Script:CurrentUser.Email } | Select-Object -First 1; if($a){ $a.LicenseKey=$txtKey.Text; $a.Plan="Pro"; Save-Accounts $accs } }; [System.Windows.Forms.MessageBox]::Show("Plan: Pro (all features unlocked).","FL3SH") | Out-Null })
+    $btnActivate.Add_Click({ $Script:Config.Email=$txtEmail.Text; $Script:Config.LicenseKey=$txtKey.Text; Save-Config; if ($Script:CurrentUser) { $accs=@(Load-Accounts); $a=$accs | Where-Object { $_.Email -eq $Script:CurrentUser.Email } | Select-Object -First 1; if($a){ $a.LicenseKey=$txtKey.Text; $a.Plan="Pro"; Save-Accounts $accs } }; [System.Windows.Forms.MessageBox]::Show("Plan: Pro (all features unlocked).","Nova Tweaks") | Out-Null })
     # Appearance controls
     $lblAcc=New-Object System.Windows.Forms.Label; $lblAcc.Text="Accent color:"; $lblAcc.Font=$FontBody; $lblAcc.ForeColor=$C.Text; $lblAcc.Location=New-Object System.Drawing.Point(0,210); $lblAcc.AutoSize=$true; $pgSettings.Controls.Add($lblAcc)
     $txtAcc=New-Object System.Windows.Forms.TextBox; $txtAcc.Location=New-Object System.Drawing.Point(110,208); $txtAcc.Width=100; $txtAcc.Text="#ff1a2e"; $txtAcc.BackColor=$C.Card; $txtAcc.ForeColor=$C.Text; $pgSettings.Controls.Add($txtAcc)
@@ -1389,10 +1389,10 @@ function Show-MainForm {
         try { $C.Red = [System.Drawing.ColorTranslator]::FromHtml($txtAcc.Text) } catch {}
         $sidebar.BackColor = [System.Drawing.ColorTranslator]::FromHtml($txtSide.Text)
         if (-not $chkSnow.Checked) { $overlay.Visible = $false } else { $overlay.Visible = $true }
-        [System.Windows.Forms.MessageBox]::Show("Appearance applied.","FL3SH") | Out-Null
+        [System.Windows.Forms.MessageBox]::Show("Appearance applied.","Nova Tweaks") | Out-Null
     })
 
-    $lblPlanInfo=New-Object System.Windows.Forms.Label; $lblPlanInfo.Text="Everyone gets Pro plan. All tweaks + Input Delay Reducer + Ping Stabilizer + Potato Graphics + full Game Booster unlocked. Credits: FL3SH & XRT."; $lblPlanInfo.Font=$FontSmall; $lblPlanInfo.ForeColor=$C.TextDim; $lblPlanInfo.Location=New-Object System.Drawing.Point(0,180); $lblPlanInfo.AutoSize=$true; $pgSettings.Controls.Add($lblPlanInfo)
+    $lblPlanInfo=New-Object System.Windows.Forms.Label; $lblPlanInfo.Text="Everyone gets Pro plan. All tweaks + Input Response Accelerator + Network Spike Smoother + Potato Graphics + full Game Booster unlocked. Credits: Nova Tweaks & XRT."; $lblPlanInfo.Font=$FontSmall; $lblPlanInfo.ForeColor=$C.TextDim; $lblPlanInfo.Location=New-Object System.Drawing.Point(0,180); $lblPlanInfo.AutoSize=$true; $pgSettings.Controls.Add($lblPlanInfo)
 
     # Navigation
     function Show-Page($key) { foreach ($p in $pages.Values) { $p.Visible=$false }; $pages[$key].Visible=$true; foreach ($btn in $navBtns.Values) { if ($btn.Tag -eq $key) { $btn.BackColor=$C.Red; $btn.ForeColor=[System.Drawing.Color]::White } else { $btn.BackColor=$C.Sidebar; $btn.ForeColor=$C.TextDim } } }
@@ -1406,7 +1406,7 @@ function Show-MainForm {
         $lblPts.Text="$applied tweaks applied"
         $lblHomeSub.Text="$applied of $($Script:Tweaks.Count) tweaks on · Pro plan"
         Render-TweakList $Script:CurrentCat
-        [System.Windows.Forms.MessageBox]::Show("Applied $applied tweaks.","FL3SH") | Out-Null
+        [System.Windows.Forms.MessageBox]::Show("Applied $applied tweaks.","Nova Tweaks") | Out-Null
     })
 
     # Remove All button
@@ -1415,7 +1415,7 @@ function Show-MainForm {
         foreach ($t in $Script:Tweaks) { $Script:TweakStates2[$t.Id]=$false; $Script:Config.TweakStates.$($t.Id)=$false }
         Save-Config; Render-TweakList $Script:CurrentCat
         $lblPts.Text="0 tweaks applied"; $lblHomeSub.Text="0 of $($Script:Tweaks.Count) tweaks on · Pro plan"
-        [System.Windows.Forms.MessageBox]::Show("All tweaks removed.","FL3SH") | Out-Null
+        [System.Windows.Forms.MessageBox]::Show("All tweaks removed.","Nova Tweaks") | Out-Null
     })
 
     # Progress + counts
@@ -1425,7 +1425,7 @@ function Show-MainForm {
     Show-Page "home"
     $h=(Get-Date).Hour
     $lblHomeTitle.Text=if ($h -lt 12) { "Good morning" } elseif ($h -lt 18) { "Good afternoon" } else { "Good evening" }
-    $Script:LogBox.AppendText("FL3SH Optimizer Ultimate started. Plan: Pro`r`nCredits: FL3SH & XRT`r`n")
+    $Script:LogBox.AppendText("Nova Tweaks started. Plan: Pro`r`nCredits: Nova Tweaks & XRT`r`n")
     Write-Log "Application started. Plan: Pro. User: $($Script:CurrentUser.Email)" "OK"
 
     # ---------- Rotating outline + snowfall (visual polish) ----------

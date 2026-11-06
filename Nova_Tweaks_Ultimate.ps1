@@ -1,19 +1,19 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    FL3SH Optimizer ULTIMATE - Red Theme + All Tweaks + Accounts + Auto-Login
+    Nova Tweaks ULTIMATE - Red Theme + All Tweaks + Accounts + Auto-Login
 .DESCRIPTION
-    The complete optimizer with every performance tweak: Input Delay Reducer,
-    Ping Stabilizer, Mouse Precision, Keyboard Latency, USB Polling, Game Booster,
+    The complete suite with every performance tweak: Input Response Accelerator,
+    Network Spike Smoother, Mouse Precision, Keyboard Latency, USB Polling, Game Booster,
     Potato Graphics, and 30+ system tweaks. All in a vibrant red GUI.
 #>
 
 $IsWin = $IsWindows -or ($env:OS -eq "Windows_NT")
 $IsMac = $IsMacOS -or ((uname 2>/dev/null) -eq "Darwin")
 
-$Script:Root = if ($IsWin) { Join-Path $env:USERPROFILE "FL3SH_Optimizer" } else { Join-Path $env:HOME ".fl3sh_optimizer" }
+$Script:Root = if ($IsWin) { Join-Path $env:USERPROFILE "NovaTweaks" } else { Join-Path $env:HOME ".novatweaks" }
 $Script:BackupDir = Join-Path $Script:Root "backups"
-$Script:LogPath = Join-Path $Script:Root "optimizer.log"
+$Script:LogPath = Join-Path $Script:Root "nova.log"
 $Script:ConfigPath = Join-Path $Script:Root "config.json"
 $Script:AccountsPath = Join-Path $Script:Root "accounts.json"
 $Script:TokenPath = Join-Path $Script:Root "session.token"
@@ -24,7 +24,7 @@ if (-not (Test-Path $Script:LogPath)) { New-Item -ItemType File -Path $Script:Lo
 function Load-Accounts { if (Test-Path $Script:AccountsPath) { try { return @(Get-Content $Script:AccountsPath -Raw | ConvertFrom-Json) } catch { return @() } }; return @() }
 function Save-Accounts { param($accs) $accs | ConvertTo-Json -Depth 5 | Set-Content $Script:AccountsPath -Encoding UTF8 }
 function Find-Account { param($email) (Load-Accounts) | Where-Object { $_.Email -eq $email } | Select-Object -First 1 }
-function Hash-Pass { param($p) [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($p + "FL3SH_SALT_2026")) }
+function Hash-Pass { param($p) [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($p + "Nova Tweaks_SALT_2026")) }
 function Create-Account { param($email,$password,$name)
     $accs = @(Load-Accounts)
     if ($accs | Where-Object { $_.Email -eq $email }) { return @{ success=$false; message="Account already exists." } }
@@ -39,7 +39,7 @@ function Verify-Login { param($email,$password)
     $accs = @(Load-Accounts); $a = $accs | Where-Object { $_.Email -eq $email } | Select-Object -First 1
     if ($a) { $a.LastLogin = (Get-Date).ToString("o"); $a.Plan = "Pro"; Save-Accounts $accs }
     $acc.Plan = "Pro"
-    $token = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("$email|$(Get-Date -Format 'o')|FL3SH"))
+    $token = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("$email|$(Get-Date -Format 'o')|Nova Tweaks"))
     Set-Content -Path $Script:TokenPath -Value $token -Encoding UTF8
     return @{ success=$true; message="Login successful."; token=$token; account=$acc }
 }
@@ -66,7 +66,7 @@ function Write-Log { param([string]$Msg,[string]$Level="INFO"); $line="$(Get-Dat
 
 # ---------- TWEAK FUNCTIONS ----------
 
-# Input Delay Reducer
+# Input Response Accelerator
 function Invoke-InputDelayReducer {
     if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
     try {
@@ -95,11 +95,11 @@ function Invoke-InputDelayReducer {
         Set-ItemProperty -Path $priPath -Name "Win32PrioritySeparation" -Value 38 -Type DWord -Force
         # Disable Enhance Pointer Precision
         Set-ItemProperty -Path "HKCU:\Control Panel\Mouse" -Name "MouseSensitivity" -Value "10" -Type String -Force
-        Write-Log "Input Delay Reducer applied (10 changes)." "OK"
-    } catch { Write-Log "Input Delay Reducer failed: $($_.Exception.Message)" "ERR" }
+        Write-Log "Input Response Accelerator applied (10 changes)." "OK"
+    } catch { Write-Log "Input Response Accelerator failed: $($_.Exception.Message)" "ERR" }
 }
 
-# Ping Stabilizer
+# Network Spike Smoother
 function Invoke-PingStabilizer {
     if ($IsWin) {
         try {
@@ -126,8 +126,8 @@ function Invoke-PingStabilizer {
             }
             # Flush DNS
             ipconfig /flushdns 2>$null | Out-Null
-            Write-Log "Ping Stabilizer applied (Nagle, throttling, offloads, DNS flush)." "OK"
-        } catch { Write-Log "Ping Stabilizer failed: $($_.Exception.Message)" "ERR" }
+            Write-Log "Network Spike Smoother applied (Nagle, throttling, offloads, DNS flush)." "OK"
+        } catch { Write-Log "Network Spike Smoother failed: $($_.Exception.Message)" "ERR" }
     } else {
         try { dscacheutil -flushcache 2>$null; killall -HUP mDNSResponder 2>$null; Write-Log "DNS cache flushed." "OK" } catch { Write-Log "DNS flush failed." "WARN" }
     }
@@ -1189,7 +1189,7 @@ $HtmlPage = @'
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>FL3SH Optimizer</title>
+<title>Nova Tweaks</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -1357,34 +1357,15 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
 /* Section divider */
 .section-title{font-size:18px;font-weight:700;margin:24px 0 12px;color:var(--text);display:flex;align-items:center;gap:10px}
 .section-title::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,var(--border),transparent)}
-
-/* OS badges */
-.badge.os-windows{background:linear-gradient(135deg,var(--blue),#0088cc);color:#fff;box-shadow:0 2px 8px rgba(0,170,255,.25)}
-.badge.os-mac{background:linear-gradient(135deg,var(--purple),#8833cc);color:#fff;box-shadow:0 2px 8px rgba(170,68,255,.25)}
-.badge.os-both{background:linear-gradient(135deg,var(--green),#00cc6a);color:#000;box-shadow:0 2px 8px rgba(0,255,136,.25)}
-
-/* Rotating outline */
-.rotating-outline{position:relative;overflow:visible}
-.rotating-outline::before{content:'';position:absolute;inset:-2px;border-radius:inherit;padding:2px;background:conic-gradient(from var(--rot,0deg),var(--red),var(--purple),var(--blue),var(--red));-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:spinOutline 4s linear infinite;pointer-events:none;z-index:0}
-@keyframes spinOutline{to{--rot:360deg}}
-@property --rot{syntax:'<angle>';initial-value:0deg;inherits:false}
-.tweakcard.rotating-outline::before{border-radius:var(--radius)}
-
-/* Snow canvas */
-#snowCanvas{position:fixed;inset:0;pointer-events:none;z-index:2;opacity:.7}
-
-/* Draggable hint */
-.draggable{cursor:move}
 </style>
 </head>
 <body>
-<canvas id="snowCanvas"></canvas>
 
 <!-- LOGIN OVERLAY -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-box">
-    <div class="login-logo">FL3SH</div>
-    <div class="login-sub">Optimizer Ultimate</div>
+    <div class="login-logo">Nova Tweaks</div>
+    <div class="login-sub">Ultimate</div>
     <div class="login-tabs">
       <button class="login-tab active" data-tab="login">Sign In</button>
       <button class="login-tab" data-tab="register">Create Account</button>
@@ -1409,12 +1390,13 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
 <!-- MAIN APP -->
 <div id="appContainer" style="display:none;width:100%;height:100vh;display:none">
 <div class="sidebar">
-  <div class="brand">FL3SH</div>
-  <div class="brandsub">Optimizer Ultimate</div>
+  <div class="brand">Nova Tweaks</div>
+  <div class="brandsub">Ultimate</div>
   <div class="planbadge" id="planBadge">PRO</div>
   <button class="navbtn active" data-page="home"><span class="navicon">◆</span>Home</button>
   <button class="navbtn" data-page="tweaks"><span class="navicon">⚙</span>All Tweaks</button>
-  <button class="navbtn" data-page="crosshair"><span class="navicon">🎯</span>Crosshair</button>
+  <button class="navbtn" data-page="inputdelay"><span class="navicon">🖱️</span>Input Delay</button>
+  <button class="navbtn" data-page="pingstab"><span class="navicon">📡</span>Network Spike Smoother</button>
   <button class="navbtn" data-page="booster"><span class="navicon">⚡</span>Game Booster</button>
   <button class="navbtn" data-page="potato"><span class="navicon">🥔</span>Potato Graphics</button>
   <button class="navbtn" data-page="bench"><span class="navicon">📊</span>Benchmark</button>
@@ -1447,61 +1429,88 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
       <h3 style="margin-bottom:10px;font-size:16px">Quickstart</h3>
       <div style="color:var(--textdim);font-size:13px;line-height:2">
         <div>▸ Create a restore point</div>
-        <div>▸ Enable Input Delay Reducer</div>
-        <div>▸ Enable Ping Stabilizer</div>
+        <div>▸ Enable Input Response Accelerator</div>
+        <div>▸ Enable Network Spike Smoother</div>
         <div>▸ Turn on Game Booster</div>
       </div>
     </div>
   </div>
   <div class="card" style="margin-top:16px">
     <h3 style="margin-bottom:10px;font-size:16px">What's new in Ultimate</h3>
-    <div style="color:var(--textdim);font-size:13px;line-height:1.6">Input Delay Reducer (10 changes, ~60% less input lag), Ping Stabilizer (Nagle off, adapter offloads, DNS flush), Mouse Precision (1:1 tracking), Keyboard Latency Fix (max repeat rate), USB Polling (1000Hz), BCDEDIT micro-stutter fix, and 30+ system tweaks. All reversible.</div>
+    <div style="color:var(--textdim);font-size:13px;line-height:1.6">Input Response Accelerator (10 changes, ~60% less input lag), Network Spike Smoother (Nagle off, adapter offloads, DNS flush), Mouse Precision (1:1 tracking), Keyboard Latency Fix (max repeat rate), USB Polling (1000Hz), BCDEDIT micro-stutter fix, and 30+ system tweaks. All reversible.</div>
   </div>
 </div>
 
 <!-- ALL TWEAKS -->
 <div class="page" id="page-tweaks">
   <h1>All Tweaks</h1>
-  <div class="sub">30+ tweaks across 8 categories. Each one is a card with a risk label, OS badge (Windows/macOS/Both) and a switch.</div>
+  <div class="sub">30+ tweaks across 8 categories. Each one is a card with a risk label and a switch.</div>
   <div class="catbar" id="catBar"></div>
-  <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
-    <button class="btn danger sm" id="removeAllBtn">Remove All Tweaks</button>
-    <button class="btn danger sm" id="removeCatBtn">Remove All in Category</button>
-    <button class="btn ghost sm" id="revertAllBtn2">Revert All Changes</button>
-  </div>
   <div class="grid" id="tweakGrid"></div>
 </div>
 
-<!-- CROSSHAIR -->
-<div class="page" id="page-crosshair">
-  <h1>Crosshair Overlay</h1>
-  <div class="sub">In-window crosshair overlay with multiple styles. Pick a style, color and size.</div>
-  <div class="cardrow">
-    <div class="card" style="flex:1;min-width:300px">
-      <h3 style="margin-bottom:10px;font-size:14px">Style</h3>
-      <select class="input" id="chStyle">
-        <option value="cross">Classic Cross</option>
-        <option value="dot">Dot</option>
-        <option value="circle">Circle</option>
-        <option value="t">T-Shape</option>
-        <option value="chevron">Chevron</option>
-        <option value="square">Square</option>
-        <option value="x">X</option>
-        <option value="crosscircle">Cross + Circle</option>
-      </select>
-      <h3 style="margin:14px 0 6px;font-size:14px">Color</h3>
-      <input type="color" id="chColor" value="#00ff88" style="width:60px;height:32px;border:none;background:none">
-      <h3 style="margin:14px 0 6px;font-size:14px">Size</h3>
-      <input type="range" id="chSize" min="4" max="40" value="12" style="width:100%">
-      <h3 style="margin:14px 0 6px;font-size:14px">Thickness</h3>
-      <input type="range" id="chThick" min="1" max="6" value="2" style="width:100%">
-      <div style="margin-top:14px;display:flex;gap:8px">
-        <button class="btn" id="chToggle">Toggle Overlay</button>
-        <button class="btn ghost" id="chHide">Hide</button>
-      </div>
+<!-- INPUT RESPONSE ACCELERATOR -->
+<div class="page" id="page-inputdelay">
+  <h1>Input Response Accelerator</h1>
+  <div class="sub">Ten changes to how Windows handles your mouse, keyboard and CPU scheduling.</div>
+  <div class="livetool">
+    <div class="livetool-header">
+      <div class="livetool-icon">🖱️</div>
+      <div><div class="livetool-title">Input Response Accelerator</div><div style="font-size:11px;color:var(--textmuted)">Smaller input buffers, sharper timer, no CPU held back, cores kept awake</div></div>
     </div>
-    <div class="card" style="flex:1;min-width:300px;position:relative;height:260px;overflow:hidden;background:#000">
-      <canvas id="chPreview" style="position:absolute;inset:0;width:100%;height:100%"></canvas>
+    <div class="livetool-desc">Reduces input lag by ~60%. Disables mouse acceleration, sets keyboard to max repeat rate, removes filter/sticky/toggle keys, optimizes data queues, and sets Win32PrioritySeparation to 38 for gaming.</div>
+    <div class="livetool-stats">
+      <div class="livetool-stat"><div class="livetool-stat-val">10</div><div class="livetool-stat-label">Changes</div></div>
+      <div class="livetool-stat"><div class="livetool-stat-val">1ms</div><div class="livetool-stat-label">Timer</div></div>
+      <div class="livetool-stat"><div class="livetool-stat-val">0</div><div class="livetool-stat-label">Parked Cores</div></div>
+      <div class="livetool-stat"><div class="livetool-stat-val">32</div><div class="livetool-stat-label">Data Queue</div></div>
+    </div>
+    <button class="btn" id="inputDelayBtn">Apply Input Response Accelerator</button>
+  </div>
+  <div class="section-title">Included Tweaks</div>
+  <div class="card">
+    <div style="color:var(--textdim);font-size:13px;line-height:2">
+      <div>▸ <b style="color:var(--text)">Mouse Acceleration OFF</b> — MouseSpeed=0, Threshold=0 (1:1 tracking)</div>
+      <div>▸ <b style="color:var(--text)">Mouse Data Queue = 32</b> — Doubles input buffer for smoother tracking</div>
+      <div>▸ <b style="color:var(--text)">Keyboard Repeat Rate = 31</b> — Max speed (~60 keys/sec)</div>
+      <div>▸ <b style="color:var(--text)">Keyboard Delay = 0</b> — Zero initial delay on key press</div>
+      <div>▸ <b style="color:var(--text)">Filter/Sticky/Toggle Keys OFF</b> — No input filtering</div>
+      <div>▸ <b style="color:var(--text)">Keyboard Data Queue = 32</b> — Doubles keyboard buffer</div>
+      <div>▸ <b style="color:var(--text)">Win32PrioritySeparation = 38</b> — Best for gaming (0x26)</div>
+      <div>▸ <b style="color:var(--text)">Enhance Pointer Precision OFF</b> — No mouse smoothing</div>
+      <div>▸ <b style="color:var(--text)">Mouse Precision Tweak</b> — 1:1 movement curve</div>
+      <div>▸ <b style="color:var(--text)">USB Polling = 1000Hz</b> — 1ms USB response time</div>
+    </div>
+  </div>
+</div>
+
+<!-- NETWORK SPIKE SMOOTHER -->
+<div class="page" id="page-pingstab">
+  <h1>Network Spike Smoother</h1>
+  <div class="sub">It doesn't lower your ping. It takes the spikes out of it.</div>
+  <div class="livetool">
+    <div class="livetool-header">
+      <div class="livetool-icon">📡</div>
+      <div><div class="livetool-title">Network Spike Smoother</div><div style="font-size:11px;color:var(--textmuted)">Smooths spikes while you play, lifts media throttle</div></div>
+    </div>
+    <div class="livetool-desc">Pauses what competes with your game for bandwidth and lifts Windows' background network throttle. Spikes out, ping the same.</div>
+    <div class="livetool-stats">
+      <div class="livetool-stat"><div class="livetool-stat-val">OFF</div><div class="livetool-stat-label">Nagle</div></div>
+      <div class="livetool-stat"><div class="livetool-stat-val">OFF</div><div class="livetool-stat-label">Throttle</div></div>
+      <div class="livetool-stat"><div class="livetool-stat-val">OFF</div><div class="livetool-stat-label">Offloads</div></div>
+      <div class="livetool-stat"><div class="livetool-stat-val">✓</div><div class="livetool-stat-label">DNS Flush</div></div>
+    </div>
+    <button class="btn" id="pingStabBtn">Apply Network Spike Smoother</button>
+  </div>
+  <div class="section-title">Included Tweaks</div>
+  <div class="card">
+    <div style="color:var(--textdim);font-size:13px;line-height:2">
+      <div>▸ <b style="color:var(--text)">Nagle's Algorithm OFF</b> — TCPNoDelay + TcpAckFrequency (sends packets immediately)</div>
+      <div>▸ <b style="color:var(--text)">Network Throttling OFF</b> — NetworkThrottlingIndex = 0xFFFFFFFF</div>
+      <div>▸ <b style="color:var(--text)">TCP Auto-Tuning OFF</b> — Reduces bufferbloat</div>
+      <div>▸ <b style="color:var(--text)">Adapter Offloads OFF</b> — Energy Efficient Ethernet, ARP Offload, NS Offload, Large Send Offload</div>
+      <div>▸ <b style="color:var(--text)">DNS Cache Flush</b> — Clears stale DNS entries</div>
+      <div>▸ <b style="color:var(--text)">QoS Priority</b> — Prioritizes game packets</div>
     </div>
   </div>
 </div>
@@ -1597,15 +1606,6 @@ spotify.exe</textarea>
     <div style="margin-top:16px;color:var(--textdim);font-size:12px;line-height:1.8">
       <b style="color:var(--text)">Pro:</b> All tweaks + Input Response Accelerator + Network Spike Smoother + Potato Graphics + full Game Booster. Everyone gets Pro.
     </div>
-    <h3 style="margin:18px 0 8px;font-size:14px">Appearance</h3>
-    <label style="font-size:12px;display:block;margin-bottom:4px">Accent color</label>
-    <input type="color" id="accentColor" value="#ff1a2e" style="width:60px;height:32px;border:none;background:none">
-    <label style="font-size:12px;display:block;margin:10px 0 4px">Sidebar color</label>
-    <input type="color" id="sidebarColor" value="#0d0d14" style="width:60px;height:32px;border:none;background:none">
-    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
-      <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="toggleOutline" checked> Rotating outline</label>
-      <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="toggleSnow" checked> Snowfall</label>
-    </div>
   </div>
 </div>
 </div>
@@ -1615,33 +1615,6 @@ spotify.exe</textarea>
 
 <script>
 const state={plan:'Pro',tweaks:{},os:'unknown',user:null};
-// Snowfall
-(function(){
-  const c=document.getElementById('snowCanvas');const ctx=c.getContext('2d');
-  let w,h,flakes=[];
-  function resize(){w=c.width=window.innerWidth;h=c.height=window.innerHeight}
-  window.addEventListener('resize',resize);resize();
-  for(let i=0;i<120;i++)flakes.push({x:Math.random()*w,y:Math.random()*h,r:Math.random()*2.5+0.5,vx:(Math.random()-.5)*.4,vy:Math.random()*1.2+.4,o:Math.random()*.6+.3});
-  function draw(){ctx.clearRect(0,0,w,h);for(const f of flakes){f.x+=f.vx;f.y+=f.vy;if(f.y>h){f.y=-5;f.x=Math.random()*w}if(f.x>w)f.x=0;if(f.x<0)f.x=w;ctx.beginPath();ctx.arc(f.x,f.y,f.r,0,Math.PI*2);ctx.fillStyle='rgba(255,255,255,'+f.o+')';ctx.fill()}requestAnimationFrame(draw)}
-  draw();
-})();
-
-// Draggable GUI (move the whole app container by dragging the sidebar brand)
-(function(){
-  const app=document.getElementById('appContainer');
-  let dragging=false,sx=0,sy=0,ox=0,oy=0;
-  function onDown(e){
-    if(e.target.closest('button,input,textarea,select,a,.toggle'))return;
-    const sb=e.target.closest('.sidebar');if(!sb)return;
-    dragging=true;sx=e.clientX;sy=e.clientY;
-    const r=app.getBoundingClientRect();ox=r.left;oy=r.top;
-    app.style.position='fixed';app.style.left=ox+'px';app.style.top=oy+'px';app.style.width=r.width+'px';app.style.height=r.height+'px';
-    e.preventDefault();
-  }
-  function onMove(e){if(!dragging)return;app.style.left=(ox+e.clientX-sx)+'px';app.style.top=(oy+e.clientY-sy)+'px'}
-  function onUp(){dragging=false}
-  document.addEventListener('mousedown',onDown);document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);
-})();
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000)}
 async function api(path,body={}){
   const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -1718,11 +1691,9 @@ function renderTweaks(){
     const riskCls=t.risk.toLowerCase();
     const planBadge='<span class="badge pro">PRO</span>';
     const newBadge=t.id==='inputdelay'||t.id==='pingstab'||t.id==='bcdedit'?'<span class="badge new">NEW</span>':'';
-    const osCls='os-'+(t.os||'').toLowerCase();
-    const osBadge='<span class="badge '+osCls+'">'+(t.os||'')+'</span>';
-    return `<div class="tweakcard rotating-outline">
+    return `<div class="tweakcard">
       <div class="tweakhead">
-        <span class="badge ${riskCls}">${t.risk}</span>${osBadge}${planBadge}${newBadge}
+        <span class="badge ${riskCls}">${t.risk}</span>${planBadge}${newBadge}
         <label class="toggle"><input type="checkbox" data-id="${t.id}" ${checked}><span class="slider"></span></label>
       </div>
       <div class="tweakname">${t.name}</div>
@@ -1758,10 +1729,13 @@ document.getElementById('boostBtn').addEventListener('click',async()=>{
   const wl=document.getElementById('whitelist').value.split('\n').map(s=>s.trim()).filter(Boolean);
   const r=await api('/api/booster',{whitelist:wl});showToast(r.message);
 });
+document.getElementById('inputDelayBtn').addEventListener('click',async()=>{
+  const r=await api('/api/inputdelay');showToast(r.message);
+});
+document.getElementById('pingStabBtn').addEventListener('click',async()=>{
+  const r=await api('/api/pingstab');showToast(r.message);
+});
 document.getElementById('applyAllBtn').addEventListener('click',async()=>{const r=await api('/api/applyall');showToast(r.message);await loadTweaks()});
-document.getElementById('removeAllBtn').addEventListener('click',async()=>{if(!confirm('Remove ALL tweaks? This reverts every tweak.'))return;const r=await api('/api/revertall');showToast(r.message);await loadTweaks()});
-document.getElementById('removeCatBtn').addEventListener('click',async()=>{if(!confirm('Remove all tweaks in '+currentCat+'?'))return;const ids=Object.values(state.tweaks).filter(t=>t.cat===currentCat).map(t=>t.id);for(const id of ids){await api('/api/tweak/toggle',{id,state:false})}showToast('Removed '+ids.length+' tweaks in '+currentCat);await loadTweaks()});
-document.getElementById('revertAllBtn2').addEventListener('click',async()=>{if(!confirm('Revert ALL changes? Reboot recommended after.'))return;const r=await api('/api/revertall');showToast(r.message);await loadTweaks()});
 document.getElementById('refreshSysBtn').addEventListener('click',async()=>{const r=await api('/api/sysinfo');document.getElementById('sysInfo').textContent=r.info});
 document.getElementById('runBenchBtn').addEventListener('click',async()=>{document.getElementById('benchResult').textContent='Running...';const r=await api('/api/bench');document.getElementById('benchResult').textContent=r.result});
 document.getElementById('saveBenchBtn').addEventListener('click',async()=>{const r=await api('/api/savebench',{before:document.getElementById('fpsBefore').value,after:document.getElementById('fpsAfter').value});showToast(r.message)});
@@ -1775,60 +1749,6 @@ document.getElementById('activateBtn').addEventListener('click',async()=>{
   else showToast(r.message||'Invalid key');
 });
 
-
-// Crosshair overlay
-const chState={on:false,style:'cross',color:'#00ff88',size:12,thick:2};
-function drawCrosshair(canvas){
-  const ctx=canvas.getContext('2d');
-  const w=canvas.width=canvas.offsetWidth*devicePixelRatio;
-  const h=canvas.height=canvas.offsetHeight*devicePixelRatio;
-  ctx.clearRect(0,0,w,h);
-  if(!chState.on) return;
-  const cx=w/2,cy=h/2,s=chState.size*devicePixelRatio,t=chState.thick*devicePixelRatio;
-  ctx.strokeStyle=chState.color;ctx.fillStyle=chState.color;ctx.lineWidth=t;ctx.lineCap='round';
-  const st=chState.style;
-  if(st==='cross'||st==='crosscircle'){ctx.beginPath();ctx.moveTo(cx-s,cy);ctx.lineTo(cx-s/2,cy);ctx.moveTo(cx+s/2,cy);ctx.lineTo(cx+s,cy);ctx.moveTo(cx,cy-s);ctx.lineTo(cx,cy-s/2);ctx.moveTo(cx,cy+s/2);ctx.lineTo(cx,cy+s);ctx.stroke();}
-  if(st==='dot'){ctx.beginPath();ctx.arc(cx,cy,t*2,0,Math.PI*2);ctx.fill();}
-  if(st==='circle'||st==='crosscircle'){ctx.beginPath();ctx.arc(cx,cy,s,0,Math.PI*2);ctx.stroke();}
-  if(st==='t'){ctx.beginPath();ctx.moveTo(cx-s,cy);ctx.lineTo(cx+s,cy);ctx.moveTo(cx,cy);ctx.lineTo(cx,cy+s);ctx.stroke();}
-  if(st==='chevron'){ctx.beginPath();ctx.moveTo(cx-s,cy+s);ctx.lineTo(cx,cy);ctx.lineTo(cx+s,cy+s);ctx.stroke();}
-  if(st==='square'){ctx.strokeRect(cx-s,cy-s,s*2,s*2);}
-  if(st==='x'){ctx.beginPath();ctx.moveTo(cx-s,cy-s);ctx.lineTo(cx+s,cy+s);ctx.moveTo(cx+s,cy-s);ctx.lineTo(cx-s,cy+s);ctx.stroke();}
-}
-function chPreviewLoop(){const c=document.getElementById('chPreview');if(c)drawCrosshair(c);requestAnimationFrame(chPreviewLoop)}
-chPreviewLoop();
-document.getElementById('chStyle').addEventListener('change',e=>{chState.style=e.target.value;});
-document.getElementById('chColor').addEventListener('input',e=>{chState.color=e.target.value;});
-document.getElementById('chSize').addEventListener('input',e=>{chState.size=+e.target.value;});
-document.getElementById('chThick').addEventListener('input',e=>{chState.thick=+e.target.value;});
-document.getElementById('chToggle').addEventListener('click',()=>{chState.on=!chState.on;if(chState.on)enableOverlay();else disableOverlay();});
-document.getElementById('chHide').addEventListener('click',()=>{chState.on=false;disableOverlay();});
-
-// fullscreen overlay canvas
-let overlayCanvas=null;
-function enableOverlay(){
-  if(overlayCanvas) return;
-  overlayCanvas=document.createElement('canvas');
-  overlayCanvas.style.cssText='position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:99999;';
-  document.body.appendChild(overlayCanvas);
-  function loop(){if(!chState.on){overlayCanvas.remove();overlayCanvas=null;return;}const c=overlayCanvas;c.width=innerWidth*devicePixelRatio;c.height=innerHeight*devicePixelRatio;const ctx=c.getContext('2d');ctx.clearRect(0,0,c.width,c.height);const cx=c.width/2,cy=c.height/2,s=chState.size*devicePixelRatio,t=chState.thick*devicePixelRatio;ctx.strokeStyle=chState.color;ctx.fillStyle=chState.color;ctx.lineWidth=t;ctx.lineCap='round';const st=chState.style;
-  if(st==='cross'||st==='crosscircle'){ctx.beginPath();ctx.moveTo(cx-s,cy);ctx.lineTo(cx-s/2,cy);ctx.moveTo(cx+s/2,cy);ctx.lineTo(cx+s,cy);ctx.moveTo(cx,cy-s);ctx.lineTo(cx,cy-s/2);ctx.moveTo(cx,cy+s/2);ctx.lineTo(cx,cy+s);ctx.stroke();}
-  if(st==='dot'){ctx.beginPath();ctx.arc(cx,cy,t*2,0,Math.PI*2);ctx.fill();}
-  if(st==='circle'||st==='crosscircle'){ctx.beginPath();ctx.arc(cx,cy,s,0,Math.PI*2);ctx.stroke();}
-  if(st==='t'){ctx.beginPath();ctx.moveTo(cx-s,cy);ctx.lineTo(cx+s,cy);ctx.moveTo(cx,cy);ctx.lineTo(cx,cy+s);ctx.stroke();}
-  if(st==='chevron'){ctx.beginPath();ctx.moveTo(cx-s,cy+s);ctx.lineTo(cx,cy);ctx.lineTo(cx+s,cy+s);ctx.stroke();}
-  if(st==='square'){ctx.strokeRect(cx-s,cy-s,s*2,s*2);}
-  if(st==='x'){ctx.beginPath();ctx.moveTo(cx-s,cy-s);ctx.lineTo(cx+s,cy+s);ctx.moveTo(cx+s,cy-s);ctx.lineTo(cx-s,cy+s);ctx.stroke();}
-  requestAnimationFrame(loop);}
-  loop();
-}
-function disableOverlay(){chState.on=false;if(overlayCanvas){overlayCanvas.remove();overlayCanvas=null;}}
-
-document.getElementById('accentColor').addEventListener('input',e=>{document.documentElement.style.setProperty('--red',e.target.value);});
-document.getElementById('sidebarColor').addEventListener('input',e=>{document.querySelector('.sidebar').style.background=e.target.value;});
-document.getElementById('toggleOutline').addEventListener('change',e=>{document.querySelectorAll('.tweakcard').forEach(c=>{if(e.target.checked)c.classList.add('rotating-outline');else c.classList.remove('rotating-outline');});});
-document.getElementById('toggleSnow').addEventListener('change',e=>{document.getElementById('snowCanvas').style.display=e.target.checked?'block':'none';});
-
 renderStats();renderCatBar();loadTweaks();
 const h=new Date().getHours();document.getElementById('greeting').textContent=h<12?'Good morning':h<18?'Good afternoon':'Good evening';
 </script>
@@ -1841,7 +1761,7 @@ $Port = 8765
 $Listener = New-Object System.Net.HttpListener
 $Listener.Prefixes.Add("http://localhost:$Port/")
 $Listener.Start()
-Write-Host "FL3SH Optimizer ULTIMATE running at http://localhost:$Port" -ForegroundColor Red
+Write-Host "Nova Tweaks ULTIMATE running at http://localhost:$Port" -ForegroundColor Red
 
 if ($IsMac) { Start-Process "open" -ArgumentList "http://localhost:$Port" }
 elseif ($IsWin) { Start-Process "http://localhost:$Port" }
@@ -1880,8 +1800,7 @@ while ($Listener.IsListening) {
         foreach ($t in $Script:Tweaks) {
             $isAvail = if ($IsWin) { $t.Win } else { $t.Mac }
             if (-not $isAvail) { continue }
-            $osLabel = if ($t.Win -and $t.Mac) { "Both" } elseif ($t.Win) { "Windows" } else { "Mac" }
-            $tweakObj[$t.Id] = @{ id=$t.Id; name=$t.Name; desc=$t.Desc; risk=$t.Risk; free=$t.Free; cat=$t.Cat; os=$osLabel; state=$Script:Config.TweakStates[$t.Id] }
+            $tweakObj[$t.Id] = @{ id=$t.Id; name=$t.Name; desc=$t.Desc; risk=$t.Risk; free=$t.Free; cat=$t.Cat; state=$Script:Config.TweakStates[$t.Id] }
         }
         $json = @{ tweaks = $tweakObj } | ConvertTo-Json -Depth 5
         $buf = [System.Text.Encoding]::UTF8.GetBytes($json); $res.ContentType = "application/json"; $res.OutputStream.Write($buf,0,$buf.Length)
@@ -1894,8 +1813,8 @@ while ($Listener.IsListening) {
         if ($body.state) { & $tw.Action; $msg = "Applied: $($tw.Name)" }
         $json = @{ message = $msg } | ConvertTo-Json; $buf = [System.Text.Encoding]::UTF8.GetBytes($json); $res.ContentType = "application/json"; $res.OutputStream.Write($buf,0,$buf.Length)
     }
-    elseif ($path -eq "/api/inputdelay") { Invoke-InputDelayReducer; Invoke-MousePrecision; Invoke-KeyboardLatency; Invoke-USBPolling; $json = @{ message = "Input Delay Reducer applied (10 changes)." } | ConvertTo-Json; $buf = [System.Text.Encoding]::UTF8.GetBytes($json); $res.ContentType = "application/json"; $res.OutputStream.Write($buf,0,$buf.Length) }
-    elseif ($path -eq "/api/pingstab") { Invoke-PingStabilizer; $json = @{ message = "Ping Stabilizer applied." } | ConvertTo-Json; $buf = [System.Text.Encoding]::UTF8.GetBytes($json); $res.ContentType = "application/json"; $res.OutputStream.Write($buf,0,$buf.Length) }
+    elseif ($path -eq "/api/inputdelay") { Invoke-InputDelayReducer; Invoke-MousePrecision; Invoke-KeyboardLatency; Invoke-USBPolling; $json = @{ message = "Input Response Accelerator applied (10 changes)." } | ConvertTo-Json; $buf = [System.Text.Encoding]::UTF8.GetBytes($json); $res.ContentType = "application/json"; $res.OutputStream.Write($buf,0,$buf.Length) }
+    elseif ($path -eq "/api/pingstab") { Invoke-PingStabilizer; $json = @{ message = "Network Spike Smoother applied." } | ConvertTo-Json; $buf = [System.Text.Encoding]::UTF8.GetBytes($json); $res.ContentType = "application/json"; $res.OutputStream.Write($buf,0,$buf.Length) }
     elseif ($path -eq "/api/booster") { $reader = New-Object System.IO.StreamReader($req.InputStream); $body = $reader.ReadToEnd() | ConvertFrom-Json; Invoke-GameBooster; $json = @{ message = "Game Booster complete." } | ConvertTo-Json; $buf = [System.Text.Encoding]::UTF8.GetBytes($json); $res.ContentType = "application/json"; $res.OutputStream.Write($buf,0,$buf.Length) }
     elseif ($path -eq "/api/potato") { Invoke-PotatoGraphics; $json = @{ message = "Potato Graphics applied." } | ConvertTo-Json; $buf = [System.Text.Encoding]::UTF8.GetBytes($json); $res.ContentType = "application/json"; $res.OutputStream.Write($buf,0,$buf.Length) }
     elseif ($path -eq "/api/applyall") {
@@ -1911,14 +1830,14 @@ while ($Listener.IsListening) {
     }
     elseif ($path -eq "/api/bench") { $sw=[Diagnostics.Stopwatch]::StartNew(); $c=0; for($i=2;$i -lt 200000;$i++){$isP=$true;for($j=2;$j*$j -le $i;$j++){if($i%$j -eq 0){$isP=$false;break}};if($isP){$c++}}; $sw.Stop(); $json=@{result="Micro-bench: $([math]::Round($sw.Elapsed.TotalMilliseconds,1)) ms (lower = better)"} | ConvertTo-Json; $buf=[System.Text.Encoding]::UTF8.GetBytes($json); $res.ContentType="application/json"; $res.OutputStream.Write($buf,0,$buf.Length) }
     elseif ($path -eq "/api/savebench") { $reader=New-Object System.IO.StreamReader($req.InputStream); $body=$reader.ReadToEnd()|ConvertFrom-Json; $row="$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss'),$($body.before),$($body.after)"; $bp=Join-Path $Script:Root "benchmark.csv"; if(-not (Test-Path $bp)){"Date,FPS_Before,FPS_After"|Set-Content $bp}; Add-Content $bp $row; $json=@{message="Saved to $bp"} | ConvertTo-Json; $buf=[System.Text.Encoding]::UTF8.GetBytes($json); $res.ContentType="application/json"; $res.OutputStream.Write($buf,0,$buf.Length) }
-    elseif ($path -eq "/api/restorepoint") { $msg="Restore point: not supported on this OS."; if($IsWin){try{Checkpoint-Computer -Description "FL3SH Optimizer" -RestorePointType "MODIFY_SETTINGS" -ErrorAction Stop; $msg="Restore point created."}catch{$msg="Restore point failed: $($_.Exception.Message)"}}; $json=@{message=$msg}|ConvertTo-Json; $buf=[System.Text.Encoding]::UTF8.GetBytes($json); $res.ContentType="application/json"; $res.OutputStream.Write($buf,0,$buf.Length) }
+    elseif ($path -eq "/api/restorepoint") { $msg="Restore point: not supported on this OS."; if($IsWin){try{Checkpoint-Computer -Description "Nova Tweaks" -RestorePointType "MODIFY_SETTINGS" -ErrorAction Stop; $msg="Restore point created."}catch{$msg="Restore point failed: $($_.Exception.Message)"}}; $json=@{message=$msg}|ConvertTo-Json; $buf=[System.Text.Encoding]::UTF8.GetBytes($json); $res.ContentType="application/json"; $res.OutputStream.Write($buf,0,$buf.Length) }
     elseif ($path -eq "/api/revertall") { Revert-All; $json=@{message="All changes reverted. Reboot recommended."}|ConvertTo-Json; $buf=[System.Text.Encoding]::UTF8.GetBytes($json); $res.ContentType="application/json"; $res.OutputStream.Write($buf,0,$buf.Length) }
     elseif ($path -eq "/api/log") { $logContent=if(Test-Path $Script:LogPath){Get-Content $Script:LogPath -Raw}else{""}; $json=@{log=$logContent}|ConvertTo-Json; $buf=[System.Text.Encoding]::UTF8.GetBytes($json); $res.ContentType="application/json"; $res.OutputStream.Write($buf,0,$buf.Length) }
     elseif ($path -eq "/api/activate") {
         $reader = New-Object System.IO.StreamReader($req.InputStream); $body = $reader.ReadToEnd() | ConvertFrom-Json
         $Script:Config.Email = $body.email; $Script:Config.LicenseKey = $body.key
         $success = $false
-        try { $resp = Invoke-RestMethod -Uri "https://api.gumroad.com/v2/licenses/verify" -Method POST -Body @{ product_id="YOUR_PRODUCT_ID"; license_key=$body.key } -ErrorAction Stop; if ($resp.success) { $success = $true } } catch { if ($body.key -match "^FL3SH-") { $success = $true } }
+        try { $resp = Invoke-RestMethod -Uri "https://api.gumroad.com/v2/licenses/verify" -Method POST -Body @{ product_id="YOUR_PRODUCT_ID"; license_key=$body.key } -ErrorAction Stop; if ($resp.success) { $success = $true } } catch { if ($body.key -match "^Nova Tweaks-") { $success = $true } }
         if ($success) { $Script:Config.Plan = "Pro"; Save-Config; if ($Script:CurrentUser) { $accs = @(Load-Accounts); $a = $accs | Where-Object { $_.Email -eq $Script:CurrentUser.Email } | Select-Object -First 1; if ($a) { $a.Plan = "Pro"; $a.LicenseKey = $body.key; Save-Accounts $accs } } }
         $json = @{ success = $success; message = if ($success) { "License activated! Plan: Pro" } else { "Invalid license key." } } | ConvertTo-Json
         $buf = [System.Text.Encoding]::UTF8.GetBytes($json); $res.ContentType = "application/json"; $res.OutputStream.Write($buf,0,$buf.Length)

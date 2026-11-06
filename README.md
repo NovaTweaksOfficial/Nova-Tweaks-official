@@ -1,6 +1,6 @@
-# FL3SH Optimizer
+# Nova Tweaks
 
-Safe, EAC-friendly Fortnite performance optimizer for Windows.
+Safe, EAC-friendly Fortnite performance suite for Windows.
 
 ## Build
 
@@ -9,5 +9,5 @@ The `.exe` is built automatically via GitHub Actions. Push to `main` and downloa
 Or build locally on Windows:
 ```powershell
 Install-Module PS2EXE -Scope CurrentUser -Force
-Invoke-PS2EXE -InputFile "FL3SH_Optimizer_WinForms_Red.ps1" -OutputFile "FL3SH_Optimizer.exe" -RequireAdmin -NoConsole -x64
+Invoke-PS2EXE -InputFile "NovaTweaks_WinForms_Red.ps1" -OutputFile "NovaTweaks.exe" -RequireAdmin -NoConsole -x64
 ```

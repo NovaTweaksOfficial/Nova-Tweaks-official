@@ -1,7 +1,7 @@
 #!/bin/bash
-# FL3SH Optimizer macOS Launcher
+# Nova Tweaks macOS Launcher
 DIR="$(cd "$(dirname "$0")/.." && pwd)/Resources"
-SCRIPT="$DIR/FL3SH_Optimizer_WebGUI.ps1"
+SCRIPT="$DIR/Nova_Tweaks_WebGUI.ps1"
 
 # Find pwsh
 if command -v pwsh >/dev/null 2>&1; then
@@ -19,7 +19,7 @@ fi
 lsof -ti:8765 2>/dev/null | xargs kill -9 2>/dev/null
 
 # Start the server in background
-"$PWSH" -NoProfile -File "$SCRIPT" >/tmp/fl3sh_optimizer.log 2>&1 &
+"$PWSH" -NoProfile -File "$SCRIPT" >/tmp/novatweaks.log 2>&1 &
 SERVER_PID=$!
 
 # Wait for server to be ready

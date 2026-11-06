@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
   <key>CFBundleName</key>
-  <string>FL3SH Optimizer</string>
+  <string>Nova Tweaks</string>
   <key>CFBundleDisplayName</key>
-  <string>FL3SH Optimizer</string>
+  <string>Nova Tweaks</string>
   <key>CFBundleIdentifier</key>
-  <string>com.fl3sh.optimizer</string>
+  <string>com.novatweaks.app</string>
   <key>CFBundleVersion</key>
   <string>1.0.0</string>
   <key>CFBundleShortVersionString</key>

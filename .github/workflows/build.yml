@@ -1,4 +1,4 @@
-name: Build FL3SH Optimizer EXE
+name: Build Nova Tweaks EXE
 
 on:
   push:
@@ -28,8 +28,8 @@ jobs:
       - name: Compile to EXE
         shell: pwsh
         run: |
-          $scriptPath = "FL3SH_Optimizer_WinForms_Ultimate.ps1"
-          $outputPath = "FL3SH_Optimizer.exe"
+          $scriptPath = "Nova_Tweaks_WinForms_Ultimate.ps1"
+          $outputPath = "NovaTweaks.exe"
           if (-not (Test-Path $scriptPath)) {
             Write-Error "Script not found: $scriptPath"
             exit 1
@@ -37,10 +37,10 @@ jobs:
           Invoke-PS2EXE `
             -InputFile $scriptPath `
             -OutputFile $outputPath `
-            -Title "FL3SH Optimizer Ultimate" `
-            -Description "Safe Fortnite performance optimizer - Credits: FL3SH & XRT" `
-            -Company "FL3SH" `
-            -Product "FL3SH Optimizer Ultimate" `
+            -Title "Nova Tweaks" `
+            -Description "Safe Fortnite performance suite - Credits: Nova Tweaks & XRT" `
+            -Company "Nova Tweaks" `
+            -Product "Nova Tweaks" `
             -Version "2.0.0.0" `
             -RequireAdmin `
             -NoConsole `
@@ -57,12 +57,12 @@ jobs:
       - name: Upload EXE artifact
         uses: actions/upload-artifact@v4
         with:
-          name: FL3SH_Optimizer_EXE
-          path: FL3SH_Optimizer.exe
+          name: NovaTweaks_EXE
+          path: NovaTweaks.exe
           retention-days: 30
 
       - name: Create Release (on tag)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: FL3SH_Optimizer.exe
+          files: NovaTweaks.exe
