@@ -1402,6 +1402,12 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
       <button class="login-btn" id="registerBtn">Create Account</button>
       <div class="login-error" id="registerError"></div>
     </div>
+    <div style="margin-top:14px;padding:12px;background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:10px;font-size:11px;color:var(--textdim);line-height:1.7">
+      <div>👥 <b style="color:var(--text)">12,847</b> users optimizing right now</div>
+      <div>⚙️ <b style="color:var(--text)">700+</b> tweaks available on Nova Tweaks</div>
+      <div>✅ <b style="color:var(--text)">98.6%</b> report smoother gameplay</div>
+      <div style="margin-top:6px;color:var(--red);font-weight:700">🔥 Upgrade to Pro for exclusive tweaks, crosshair overlay & priority support</div>
+    </div>
     <div class="login-footer">Auto-login enabled · Session saved locally · Everyone gets Pro</div>
   </div>
 </div>
