@@ -25,10 +25,22 @@ function Load-Accounts { if (Test-Path $Script:AccountsPath) { try { return @(Ge
 function Save-Accounts { param($accs) $accs | ConvertTo-Json -Depth 5 | Set-Content $Script:AccountsPath -Encoding UTF8 }
 function Find-Account { param($email) (Load-Accounts) | Where-Object { $_.Email -eq $email } | Select-Object -First 1 }
 function Hash-Pass { param($p) [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($p + "Nova Tweaks_SALT_2026")) }
+function Normalize-NovaAccount { param($acc)
+    if (-not $acc) { return $null }
+    if (-not $acc.Plan) { $acc.Plan = "Free" }
+    if ($acc.Plan -notin @("Free","Pro","Ultimate")) { $acc.Plan = "Free" }
+    if (-not $acc.PSObject.Properties.Name -contains "Balance") { $acc | Add-Member -NotePropertyName Balance -NotePropertyValue 0 -Force }
+    if (-not $acc.PSObject.Properties.Name -contains "PlanUntil") { $acc | Add-Member -NotePropertyName PlanUntil -NotePropertyValue $null -Force }
+    if (-not $acc.PSObject.Properties.Name -contains "Redeemed") { $acc | Add-Member -NotePropertyName Redeemed -NotePropertyValue @() -Force }
+    if ($acc.Plan -ne "Free" -and $acc.PlanUntil) {
+        try { if ([datetime]$acc.PlanUntil -lt (Get-Date)) { $acc.Plan = "Free"; $acc.PlanUntil = $null } } catch { $acc.Plan = "Free"; $acc.PlanUntil = $null }
+    }
+    return $acc
+}
 function Create-Account { param($email,$password,$name)
     $accs = @(Load-Accounts)
     if ($accs | Where-Object { $_.Email -eq $email }) { return @{ success=$false; message="Account already exists." } }
-    $acc = @{ Email=$email; PasswordHash=(Hash-Pass $password); Name=$name; Plan="Pro"; LicenseKey=""; Created=(Get-Date).ToString("o"); LastLogin=(Get-Date).ToString("o") }
+    $acc = @{ Email=$email; PasswordHash=(Hash-Pass $password); Name=$name; Plan="Free"; LicenseKey=""; Balance=0; PlanUntil=$null; Redeemed=@(); Created=(Get-Date).ToString("o"); LastLogin=(Get-Date).ToString("o") }
     $accs += $acc; Save-Accounts $accs
     return @{ success=$true; message="Account created."; account=$acc }
 }
@@ -37,8 +49,8 @@ function Verify-Login { param($email,$password)
     if (-not $acc) { return @{ success=$false; message="No account found." } }
     if ((Hash-Pass $password) -ne $acc.PasswordHash) { return @{ success=$false; message="Wrong password." } }
     $accs = @(Load-Accounts); $a = $accs | Where-Object { $_.Email -eq $email } | Select-Object -First 1
-    if ($a) { $a.LastLogin = (Get-Date).ToString("o"); $a.Plan = "Pro"; Save-Accounts $accs }
-    $acc.Plan = "Pro"
+    if ($a) { $a.LastLogin = (Get-Date).ToString("o"); Save-Accounts $accs }
+    $acc = Normalize-NovaAccount $acc
     $token = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("$email|$(Get-Date -Format 'o')|Nova Tweaks"))
     Set-Content -Path $Script:TokenPath -Value $token -Encoding UTF8
     return @{ success=$true; message="Login successful."; token=$token; account=$acc }
@@ -50,13 +62,13 @@ function Auto-Login {
         $decoded = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($token))
         $email = ($decoded -split "\|")[0]
         $acc = Find-Account $email
-        if ($acc) { $acc.Plan = "Pro"; return $acc }
+        if ($acc) { return (Normalize-NovaAccount $acc) }
     } catch {}
     return $null
 }
 function Logout { if (Test-Path $Script:TokenPath) { Remove-Item $Script:TokenPath -Force } }
 
-$Script:Config = @{ Plan="Pro"; TweakStates=@{}; Email=""; LicenseKey=""; CurrentUser="" }
+$Script:Config = @{ Plan="Free"; PlanUntil=$null; Balance=0; TweakStates=@{}; Email=""; LicenseKey=""; CurrentUser="" }
 if (Test-Path $Script:ConfigPath) {
     try {
         $l = Get-Content $Script:ConfigPath -Raw | ConvertFrom-Json
@@ -71,8 +83,64 @@ if (Test-Path $Script:ConfigPath) {
         }
     } catch {}
 }
-$Script:Config.Plan = "Pro"
+if (-not $Script:Config.Plan -or $Script:Config.Plan -notin @("Free","Pro","Ultimate")) { $Script:Config.Plan = "Free" }
+if (-not $Script:Config.PSObject.Properties.Name -contains "Balance") { $Script:Config | Add-Member -NotePropertyName Balance -NotePropertyValue 0 -Force }
+if (-not $Script:Config.PSObject.Properties.Name -contains "PlanUntil") { $Script:Config | Add-Member -NotePropertyName PlanUntil -NotePropertyValue $null -Force }
 function Save-Config { $Script:Config | ConvertTo-Json -Depth 5 | Set-Content $Script:ConfigPath -Encoding UTF8 }
+
+# ---------- Tier helpers ----------
+$Script:GiftSecret = "NovaTweaks-Gift-S3cr3t-2026-ChangeMe"
+$Script:LicenseSecret = "NovaTweaks-License-S3cr3t-2026-ChangeMe"
+function Get-NovaPlanRank { param([string]$p) switch ($p) { "Ultimate" { 2 } "Pro" { 1 } default { 0 } } }
+function Get-NovaPlanPriceCents { param([string]$p) switch ($p) { "Pro" { 599 } "Ultimate" { 1299 } default { 0 } } }
+function Get-NovaPlanUntil { param($acc) if ($acc.PlanUntil) { try { return [datetime]$acc.PlanUntil } catch {} }; return $null }
+function Update-NovaPlanState {
+    if ($Script:CurrentUser) {
+        $acc = Normalize-NovaAccount $Script:CurrentUser
+        $Script:CurrentUser = $acc
+        $Script:Config.Plan = $acc.Plan
+        $Script:Config.PlanUntil = $acc.PlanUntil
+        $Script:Config.Balance = $acc.Balance
+    }
+}
+function Invoke-NovaHmac { param([string]$Secret,[string]$Data)
+    $h = [System.Security.Cryptography.HMACSHA256]::new([System.Text.Encoding]::UTF8.GetBytes($Secret))
+    $b = $h.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($Data))
+    return ([System.BitConverter]::ToString($b) -replace "-").ToLower().Substring(0,10)
+}
+function New-NovaGiftCode { param([int]$Cents)
+    $nonce = [System.Guid]::NewGuid().ToString("N").Substring(0,8).ToUpper()
+    $sig = Invoke-NovaHmac -Secret $Script:GiftSecret -Data "$Cents`:$nonce"
+    return "NOVA-GIFT-$Cents-$nonce-$sig"
+}
+function Test-NovaGiftCode { param([string]$Code)
+    if ($Code -notmatch "^NOVA-GIFT-(\d+)-([A-F0-9]{8})-([a-f0-9]{10})$") { return $null }
+    $cents = [int]$matches[1]
+    $nonce = $matches[2]
+    $sig = $matches[3]
+    if ($cents -lt 100 -or $cents -gt 100000) { return $null }
+    $expected = Invoke-NovaHmac -Secret $Script:GiftSecret -Data "$cents`:$nonce"
+    if ($sig -ne $expected) { return $null }
+    return $cents
+}
+function New-NovaLicenseKey { param([string]$Kind)
+    $days = [int]((Get-Date).ToUniversalTime() - [datetime]"2024-01-01").TotalDays
+    $nonce = [System.Guid]::NewGuid().ToString("N").Substring(0,8).ToUpper()
+    $sig = Invoke-NovaHmac -Secret $Script:LicenseSecret -Data "$Kind`:$days`:$nonce"
+    return "NOVA-$Kind-$days-$nonce-$sig"
+}
+function Test-NovaLicenseKey { param([string]$Key)
+    if ($Key -notmatch "^NOVA-(PRO|ULT)-(\d+)-([A-F0-9]{8})-([a-f0-9]{10})$") { return $null }
+    $kind = $matches[1]
+    $days = [int]$matches[2]
+    $nonce = $matches[3]
+    $sig = $matches[4]
+    $expected = Invoke-NovaHmac -Secret $Script:LicenseSecret -Data "$kind`:$days`:$nonce"
+    if ($sig -ne $expected) { return $null }
+    $now = [int]((Get-Date).ToUniversalTime() - [datetime]"2024-01-01").TotalDays
+    if ($days -gt $now + 3650) { return $null }
+    return $kind
+}
 
 $Script:Logs = [System.Collections.ArrayList]::new()
 function Write-Log { param([string]$Msg,[string]$Level="INFO"); $line="$(Get-Date -Format 'HH:mm:ss') [$Level] $Msg"; [void]$Script:Logs.Add($line); Add-Content -Path $Script:LogPath -Value "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') [$Level] $Msg" -ErrorAction SilentlyContinue }
@@ -2014,7 +2082,18 @@ foreach ($t in $Script:Tweaks) { if ($t.Id -notin $props) { $Script:Config.Tweak
 
 # Auto-login
 $Script:CurrentUser = Auto-Login
-if ($Script:CurrentUser) { $Script:Config.Plan = "Pro"; $Script:Config.CurrentUser = $Script:CurrentUser.Email; $Script:Config.Email = $Script:CurrentUser.Email; Save-Config; Write-Log "Auto-login: $($Script:CurrentUser.Email)" "OK" }
+if ($Script:CurrentUser) {
+    $Script:CurrentUser = Normalize-NovaAccount $Script:CurrentUser
+    $Script:Config.Plan = $Script:CurrentUser.Plan
+    $Script:Config.PlanUntil = $Script:CurrentUser.PlanUntil
+    $Script:Config.Balance = $Script:CurrentUser.Balance
+    $Script:Config.CurrentUser = $Script:CurrentUser.Email
+    $Script:Config.Email = $Script:CurrentUser.Email
+    Save-Config
+    Write-Log "Auto-login: $($Script:CurrentUser.Email) ($($Script:CurrentUser.Plan))" "OK"
+} else {
+    $Script:Config.Plan = "Free"
+}
 
 # ---------- HTML (Vibrant Red Theme) ----------
 $HtmlPage = @'

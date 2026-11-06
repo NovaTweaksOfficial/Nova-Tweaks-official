@@ -66,7 +66,7 @@ Invoke-PS2EXE `
   -Description "Nova Tweaks performance suite - by Kyle Bonebrake" `
   -Company "Nova Tweaks" `
   -Product "Nova Tweaks" `
-  -Version "5.3.1.0" `
+  -Version "1.0.0.0" `
   -RequireAdmin `
   -NoConsole `
   -STA `
