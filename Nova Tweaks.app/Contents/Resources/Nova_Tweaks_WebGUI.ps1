@@ -1387,9 +1387,9 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
       <div class="login-logo" style="font-size:56px">Nova Tweaks</div>
       <div class="login-sub" style="letter-spacing:6px">Performance Suite</div>
       <div style="display:flex;gap:18px;justify-content:center;margin-top:14px;flex-wrap:wrap">
-        <div style="text-align:center"><div style="font-size:22px;font-weight:900;color:var(--text)">12,847</div><div style="font-size:9px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px">Users Online</div></div>
+        <div style="text-align:center"><div style="font-size:22px;font-weight:900;color:var(--text)">—</div><div style="font-size:9px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px">Users Online</div></div>
         <div style="text-align:center"><div style="font-size:22px;font-weight:900;color:var(--text)">750+</div><div style="font-size:9px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px">Tweaks</div></div>
-        <div style="text-align:center"><div style="font-size:22px;font-weight:900;color:var(--text)">98.6%</div><div style="font-size:9px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px">Smoother</div></div>
+        <div style="text-align:center"><div style="font-size:22px;font-weight:900;color:var(--text)">—</div><div style="font-size:9px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px">Smoother</div></div>
       </div>
     </div>
     <div style="padding:28px 44px 40px">
