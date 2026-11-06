@@ -4,8 +4,8 @@ Safe, EAC-friendly Fortnite performance suite. Native app on Windows and macOS, 
 
 **111 working tweaks** across General, Input, Network, Power, Visual, Services and Game. Every tweak in the
 shipped build changes the system — there are no log-only placeholders — and each one has a risk label, an OS
-badge (Windows/macOS/Both) and a one-click switch. 13 of the 111 apply on macOS; the Windows build ships all
-111. `tools/Check-Tweaks.ps1` enforces this in CI.
+badge (Windows/macOS/Both) and a one-click switch. 103 apply on Windows and 13 on macOS (5 are cross-platform);
+the app includes all 111 and the Windows/Mac tabs show every one. `tools/Check-Tweaks.ps1` enforces this in CI.
 
 ## How the Windows app works
 
@@ -50,7 +50,7 @@ Invoke-PS2EXE `
   -Description "Nova Tweaks performance suite - by Kyle Bonebrake" `
   -Company "Nova Tweaks" `
   -Product "Nova Tweaks" `
-  -Version "5.1.0.0" `
+  -Version "5.1.1.0" `
   -RequireAdmin `
   -NoConsole `
   -STA `
