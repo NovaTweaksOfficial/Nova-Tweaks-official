@@ -3,7 +3,7 @@
 .SYNOPSIS
     FL3SH Optimizer ULTIMATE - Red Theme + All Tweaks + Accounts + Auto-Login
 .DESCRIPTION
-    The complete optimizer with every EMTweaks-style tweak: Input Delay Reducer,
+    The complete optimizer with every performance tweak: Input Delay Reducer,
     Ping Stabilizer, Mouse Precision, Keyboard Latency, USB Polling, Game Booster,
     Potato Graphics, and 30+ system tweaks. All in a vibrant red GUI.
 #>
@@ -571,9 +571,28 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
 /* Section divider */
 .section-title{font-size:18px;font-weight:700;margin:24px 0 12px;color:var(--text);display:flex;align-items:center;gap:10px}
 .section-title::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,var(--border),transparent)}
+
+/* OS badges */
+.badge.os-windows{background:linear-gradient(135deg,var(--blue),#0088cc);color:#fff;box-shadow:0 2px 8px rgba(0,170,255,.25)}
+.badge.os-mac{background:linear-gradient(135deg,var(--purple),#8833cc);color:#fff;box-shadow:0 2px 8px rgba(170,68,255,.25)}
+.badge.os-both{background:linear-gradient(135deg,var(--green),#00cc6a);color:#000;box-shadow:0 2px 8px rgba(0,255,136,.25)}
+
+/* Rotating outline */
+.rotating-outline{position:relative;overflow:visible}
+.rotating-outline::before{content:'';position:absolute;inset:-2px;border-radius:inherit;padding:2px;background:conic-gradient(from var(--rot,0deg),var(--red),var(--purple),var(--blue),var(--red));-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:spinOutline 4s linear infinite;pointer-events:none;z-index:0}
+@keyframes spinOutline{to{--rot:360deg}}
+@property --rot{syntax:'<angle>';initial-value:0deg;inherits:false}
+.tweakcard.rotating-outline::before{border-radius:var(--radius)}
+
+/* Snow canvas */
+#snowCanvas{position:fixed;inset:0;pointer-events:none;z-index:2;opacity:.7}
+
+/* Draggable hint */
+.draggable{cursor:move}
 </style>
 </head>
 <body>
+<canvas id="snowCanvas"></canvas>
 
 <!-- LOGIN OVERLAY -->
 <div class="login-overlay" id="loginOverlay">
@@ -658,8 +677,13 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
 <!-- ALL TWEAKS -->
 <div class="page" id="page-tweaks">
   <h1>All Tweaks</h1>
-  <div class="sub">30+ tweaks across 8 categories. Each one is a card with a risk label and a switch.</div>
+  <div class="sub">30+ tweaks across 8 categories. Each one is a card with a risk label, OS badge (Windows/macOS/Both) and a switch.</div>
   <div class="catbar" id="catBar"></div>
+  <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+    <button class="btn danger sm" id="removeAllBtn">Remove All Tweaks</button>
+    <button class="btn danger sm" id="removeCatBtn">Remove All in Category</button>
+    <button class="btn ghost sm" id="revertAllBtn2">Revert All Changes</button>
+  </div>
   <div class="grid" id="tweakGrid"></div>
 </div>
 
@@ -829,6 +853,33 @@ spotify.exe</textarea>
 
 <script>
 const state={plan:'Pro',tweaks:{},os:'unknown',user:null};
+// Snowfall
+(function(){
+  const c=document.getElementById('snowCanvas');const ctx=c.getContext('2d');
+  let w,h,flakes=[];
+  function resize(){w=c.width=window.innerWidth;h=c.height=window.innerHeight}
+  window.addEventListener('resize',resize);resize();
+  for(let i=0;i<120;i++)flakes.push({x:Math.random()*w,y:Math.random()*h,r:Math.random()*2.5+0.5,vx:(Math.random()-.5)*.4,vy:Math.random()*1.2+.4,o:Math.random()*.6+.3});
+  function draw(){ctx.clearRect(0,0,w,h);for(const f of flakes){f.x+=f.vx;f.y+=f.vy;if(f.y>h){f.y=-5;f.x=Math.random()*w}if(f.x>w)f.x=0;if(f.x<0)f.x=w;ctx.beginPath();ctx.arc(f.x,f.y,f.r,0,Math.PI*2);ctx.fillStyle='rgba(255,255,255,'+f.o+')';ctx.fill()}requestAnimationFrame(draw)}
+  draw();
+})();
+
+// Draggable GUI (move the whole app container by dragging the sidebar brand)
+(function(){
+  const app=document.getElementById('appContainer');
+  let dragging=false,sx=0,sy=0,ox=0,oy=0;
+  function onDown(e){
+    if(e.target.closest('button,input,textarea,select,a,.toggle'))return;
+    const sb=e.target.closest('.sidebar');if(!sb)return;
+    dragging=true;sx=e.clientX;sy=e.clientY;
+    const r=app.getBoundingClientRect();ox=r.left;oy=r.top;
+    app.style.position='fixed';app.style.left=ox+'px';app.style.top=oy+'px';app.style.width=r.width+'px';app.style.height=r.height+'px';
+    e.preventDefault();
+  }
+  function onMove(e){if(!dragging)return;app.style.left=(ox+e.clientX-sx)+'px';app.style.top=(oy+e.clientY-sy)+'px'}
+  function onUp(){dragging=false}
+  document.addEventListener('mousedown',onDown);document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);
+})();
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000)}
 async function api(path,body={}){
   const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -903,9 +954,11 @@ function renderTweaks(){
     const riskCls=t.risk.toLowerCase();
     const planBadge='<span class="badge pro">PRO</span>';
     const newBadge=t.id==='inputdelay'||t.id==='pingstab'||t.id==='bcdedit'?'<span class="badge new">NEW</span>':'';
-    return `<div class="tweakcard">
+    const osCls='os-'+(t.os||'').toLowerCase();
+    const osBadge='<span class="badge '+osCls+'">'+(t.os||'')+'</span>';
+    return `<div class="tweakcard rotating-outline">
       <div class="tweakhead">
-        <span class="badge ${riskCls}">${t.risk}</span>${planBadge}${newBadge}
+        <span class="badge ${riskCls}">${t.risk}</span>${osBadge}${planBadge}${newBadge}
         <label class="toggle"><input type="checkbox" data-id="${t.id}" ${checked}><span class="slider"></span></label>
       </div>
       <div class="tweakname">${t.name}</div>
@@ -948,6 +1001,9 @@ document.getElementById('pingStabBtn').addEventListener('click',async()=>{
   const r=await api('/api/pingstab');showToast(r.message);
 });
 document.getElementById('applyAllBtn').addEventListener('click',async()=>{const r=await api('/api/applyall');showToast(r.message);await loadTweaks()});
+document.getElementById('removeAllBtn').addEventListener('click',async()=>{if(!confirm('Remove ALL tweaks? This reverts every tweak.'))return;const r=await api('/api/revertall');showToast(r.message);await loadTweaks()});
+document.getElementById('removeCatBtn').addEventListener('click',async()=>{if(!confirm('Remove all tweaks in '+currentCat+'?'))return;const ids=Object.values(state.tweaks).filter(t=>t.cat===currentCat).map(t=>t.id);for(const id of ids){await api('/api/tweak/toggle',{id,state:false})}showToast('Removed '+ids.length+' tweaks in '+currentCat);await loadTweaks()});
+document.getElementById('revertAllBtn2').addEventListener('click',async()=>{if(!confirm('Revert ALL changes? Reboot recommended after.'))return;const r=await api('/api/revertall');showToast(r.message);await loadTweaks()});
 document.getElementById('refreshSysBtn').addEventListener('click',async()=>{const r=await api('/api/sysinfo');document.getElementById('sysInfo').textContent=r.info});
 document.getElementById('runBenchBtn').addEventListener('click',async()=>{document.getElementById('benchResult').textContent='Running...';const r=await api('/api/bench');document.getElementById('benchResult').textContent=r.result});
 document.getElementById('saveBenchBtn').addEventListener('click',async()=>{const r=await api('/api/savebench',{before:document.getElementById('fpsBefore').value,after:document.getElementById('fpsAfter').value});showToast(r.message)});
@@ -1013,7 +1069,8 @@ while ($Listener.IsListening) {
         foreach ($t in $Script:Tweaks) {
             $isAvail = if ($IsWin) { $t.Win } else { $t.Mac }
             if (-not $isAvail) { continue }
-            $tweakObj[$t.Id] = @{ id=$t.Id; name=$t.Name; desc=$t.Desc; risk=$t.Risk; free=$t.Free; cat=$catMap[$t.Id]; state=$Script:Config.TweakStates[$t.Id] }
+            $osLabel = if ($t.Win -and $t.Mac) { "Both" } elseif ($t.Win) { "Windows" } else { "Mac" }
+            $tweakObj[$t.Id] = @{ id=$t.Id; name=$t.Name; desc=$t.Desc; risk=$t.Risk; free=$t.Free; cat=$catMap[$t.Id]; os=$osLabel; state=$Script:Config.TweakStates[$t.Id] }
         }
         $json = @{ tweaks = $tweakObj } | ConvertTo-Json -Depth 5
         $buf = [System.Text.Encoding]::UTF8.GetBytes($json); $res.ContentType = "application/json"; $res.OutputStream.Write($buf,0,$buf.Length)

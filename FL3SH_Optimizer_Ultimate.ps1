@@ -3,7 +3,7 @@
 .SYNOPSIS
     FL3SH Optimizer ULTIMATE - Red Theme + All Tweaks + Accounts + Auto-Login
 .DESCRIPTION
-    The complete optimizer with every EMTweaks-style tweak: Input Delay Reducer,
+    The complete optimizer with every performance tweak: Input Delay Reducer,
     Ping Stabilizer, Mouse Precision, Keyboard Latency, USB Polling, Game Booster,
     Potato Graphics, and 30+ system tweaks. All in a vibrant red GUI.
 #>

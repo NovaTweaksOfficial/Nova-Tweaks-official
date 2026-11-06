@@ -414,9 +414,10 @@ function Show-MainForm {
             $card=New-Object System.Windows.Forms.Panel; $card.Size=New-Object System.Drawing.Size(880,82); $card.Location=New-Object System.Drawing.Point(5,$y); $card.BackColor=$C.Card; $tweakListPanel.Controls.Add($card)
             $riskColor=switch ($t.Risk) { "Safe"{$C.Green} "Caution"{$C.Warn} "Danger"{$C.Danger} default{$C.TextDim} }
             $riskLbl=New-Object System.Windows.Forms.Label; $riskLbl.Text=$t.Risk; $riskLbl.Font=New-Object System.Drawing.Font("Segoe UI",8,[System.Drawing.FontStyle]::Bold); $riskLbl.ForeColor=$C.Bg; $riskLbl.BackColor=$riskColor; $riskLbl.Location=New-Object System.Drawing.Point(10,8); $riskLbl.AutoSize=$true; $riskLbl.Padding=New-Object System.Windows.Forms.Padding(5,1,5,1); $card.Controls.Add($riskLbl)
-            # OS badge
-            $osColor=switch ($t.OS) { "Windows"{$C.Blue} "Mac"{$C.Purple} "Both"{$C.Green} default{$C.TextDim} }
-            $osLbl=New-Object System.Windows.Forms.Label; $osLbl.Text=$t.OS; $osLbl.Font=New-Object System.Drawing.Font("Segoe UI",7.5,[System.Drawing.FontStyle]::Bold); $osLbl.ForeColor=[System.Drawing.Color]::White; $osLbl.BackColor=$osColor; $osLbl.Location=New-Object System.Drawing.Point(62,8); $osLbl.AutoSize=$true; $osLbl.Padding=New-Object System.Windows.Forms.Padding(5,1,5,1); $card.Controls.Add($osLbl)
+            # OS badge (derive from Win/Mac flags)
+            $osLabel = if ($t.Win -and $t.Mac) { "Both" } elseif ($t.Win) { "Windows" } else { "Mac" }
+            $osColor = switch ($osLabel) { "Windows"{$C.Blue} "Mac"{$C.Purple} "Both"{$C.Green} default{$C.TextDim} }
+            $osLbl=New-Object System.Windows.Forms.Label; $osLbl.Text=$osLabel; $osLbl.Font=New-Object System.Drawing.Font("Segoe UI",7.5,[System.Drawing.FontStyle]::Bold); $osLbl.ForeColor=[System.Drawing.Color]::White; $osLbl.BackColor=$osColor; $osLbl.Location=New-Object System.Drawing.Point(62,8); $osLbl.AutoSize=$true; $osLbl.Padding=New-Object System.Windows.Forms.Padding(5,1,5,1); $card.Controls.Add($osLbl)
             $planLbl=New-Object System.Windows.Forms.Label; $planLbl.Text="PRO"; $planLbl.Font=New-Object System.Drawing.Font("Segoe UI",8,[System.Drawing.FontStyle]::Bold); $planLbl.ForeColor=[System.Drawing.Color]::White; $planLbl.BackColor=$C.Red; $planLbl.Location=New-Object System.Drawing.Point(115,8); $planLbl.AutoSize=$true; $planLbl.Padding=New-Object System.Windows.Forms.Padding(5,1,5,1); $card.Controls.Add($planLbl)
             $nameLbl=New-Object System.Windows.Forms.Label; $nameLbl.Text=$t.Name; $nameLbl.Font=$FontHead; $nameLbl.ForeColor=$C.Text; $nameLbl.Location=New-Object System.Drawing.Point(10,30); $nameLbl.AutoSize=$true; $card.Controls.Add($nameLbl)
             $descLbl=New-Object System.Windows.Forms.Label; $descLbl.Text=$t.Desc; $descLbl.Font=$FontSmall; $descLbl.ForeColor=$C.TextDim; $descLbl.Location=New-Object System.Drawing.Point(10,52); $descLbl.Size=New-Object System.Drawing.Size(760,26); $card.Controls.Add($descLbl)
@@ -589,7 +590,97 @@ function Show-MainForm {
     $Script:LogBox.AppendText("FL3SH Optimizer Ultimate started. Plan: Pro`r`nCredits: FL3SH & XRT`r`n")
     Write-Log "Application started. Plan: Pro. User: $($Script:CurrentUser.Email)" "OK"
 
-    $form.Add_FormClosing({ Save-Config })
+    # ---------- Rotating outline + snowfall (visual polish) ----------
+    Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public class Win32Ex {
+    public const int GWL_EXSTYLE = -20;
+    public const int WS_EX_TRANSPARENT = 0x20;
+    public const int WS_EX_LAYERED = 0x80000;
+    [DllImport("user32.dll")] public static extern int GetWindowLong(IntPtr hwnd, int index);
+    [DllImport("user32.dll")] public static extern int SetWindowLong(IntPtr hwnd, int index, int value);
+}
+"@ -ErrorAction SilentlyContinue
+
+    $Script:SnowFlakes = @()
+    $rng = New-Object System.Random
+    for ($i=0; $i -lt 90; $i++) {
+        $Script:SnowFlakes += @{ X=$rng.Next(0,$form.Width); Y=$rng.Next(0,$form.Height); R=[double]($rng.Next(1,4)); Vx=($rng.NextDouble()-0.5)*0.6; Vy=$rng.NextDouble()*1.4+0.3; O=$rng.NextDouble()*0.5+0.25 }
+    }
+    $Script:RotAngle = 0
+
+    $overlay = New-Object System.Windows.Forms.Panel
+    $overlay.Size = $form.ClientSize
+    $overlay.Location = New-Object System.Drawing.Point(0,0)
+    $overlay.BackColor = [System.Drawing.Color]::Transparent
+    $overlay.Enabled = $false
+    $form.Controls.Add($overlay)
+    $overlay.BringToFront()
+
+    $overlay.Add_HandleCreated({
+        $ex = [Win32Ex]::GetWindowLong($overlay.Handle, [Win32Ex]::GWL_EXSTYLE)
+        [Win32Ex]::SetWindowLong($overlay.Handle, [Win32Ex]::GWL_EXSTYLE, $ex -bor [Win32Ex]::WS_EX_TRANSPARENT -bor [Win32Ex]::WS_EX_LAYERED) | Out-Null
+    })
+    $overlay.Add_Paint({
+        $g = $_.Graphics
+        foreach ($f in $Script:SnowFlakes) {
+            $f.X += $f.Vx; $f.Y += $f.Vy
+            if ($f.Y -gt $form.Height) { $f.Y = -4; $f.X = $rng.Next(0,$form.Width) }
+            if ($f.X -gt $form.Width) { $f.X = 0 }
+            if ($f.X -lt 0) { $f.X = $form.Width }
+            $b = [int]($f.O*255)
+            $brush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb($b,255,255,255))
+            $g.FillEllipse($brush, [float]$f.X, [float]$f.Y, [float]$f.R, [float]$f.R)
+            $brush.Dispose()
+        }
+    })
+
+    $form.Add_Paint({
+        $g = $_.Graphics
+        $r = $form.ClientRectangle
+        $Script:RotAngle = ($Script:RotAngle + 3) % 360
+        # rotating outline: draw a conic-ish gradient border using multiple colored segments
+        $colors = @($C.Red, $C.Purple, $C.Blue, $C.Red)
+        $penW = 2
+        for ($i=0; $i -lt 36; $i++) {
+            $a1 = ($Script:RotAngle + $i*10) * [Math]::PI / 180.0
+            $a2 = ($Script:RotAngle + ($i+1)*10) * [Math]::PI / 180.0
+            $ci = [int]($i / 12) % 3
+            $pen = New-Object System.Drawing.Pen($colors[$ci], $penW)
+            # top edge
+            $x1 = $r.Left + ($r.Width/2) + [Math]::Cos($a1)*($r.Width/2-2)
+            # simpler: draw outline segments around rectangle perimeter
+            $pen.Dispose()
+        }
+        # Draw a simple animated dashed border
+        $dashPen = New-Object System.Drawing.Pen($C.Red, 2)
+        $dashPen.DashStyle = [System.Drawing.Drawing2D.DashStyle]::Dash
+        $dashPen.DashOffset = $Script:RotAngle / 10.0
+        $g.DrawRectangle($dashPen, 1,1,$r.Width-2,$r.Height-2)
+        $dashPen.Dispose()
+    })
+
+    $animTimer = New-Object System.Windows.Forms.Timer
+    $animTimer.Interval = 40
+    $animTimer.Add_Tick({ $overlay.Invalidate(); $form.Invalidate() })
+    $animTimer.Start()
+
+    $form.Add_Resize({ $overlay.Size = $form.ClientSize })
+    $form.Add_FormClosing({ $animTimer.Stop(); Save-Config })
+
+    # ---------- Draggable window (move by dragging sidebar) ----------
+    $Script:DragStart = $null
+    $sidebar.Add_MouseDown({ $Script:DragStart = [System.Windows.Forms.Cursor]::Position })
+    $sidebar.Add_MouseMove({
+        if ($Script:DragStart -ne $null -and $_.Button -eq [System.Windows.Forms.MouseButtons]::Left) {
+            $cur = [System.Windows.Forms.Cursor]::Position
+            $form.Location = New-Object System.Drawing.Point(($form.Location.X + $cur.X - $Script:DragStart.X), ($form.Location.Y + $cur.Y - $Script:DragStart.Y))
+            $Script:DragStart = $cur
+        }
+    })
+    $sidebar.Add_MouseUp({ $Script:DragStart = $null })
+
     [void]$form.ShowDialog()
 }
 
