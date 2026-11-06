@@ -1371,7 +1371,7 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
 .tweakcard.rotating-outline::before{border-radius:var(--radius)}
 
 /* Snow canvas */
-#snowCanvas{position:fixed;inset:0;pointer-events:none;z-index:2;opacity:.7}
+#snowCanvas{position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.5}
 
 /* Draggable hint */
 .draggable{cursor:move}
@@ -1402,6 +1402,7 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
         <div class="login-field"><label>Password</label><input class="login-input" id="loginPass" type="password" placeholder="••••••••"></div>
         <button class="login-btn" id="loginBtn">Sign In</button>
         <div class="login-error" id="loginError"></div>
+        <div id="loginStatus" style="font-size:10px;color:var(--textmuted);text-align:center;margin-top:6px"></div>
       </div>
       <div id="registerForm" style="display:none">
         <div class="login-field"><label>Name</label><input class="login-input" id="regName" placeholder="Your name"></div>
@@ -1420,7 +1421,7 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
 </div>
 
 <!-- MAIN APP -->
-<div id="appContainer" style="display:none;width:100%;height:100vh;display:none">
+<div id="appContainer" style="display:none;width:100%;height:100vh;position:relative;z-index:1;">
 <div class="sidebar">
   <div class="brand">Nova Tweaks</div>
   <div class="brandsub">Ultimate</div>
@@ -1663,6 +1664,7 @@ spotify.exe</textarea>
 
 <script>
 const state={plan:'Pro',tweaks:{},os:'unknown',user:null};
+window.onerror=(m,u,l)=>{const e=document.getElementById('loginError');if(e)e.textContent='JS Error: '+m+' (line '+l+')';console.error(m,u,l);};
 // Snowfall
 (function(){
   const c=document.getElementById('snowCanvas');const ctx=c.getContext('2d');
@@ -1715,6 +1717,8 @@ document.getElementById('registerBtn').addEventListener('click',async()=>{
 document.getElementById('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('loginBtn').click()});
 
 function onLogin(acc){
+  try{
+  const st=document.getElementById('loginStatus'); if(st) st.textContent='Loading...';
   state.user=acc;state.plan='Pro';
   document.getElementById('loginOverlay').style.display='none';
   document.getElementById('appContainer').style.display='flex';
@@ -1724,7 +1728,10 @@ function onLogin(acc){
   document.getElementById('planBadge').textContent='PRO';
   document.getElementById('emailInput').value=acc.Email;
   document.getElementById('keyInput').value=acc.LicenseKey||'';
-  loadTweaks();
+  if(st) st.textContent='Loading tweaks...';
+  loadTweaks().then(()=>{ if(st) st.textContent='Done'; }).catch(e=>{ if(st) st.textContent='Tweak load error: '+e; });
+  }catch(e){ const er=document.getElementById('loginError'); if(er) er.textContent='Login error: '+e; console.error(e);}
+}
 }
 
 (async function(){const r=await api('/api/autologin');if(r.success){onLogin(r.account)}})();
