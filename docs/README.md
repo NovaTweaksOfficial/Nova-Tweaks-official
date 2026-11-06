@@ -65,6 +65,31 @@ in one place. Keep the app's plan prices in `Get-NovaPlanPriceCents` in
 After payment, issue a license key and send it to the buyer. The buyer pastes it into
 **Account → License key** in the app.
 
+## Issue license keys and gift codes
+
+Run the key tool from the repo root:
+
+```powershell
+# $15 of in-app giveaway balance
+pwsh ./tools/New-NovaKey.ps1 -Type Gift -Amount 15
+
+# 30-day Pro key
+pwsh ./tools/New-NovaKey.ps1 -Type Pro
+
+# 30-day Ultimate key
+pwsh ./tools/New-NovaKey.ps1 -Type Ultimate
+
+# bulk
+pwsh ./tools/New-NovaKey.ps1 -Type Pro -Count 10 > pro-keys.txt
+```
+
+Send gift codes to giveaway winners. They redeem under **Settings → Account → Redeem a gift code**, and the
+balance can pay for Pro or Ultimate in the same panel. Send license keys to website buyers.
+
+The secrets in `tools/New-NovaKey.ps1` must match `$Script:GiftSecret` and `$Script:LicenseSecret` in
+`Nova_Tweaks_WebGUI.ps1`. Change both before a public launch. Validation is offline and client-side; it is not
+a substitute for a real licensing backend.
+
 ## Attach a `.gg` domain
 
 `.gg` domains are sold by Island Networks / 101domain (roughly $60–100/year). Once purchased:

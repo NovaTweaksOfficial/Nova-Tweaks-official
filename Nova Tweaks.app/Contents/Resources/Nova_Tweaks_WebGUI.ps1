@@ -25,10 +25,27 @@ function Load-Accounts { if (Test-Path $Script:AccountsPath) { try { return @(Ge
 function Save-Accounts { param($accs) $accs | ConvertTo-Json -Depth 5 | Set-Content $Script:AccountsPath -Encoding UTF8 }
 function Find-Account { param($email) (Load-Accounts) | Where-Object { $_.Email -eq $email } | Select-Object -First 1 }
 function Hash-Pass { param($p) [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($p + "Nova Tweaks_SALT_2026")) }
+function Normalize-NovaAccount { param($acc)
+    if (-not $acc) { return $null }
+    if (-not $acc.Plan) { $acc.Plan = "Free" }
+    if ($acc.Plan -notin @("Free","Pro","Ultimate")) { $acc.Plan = "Free" }
+    $names = @($acc.PSObject.Properties.Name)
+    if ($names -notcontains "Balance") { $acc | Add-Member -NotePropertyName Balance -NotePropertyValue 0 -Force }
+    if ($names -notcontains "PlanUntil") { $acc | Add-Member -NotePropertyName PlanUntil -NotePropertyValue $null -Force }
+    if ($names -notcontains "Redeemed") { $acc | Add-Member -NotePropertyName Redeemed -NotePropertyValue @() -Force }
+    if ($acc.Plan -ne "Free" -and -not $acc.PlanUntil) {
+        # Legacy builds unlocked Pro for everyone; only a dated plan counts as paid.
+        $acc.Plan = "Free"
+    }
+    if ($acc.Plan -ne "Free" -and $acc.PlanUntil) {
+        try { if ([datetime]$acc.PlanUntil -lt (Get-Date)) { $acc.Plan = "Free"; $acc.PlanUntil = $null } } catch { $acc.Plan = "Free"; $acc.PlanUntil = $null }
+    }
+    return $acc
+}
 function Create-Account { param($email,$password,$name)
     $accs = @(Load-Accounts)
     if ($accs | Where-Object { $_.Email -eq $email }) { return @{ success=$false; message="Account already exists." } }
-    $acc = @{ Email=$email; PasswordHash=(Hash-Pass $password); Name=$name; Plan="Pro"; LicenseKey=""; Created=(Get-Date).ToString("o"); LastLogin=(Get-Date).ToString("o") }
+    $acc = @{ Email=$email; PasswordHash=(Hash-Pass $password); Name=$name; Plan="Free"; LicenseKey=""; Balance=0; PlanUntil=$null; Redeemed=@(); Created=(Get-Date).ToString("o"); LastLogin=(Get-Date).ToString("o") }
     $accs += $acc; Save-Accounts $accs
     return @{ success=$true; message="Account created."; account=$acc }
 }
@@ -37,8 +54,8 @@ function Verify-Login { param($email,$password)
     if (-not $acc) { return @{ success=$false; message="No account found." } }
     if ((Hash-Pass $password) -ne $acc.PasswordHash) { return @{ success=$false; message="Wrong password." } }
     $accs = @(Load-Accounts); $a = $accs | Where-Object { $_.Email -eq $email } | Select-Object -First 1
-    if ($a) { $a.LastLogin = (Get-Date).ToString("o"); $a.Plan = "Pro"; Save-Accounts $accs }
-    $acc.Plan = "Pro"
+    if ($a) { $a.LastLogin = (Get-Date).ToString("o"); Save-Accounts $accs }
+    $acc = Normalize-NovaAccount $acc
     $token = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("$email|$(Get-Date -Format 'o')|Nova Tweaks"))
     Set-Content -Path $Script:TokenPath -Value $token -Encoding UTF8
     return @{ success=$true; message="Login successful."; token=$token; account=$acc }
@@ -50,13 +67,13 @@ function Auto-Login {
         $decoded = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($token))
         $email = ($decoded -split "\|")[0]
         $acc = Find-Account $email
-        if ($acc) { $acc.Plan = "Pro"; return $acc }
+        if ($acc) { return (Normalize-NovaAccount $acc) }
     } catch {}
     return $null
 }
 function Logout { if (Test-Path $Script:TokenPath) { Remove-Item $Script:TokenPath -Force } }
 
-$Script:Config = @{ Plan="Pro"; TweakStates=@{}; Email=""; LicenseKey=""; CurrentUser="" }
+$Script:Config = @{ Plan="Free"; PlanUntil=$null; Balance=0; TweakStates=@{}; Email=""; LicenseKey=""; CurrentUser="" }
 if (Test-Path $Script:ConfigPath) {
     try {
         $l = Get-Content $Script:ConfigPath -Raw | ConvertFrom-Json
@@ -71,8 +88,160 @@ if (Test-Path $Script:ConfigPath) {
         }
     } catch {}
 }
-$Script:Config.Plan = "Pro"
+if (-not $Script:Config.Plan -or $Script:Config.Plan -notin @("Free","Pro","Ultimate")) { $Script:Config.Plan = "Free" }
+if (-not $Script:Config.PSObject.Properties.Name -contains "Balance") { $Script:Config | Add-Member -NotePropertyName Balance -NotePropertyValue 0 -Force }
+if (-not $Script:Config.PSObject.Properties.Name -contains "PlanUntil") { $Script:Config | Add-Member -NotePropertyName PlanUntil -NotePropertyValue $null -Force }
 function Save-Config { $Script:Config | ConvertTo-Json -Depth 5 | Set-Content $Script:ConfigPath -Encoding UTF8 }
+
+# ---------- Tier helpers ----------
+$Script:GiftSecret = "NovaTweaks-Gift-S3cr3t-2026-ChangeMe"
+$Script:LicenseSecret = "NovaTweaks-License-S3cr3t-2026-ChangeMe"
+function Get-NovaPlanRank { param([string]$p) switch ($p) { "Ultimate" { 2 } "Pro" { 1 } default { 0 } } }
+function Get-NovaPlanPriceCents { param([string]$p) switch ($p) { "Pro" { 599 } "Ultimate" { 1299 } default { 0 } } }
+function Get-NovaPlanUntil { param($acc) if ($acc.PlanUntil) { try { return [datetime]$acc.PlanUntil } catch {} }; return $null }
+function Update-NovaPlanState {
+    if ($Script:CurrentUser) {
+        $acc = Normalize-NovaAccount $Script:CurrentUser
+        $Script:CurrentUser = $acc
+        $Script:Config.Plan = $acc.Plan
+        $Script:Config.PlanUntil = $acc.PlanUntil
+        $Script:Config.Balance = $acc.Balance
+    }
+}
+function Invoke-NovaHmac { param([string]$Secret,[string]$Data)
+    $h = [System.Security.Cryptography.HMACSHA256]::new([System.Text.Encoding]::UTF8.GetBytes($Secret))
+    $b = $h.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($Data))
+    return ([System.BitConverter]::ToString($b) -replace "-").ToLower().Substring(0,10)
+}
+function New-NovaGiftCode { param([int]$Cents)
+    $nonce = [System.Guid]::NewGuid().ToString("N").Substring(0,8).ToUpper()
+    $sig = Invoke-NovaHmac -Secret $Script:GiftSecret -Data "$Cents`:$nonce"
+    return "NOVA-GIFT-$Cents-$nonce-$sig"
+}
+function Test-NovaGiftCode { param([string]$Code)
+    if ($Code -notmatch "^NOVA-GIFT-(\d+)-([A-F0-9]{8})-([a-f0-9]{10})$") { return $null }
+    $cents = [int]$matches[1]
+    $nonce = $matches[2]
+    $sig = $matches[3]
+    if ($cents -lt 100 -or $cents -gt 100000) { return $null }
+    $expected = Invoke-NovaHmac -Secret $Script:GiftSecret -Data "$cents`:$nonce"
+    if ($sig -ne $expected) { return $null }
+    return $cents
+}
+function New-NovaLicenseKey { param([string]$Kind)
+    $days = [int]((Get-Date).ToUniversalTime() - [datetime]"2024-01-01").TotalDays
+    $nonce = [System.Guid]::NewGuid().ToString("N").Substring(0,8).ToUpper()
+    $sig = Invoke-NovaHmac -Secret $Script:LicenseSecret -Data "$Kind`:$days`:$nonce"
+    return "NOVA-$Kind-$days-$nonce-$sig"
+}
+function Test-NovaLicenseKey { param([string]$Key)
+    if ($Key -notmatch "^NOVA-(PRO|ULT)-(\d+)-([A-F0-9]{8})-([a-f0-9]{10})$") { return $null }
+    $kind = $matches[1]
+    $days = [int]$matches[2]
+    $nonce = $matches[3]
+    $sig = $matches[4]
+    $expected = Invoke-NovaHmac -Secret $Script:LicenseSecret -Data "$kind`:$days`:$nonce"
+    if ($sig -ne $expected) { return $null }
+    $now = [int]((Get-Date).ToUniversalTime() - [datetime]"2024-01-01").TotalDays
+    if ($days -gt $now + 3650) { return $null }
+    return $kind
+}
+
+# ---------- Plan / tier model ----------
+# Free = 30 hand-picked tweaks. Pro = everything except the advanced service pack,
+# firmware category and the Ultimate-only list. Ultimate = the full catalog.
+$Script:FreeTweakIds = @(
+    "memory","temp","startup","mouseprec","power","visual","menu","transp",
+    "disableballoontips","disablemenuanim","disablecursorshadow","gamemode",
+    "faststartup","hibernate","ntfslast","trim","disableprintspooler","disablefax",
+    "winanimoff","displaysleepoff","nosleep","macpower","macappnap","macwinanim",
+    "macpurge","macdock","macfinderanim","macmouseaccel","mackeyrepeat","macreducemotion"
+)
+$Script:UltimateTweakIds = @(
+    "potato","mpo","fullopt","bcdedit","hags","corepark","timer","usbss","powerthrottle",
+    "defendercloud","smartscreen","disablewuauserv","wuautorestart","wins",
+    "hypervisoroff","vbsdisable","memoryintegrityoff"
+)
+
+function Get-NovaEffectivePlan {
+    if ($Script:CurrentUser) {
+        $acc = Normalize-NovaAccount $Script:CurrentUser
+        $Script:CurrentUser = $acc
+        $Script:Config.Plan = $acc.Plan
+        return [string]$acc.Plan
+    }
+    # No signed-in account means no paid entitlement.
+    return "Free"
+}
+
+function Test-NovaProTweak {
+    param($Tweak)
+    if (-not $Tweak) { return $false }
+    if ([string]$Tweak.Id -like "svc*") { return $false }
+    if ([string]$Tweak.Cat -eq "Firmware") { return $false }
+    if ([string]$Tweak.Id -in $Script:UltimateTweakIds) { return $false }
+    return $true
+}
+
+function Test-NovaTweakAllowed {
+    param($Tweak, [string]$Plan)
+    if (-not $Plan) { $Plan = Get-NovaEffectivePlan }
+    $rank = Get-NovaPlanRank $Plan
+    if ($rank -ge 2) { return $true }
+    if ($rank -eq 1) { return (Test-NovaProTweak $Tweak) }
+    return ([string]$Tweak.Id -in $Script:FreeTweakIds)
+}
+
+function Get-NovaTweakRequiredPlan {
+    param($Tweak)
+    if ([string]$Tweak.Id -in $Script:FreeTweakIds) { return "Free" }
+    if (Test-NovaProTweak $Tweak) { return "Pro" }
+    return "Ultimate"
+}
+
+function Save-NovaCurrentAccount {
+    if (-not $Script:CurrentUser) { return $null }
+    $acc = Normalize-NovaAccount $Script:CurrentUser
+    $Script:CurrentUser = $acc
+    $accs = @(Load-Accounts)
+    $idx = -1
+    for ($i = 0; $i -lt $accs.Count; $i++) {
+        if ([string]$accs[$i].Email -eq [string]$acc.Email) { $idx = $i; break }
+    }
+    if ($idx -ge 0) { $accs[$idx] = $acc } else { $accs += $acc }
+    Save-Accounts $accs
+    $Script:Config.CurrentUser = $acc.Email
+    $Script:Config.Email = $acc.Email
+    $Script:Config.Plan = $acc.Plan
+    $Script:Config.PlanUntil = $acc.PlanUntil
+    $Script:Config.Balance = $acc.Balance
+    Save-Config
+    return $acc
+}
+
+function Set-NovaAccountPlan {
+    param([string]$Plan, [int]$Days = 30)
+    $acc = Normalize-NovaAccount $Script:CurrentUser
+    if (-not $acc) { return $null }
+    $base = Get-Date
+    $until = Get-NovaPlanUntil $acc
+    if ($until -and $until -gt $base -and (Get-NovaPlanRank $Plan) -ge (Get-NovaPlanRank $acc.Plan)) {
+        $base = $until
+    }
+    $acc.Plan = $Plan
+    $acc.PlanUntil = $base.AddDays($Days).ToString("o")
+    $Script:CurrentUser = $acc
+    return (Save-NovaCurrentAccount)
+}
+
+function Add-NovaBalance {
+    param([int]$Cents)
+    $acc = Normalize-NovaAccount $Script:CurrentUser
+    if (-not $acc) { return $null }
+    $acc.Balance = [int]$acc.Balance + $Cents
+    $Script:CurrentUser = $acc
+    return (Save-NovaCurrentAccount)
+}
 
 $Script:Logs = [System.Collections.ArrayList]::new()
 function Write-Log { param([string]$Msg,[string]$Level="INFO"); $line="$(Get-Date -Format 'HH:mm:ss') [$Level] $Msg"; [void]$Script:Logs.Add($line); Add-Content -Path $Script:LogPath -Value "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') [$Level] $Msg" -ErrorAction SilentlyContinue }
@@ -2014,7 +2183,18 @@ foreach ($t in $Script:Tweaks) { if ($t.Id -notin $props) { $Script:Config.Tweak
 
 # Auto-login
 $Script:CurrentUser = Auto-Login
-if ($Script:CurrentUser) { $Script:Config.Plan = "Pro"; $Script:Config.CurrentUser = $Script:CurrentUser.Email; $Script:Config.Email = $Script:CurrentUser.Email; Save-Config; Write-Log "Auto-login: $($Script:CurrentUser.Email)" "OK" }
+if ($Script:CurrentUser) {
+    $Script:CurrentUser = Normalize-NovaAccount $Script:CurrentUser
+    $Script:Config.Plan = $Script:CurrentUser.Plan
+    $Script:Config.PlanUntil = $Script:CurrentUser.PlanUntil
+    $Script:Config.Balance = $Script:CurrentUser.Balance
+    $Script:Config.CurrentUser = $Script:CurrentUser.Email
+    $Script:Config.Email = $Script:CurrentUser.Email
+    Save-Config
+    Write-Log "Auto-login: $($Script:CurrentUser.Email) ($($Script:CurrentUser.Plan))" "OK"
+} else {
+    $Script:Config.Plan = "Free"
+}
 
 # ---------- HTML (Vibrant Red Theme) ----------
 $HtmlPage = @'
@@ -2246,6 +2426,27 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
 .badge.os-mac{background:linear-gradient(135deg,var(--purple),#8833cc);color:#fff;box-shadow:0 2px 8px rgba(170,68,255,.25)}
 .badge.os-both{background:linear-gradient(135deg,var(--green),#00cc6a);color:#000;box-shadow:0 2px 8px rgba(0,255,136,.25)}
 .badge.unavailable{background:rgba(255,255,255,.06);color:var(--textmuted);border:1px solid rgba(255,255,255,.14)}
+.planbadge.free{background:linear-gradient(135deg,#2b2b3a,#3d3d52);box-shadow:0 2px 12px rgba(0,0,0,.4)}
+.planbadge.pro{background:linear-gradient(135deg,var(--red),var(--red2));box-shadow:0 2px 12px var(--redglow)}
+.planbadge.ultimate{background:linear-gradient(135deg,#ffc233,#ff7a00);color:#1c1300;box-shadow:0 2px 14px rgba(255,160,0,.35)}
+.badge.tier{background:rgba(255,255,255,.05);color:var(--textdim);border:1px solid rgba(255,255,255,.12)}
+.badge.tier-free{background:rgba(120,140,180,.12);color:#9fb3d6;border:1px solid rgba(120,140,180,.3)}
+.badge.tier-pro{background:rgba(255,26,46,.1);color:var(--red3);border:1px solid rgba(255,26,46,.32)}
+.badge.tier-ult{background:rgba(255,170,0,.11);color:var(--warn);border:1px solid rgba(255,170,0,.32)}
+.tweakcard.locked{opacity:.66;border-style:dashed}
+.tweakcard.locked:hover{transform:none;box-shadow:0 8px 30px rgba(0,0,0,.45)}
+.tweakcard.locked .toggle{pointer-events:none;opacity:.5}
+.acctgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+.acctcard{background:linear-gradient(145deg,rgba(17,17,25,.85),rgba(24,24,34,.85));border:1px solid var(--border);border-radius:var(--radius);padding:18px}
+.acctlabel{font-size:10px;text-transform:uppercase;letter-spacing:1.4px;color:var(--textmuted);font-weight:800;margin-bottom:8px}
+.acctvalue{font-size:28px;font-weight:900;letter-spacing:-.04em;line-height:1.1}
+.acctsub{font-size:11.5px;color:var(--textdim);margin-top:5px;line-height:1.6}
+.acctinput{width:100%;background:#0a0a10;border:1px solid var(--border);border-radius:9px;color:var(--text);padding:11px 12px;font-size:12.5px;font-family:inherit;margin-bottom:8px}
+.acctinput::placeholder{color:var(--textmuted)}
+.acctactions{display:flex;gap:8px;flex-wrap:wrap}
+.tierlist{display:grid;gap:10px;margin-top:4px}
+.tierrow{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 13px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.02);font-size:12.5px}
+.tierrow b{font-size:13px}
 
 /* Vibrant red outline */
 .rotating-outline{position:relative;overflow:visible}
@@ -2298,10 +2499,10 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
         <div class="login-error" id="registerError"></div>
       </div>
       <div style="margin-top:16px;padding:12px;background:linear-gradient(135deg,rgba(255,26,46,.08),rgba(255,26,46,.02));border:1px solid rgba(255,26,46,.25);border-radius:10px;font-size:11px;color:var(--textdim);line-height:1.7;text-align:center">
-        <div style="color:var(--red);font-weight:700;margin-bottom:4px">🔥 Upgrade to Pro</div>
+        <div style="color:var(--red);font-weight:700;margin-bottom:4px">🔥 Upgrade to Pro or Ultimate</div>
         Exclusive tweaks · Crosshair Overlay · Priority Support · Early Access
       </div>
-      <div class="login-footer">Auto-login enabled · Session saved locally · Everyone gets Pro</div>
+      <div class="login-footer">Auto-login enabled · Session saved locally · Free plan included</div>
     </div>
   </div>
 </div>
@@ -2310,8 +2511,8 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
 <div id="appContainer" style="display:none;width:100%;height:100vh;position:relative;z-index:1;">
 <div class="sidebar">
   <div class="brand">Nova Tweaks</div>
-  <div class="brandsub">Ultimate</div>
-  <div class="planbadge" id="planBadge">PRO</div>
+  <div class="brandsub">Performance Suite</div>
+  <div class="planbadge free" id="planBadge">FREE</div>
   <button class="navbtn active" data-page="home"><span class="navicon">◆</span>Home</button>
   <button class="navbtn" data-page="tweaks"><span class="navicon">⚙</span>All Tweaks</button>
   <div style="padding:14px 12px 6px;font-size:9px;text-transform:uppercase;letter-spacing:1.6px;color:var(--textmuted);font-weight:800">Tools</div>
@@ -2346,7 +2547,7 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:6px">
     <div>
       <h1 id="greeting" style="font-size:34px">Good evening</h1>
-      <div class="sub" id="homeSub" style="margin-bottom:0">0 tweaks on · Pro plan · All features unlocked</div>
+      <div class="sub" id="homeSub" style="margin-bottom:0">0 tweaks on · Free plan</div>
     </div>
     <div style="display:flex;gap:8px">
       <button class="btn" id="applyAllBtn">⚡ Apply All</button>
@@ -2372,10 +2573,10 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
       <h3 style="margin-bottom:10px;font-size:16px">Quickstart</h3>
       <div style="color:var(--textdim);font-size:13px;line-height:2">
         <div>▸ Create a restore point</div>
-        <div>▸ Enable Input Response Accelerator</div>
-        <div>▸ Enable Network Spike Smoother</div>
-        <div>▸ Turn on Game Booster</div>
-        <div>▸ Apply Potato Graphics</div>
+        <div>▸ Enable Input Response Accelerator <span style="color:var(--red3)">Pro</span></div>
+        <div>▸ Enable Network Spike Smoother <span style="color:var(--red3)">Pro</span></div>
+        <div>▸ Turn on Game Booster <span style="color:var(--red3)">Pro</span></div>
+        <div>▸ Apply Potato Graphics <span style="color:var(--warn)">Ultimate</span></div>
       </div>
     </div>
   </div>
@@ -2393,7 +2594,7 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
       <div style="font-size:11px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px;margin-top:4px">Categories</div>
     </div>
     <div class="card" style="flex:1;min-width:200px;text-align:center">
-      <div style="font-size:32px;font-weight:900;background:linear-gradient(135deg,var(--purple),#8833cc);-webkit-background-clip:text;-webkit-text-fill-color:transparent">PRO</div>
+      <div style="font-size:32px;font-weight:900;background:linear-gradient(135deg,var(--purple),#8833cc);-webkit-background-clip:text;-webkit-text-fill-color:transparent" id="statPlan">FREE</div>
       <div style="font-size:11px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px;margin-top:4px">Your Plan</div>
     </div>
   </div>
@@ -2577,17 +2778,59 @@ spotify.exe</textarea>
 <!-- SETTINGS -->
 <div class="page" id="page-settings">
   <h1>Settings</h1>
-  <div class="sub">License and account.</div>
-  <div class="card">
-    <label style="font-size:13px;display:block;margin-bottom:6px;font-weight:500">Email (for license)</label>
-    <input class="input" id="emailInput" style="margin-bottom:14px">
-    <label style="font-size:13px;display:block;margin-bottom:6px;font-weight:500">License key</label>
-    <input class="input" id="keyInput" style="margin-bottom:14px">
-    <button class="btn" id="activateBtn">Activate License</button>
-    <div style="margin-top:16px;color:var(--textdim);font-size:12px;line-height:1.8">
-      <b style="color:var(--text)">Pro:</b> All tweaks + Input Response Accelerator + Network Spike Smoother + Potato Graphics + full Game Booster. Everyone gets Pro.
+  <div class="sub">Plan, balance and license.</div>
+  <div class="acctgrid">
+    <div class="acctcard">
+      <div class="acctlabel">Current plan</div>
+      <div class="acctvalue" id="acctPlan">Free</div>
+      <div class="acctsub" id="acctPlanUntil">Free tier — no renewal date.</div>
     </div>
-    <h3 style="margin:18px 0 8px;font-size:14px">Account Sync</h3>
+    <div class="acctcard">
+      <div class="acctlabel">Giveaway balance</div>
+      <div class="acctvalue" id="acctBalance">$0.00</div>
+      <div class="acctsub">Credit from giveaway codes. Use it toward Pro or Ultimate.</div>
+    </div>
+    <div class="acctcard">
+      <div class="acctlabel">Signed in as</div>
+      <div class="acctvalue" id="acctEmail" style="font-size:16px;word-break:break-word">—</div>
+      <div class="acctsub">Accounts and balance stay on this device.</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <h3 style="margin-bottom:6px;font-size:14px">Redeem a gift code</h3>
+    <div style="font-size:12px;color:var(--textdim);margin-bottom:10px">Giveaway codes add credit to your balance. Each code works once per account.</div>
+    <input class="acctinput" id="giftCode" placeholder="NOVA-GIFT-…" autocomplete="off" spellcheck="false">
+    <button class="btn sm" id="giftRedeemBtn">Redeem to balance</button>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-bottom:6px;font-size:14px">Upgrade with balance</h3>
+    <div style="font-size:12px;color:var(--textdim);margin-bottom:12px">30 days per purchase. Balance is deducted immediately; no card is stored.</div>
+    <div class="tierlist">
+      <div class="tierrow"><div><b>Pro</b><div style="color:var(--textdim);font-size:11.5px">$5.99 · most tweaks, all crosshairs, macro</div></div><button class="btn sm" id="buyProBtn">Use balance</button></div>
+      <div class="tierrow"><div><b>Ultimate</b><div style="color:var(--textdim);font-size:11.5px">$12.99 · all 375 tweaks, Potato Graphics</div></div><button class="btn sm" id="buyUltimateBtn">Use balance</button></div>
+    </div>
+    <div style="margin-top:12px;font-size:11.5px;color:var(--textmuted);line-height:1.7">
+      Card, PayPal and Cash App checkout is on the website. A paid upgrade arrives as a license key — paste it below.
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-bottom:6px;font-size:14px">License key</h3>
+    <div style="font-size:12px;color:var(--textdim);margin-bottom:10px">Activating a key adds 30 days to your plan. Keys are validated locally.</div>
+    <input class="acctinput" id="keyInput" placeholder="NOVA-PRO-…" autocomplete="off" spellcheck="false">
+    <button class="btn sm" id="activateBtn">Activate license</button>
+    <div style="margin-top:12px;color:var(--textdim);font-size:11.5px;line-height:1.8">
+      <b style="color:var(--text)">Free</b> — 30 core tweaks, restore point, Classic crosshair.<br>
+      <b style="color:var(--text)">Pro</b> — most tweaks, every crosshair style, drag macro, ping and input work.<br>
+      <b style="color:var(--text)">Ultimate</b> — all 375 tweaks, advanced services, firmware controls, Potato Graphics.
+    </div>
+    <div id="acctMsg" style="display:none;margin-top:12px;font-size:12px;line-height:1.6"></div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-bottom:6px;font-size:14px">Account sync</h3>
     <div style="font-size:12px;color:var(--textdim);margin-bottom:8px">Export your account to a sync code, then import it on another device.</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
       <button class="btn ghost sm" id="exportSyncBtn">Export Sync Code</button>
@@ -2612,7 +2855,7 @@ spotify.exe</textarea>
 <div class="toast" id="toast"></div>
 
 <script>
-const state={plan:'Pro',tweaks:{},os:'unknown',user:null};
+const state={plan:'Free',tweaks:{},os:'unknown',user:null,balance:0,planUntil:null};
 window.onerror=(m,u,l)=>{const e=document.getElementById('loginError');if(e)e.textContent='JS Error: '+m+' (line '+l+')';console.error(m,u,l);};
 // Snowfall
 (function(){
@@ -2665,17 +2908,41 @@ document.getElementById('registerBtn').addEventListener('click',async()=>{
 });
 document.getElementById('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('loginBtn').click()});
 
+function setPlanUI(plan, planUntil, balance){
+  const p = plan || 'Free';
+  state.plan = p;
+  state.balance = Number(balance || 0);
+  state.planUntil = planUntil || null;
+  const pb = document.getElementById('planBadge');
+  if(pb){ pb.textContent = p.toUpperCase(); pb.className = 'planbadge ' + p.toLowerCase(); }
+  const ap = document.getElementById('acctPlan'); if(ap) ap.textContent = p;
+  const sp = document.getElementById('statPlan'); if(sp) sp.textContent = p.toUpperCase();
+  const ae = document.getElementById('acctEmail'); if(ae && state.user) ae.textContent = state.user.Email || '—';
+  const ab = document.getElementById('acctBalance'); if(ab) ab.textContent = '$' + (state.balance / 100).toFixed(2);
+  const au = document.getElementById('acctPlanUntil');
+  if(au){
+    if(p === 'Free') au.textContent = 'Free tier — no renewal date.';
+    else if(planUntil){ const d = new Date(planUntil); au.textContent = 'Active through ' + d.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'}); }
+    else au.textContent = '30-day plan.';
+  }
+  const cs = document.getElementById('chStyle');
+  if(cs){
+    [...cs.options].forEach(o => { o.disabled = (p === 'Free' && o.value !== 'cross'); });
+    if(p === 'Free' && cs.value !== 'cross'){ cs.value = 'cross'; chState.style = 'cross'; }
+  }
+  updateMacroAvailability();
+}
+
 function onLogin(acc){
   try{
   const st=document.getElementById('loginStatus'); if(st) st.textContent='Loading...';
-  state.user=acc;state.plan='Pro';
+  state.user=acc;
   document.getElementById('loginOverlay').style.display='none';
   document.getElementById('appContainer').style.display='flex';
   document.getElementById('accountBadge').style.display='flex';
   document.getElementById('userInfo').textContent=acc.Name||acc.Email;
   document.getElementById('accountAvatar').textContent=(acc.Name||acc.Email).charAt(0).toUpperCase();
-  document.getElementById('planBadge').textContent='PRO';
-  document.getElementById('emailInput').value=acc.Email;
+  setPlanUI(acc.Plan, acc.PlanUntil, acc.Balance);
   document.getElementById('keyInput').value=acc.LicenseKey||'';
   if(st) st.textContent='Loading tweaks...';
   loadTweaks().then(()=>{ if(st) st.textContent='Done'; }).catch(e=>{ if(st) st.textContent='Tweak load error: '+e; });
@@ -2718,6 +2985,7 @@ async function loadTweaks(){
   const r=await api('/api/tweaks/list');
   state.tweaks=r.tweaks||{};
   state.os=r.os||'unknown';
+  if(r.plan) setPlanUI(r.plan, r.planUntil, r.balance);
   renderCatBar();renderTweaks();updateCounts();updateMacroAvailability();
 }
 function tweaksFor(cat){
@@ -2730,28 +2998,39 @@ function renderTweaks(){
   const grid=document.getElementById('tweakGrid');
   const list=tweaksFor(currentCat);
   grid.innerHTML=list.map(t=>{
+    const locked = !!t.locked && !t.state;
     const checked=t.state?'checked':'';
-    const disabled=t.available?'':'disabled';
+    const disabled=(!t.available||locked)?'disabled':'';
     const riskCls=t.risk.toLowerCase();
-    const planBadge='<span class="badge pro">PRO</span>';
+    const tier=t.required||'Free';
+    const tierCls=tier==='Ultimate'?'ult':tier.toLowerCase();
+    const planBadge=`<span class="badge tier tier-${tierCls}">${tier.toUpperCase()}</span>`;
     const availBadge=t.available?'':'<span class="badge unavailable">Not on this PC</span>';
+    const lockBadge=locked?'<span class="badge unavailable">🔒 Locked</span>':'';
     const newBadge=t.id==='inputdelay'||t.id==='pingstab'||t.id==='bcdedit'?'<span class="badge new">NEW</span>':'';
     const osCls='os-'+(t.os||'').toLowerCase();
     const osBadge='<span class="badge '+osCls+'">'+(t.os||'')+'</span>';
-    return `<div class="tweakcard rotating-outline">
+    return `<div class="tweakcard rotating-outline${locked?' locked':''}" data-tweak="${t.id}">
       <div class="tweakhead">
-        <span class="badge ${riskCls}">${t.risk}</span>${osBadge}${availBadge}${planBadge}${newBadge}
+        <span class="badge ${riskCls}">${t.risk}</span>${osBadge}${availBadge}${planBadge}${lockBadge}${newBadge}
         <label class="toggle"><input type="checkbox" data-id="${t.id}" ${checked} ${disabled}><span class="slider"></span></label>
       </div>
       <div class="tweakname">${t.name}</div>
       <div class="tweakdesc">${t.desc}</div>
     </div>`;
   }).join('');
+  grid.querySelectorAll('.tweakcard.locked').forEach(card=>card.addEventListener('click',e=>{
+    if(e.target.closest('.toggle'))return;
+    const t=state.tweaks[card.dataset.tweak];
+    showToast('Locked: '+t.name+' needs '+t.required+'. Open Settings to upgrade.');
+  }));
   grid.querySelectorAll('input[type=checkbox]').forEach(cb=>cb.addEventListener('change',async e=>{
     const id=cb.dataset.id;const tw=state.tweaks[id];
-    if(cb.checked&&tw.risk!=='Safe'){if(!confirm(tw.name+'\n\nRisk: '+tw.risk+'\n'+tw.desc+'\n\nApply?')){cb.checked=false;return}}
+    const prev=!!tw.state;
+    if(cb.checked&&tw.risk!=='Safe'){if(!confirm(tw.name+'\n\nRisk: '+tw.risk+'\n'+tw.desc+'\n\nApply?')){cb.checked=prev;return}}
     const r=await api('/api/tweak/toggle',{id,state:cb.checked});
-    state.tweaks[id].state=cb.checked;
+    if(r.locked||r.success===false){cb.checked=prev;showToast(r.message||'Locked.');return;}
+    tw.state=cb.checked;
     showToast(r.message||(cb.checked?'Applied':'Reverted'));
     updateCounts();
   }));
@@ -2761,9 +3040,11 @@ function updateCounts(){
   const applied=all.filter(t=>t.state).length;
   const total=all.length;
   const available=all.filter(t=>t.available).length;
+  const unlocked=all.filter(t=>t.available&&!t.locked).length;
+  const locked=all.filter(t=>t.available&&t.locked).length;
   const pct=available?Math.min(100,Math.round(applied/available*100)):0;
   document.getElementById('ptsInfo').textContent=applied+' tweaks applied';
-  document.getElementById('homeSub').textContent=applied+' of '+available+' available tweaks on · '+total+' included · Pro plan';
+  document.getElementById('homeSub').textContent=applied+' of '+unlocked+' unlocked tweaks on · '+state.plan+' plan'+(locked?' · '+locked+' locked':'');
   document.getElementById('sugText').textContent=pct+'% optimized · '+applied+' of '+available+' available on this PC.';
   document.getElementById('progressFill').style.width=pct+'%';
   const hp=document.getElementById('homeProgress'); if(hp) hp.style.width=pct+'%';
@@ -2772,11 +3053,12 @@ function updateCounts(){
   const sc=document.getElementById('statCats'); if(sc) sc.textContent=total? (new Set(all.map(t=>t.cat))).size : 10;
 }
 
-const profiles=[{name:'Fortnite',desc:'DX11 and Performance mode',plan:'Pro',icon:'FN'},{name:'Fortnite Competitive',desc:'Fixed floor (lowest settings)',plan:'Pro',icon:'FC'},{name:'Marvel Rivals',desc:'Low-graphics competitive profile',plan:'Pro',icon:'MR'},{name:'AMD/Intel Potato',desc:'Works on any GPU. Removes texture packs.',plan:'Pro',icon:'AI'}];
-document.getElementById('profileList').innerHTML=profiles.map(p=>`<div class="profilecard"><div class="profileicon">${p.icon}</div><div style="flex:1"><div style="font-weight:700;font-size:14px">${p.name}</div><div style="font-size:12px;color:var(--textdim);margin-top:2px">${p.desc}</div></div><span class="badge pro">${p.plan}</span><button class="btn sm" data-profile="${p.name}">Apply</button></div>`).join('');
+const profiles=[{name:'Fortnite',desc:'DX11 and Performance mode',plan:'Ultimate',icon:'FN'},{name:'Fortnite Competitive',desc:'Fixed floor (lowest settings)',plan:'Ultimate',icon:'FC'},{name:'Marvel Rivals',desc:'Low-graphics competitive profile',plan:'Ultimate',icon:'MR'},{name:'AMD/Intel Potato',desc:'Works on any GPU. Removes texture packs.',plan:'Ultimate',icon:'AI'}];
+document.getElementById('profileList').innerHTML=profiles.map(p=>`<div class="profilecard"><div class="profileicon">${p.icon}</div><div style="flex:1"><div style="font-weight:700;font-size:14px">${p.name}</div><div style="font-size:12px;color:var(--textdim);margin-top:2px">${p.desc}</div></div><span class="badge tier tier-ult">${p.plan.toUpperCase()}</span><button class="btn sm" data-profile="${p.name}">Apply</button></div>`).join('');
 document.querySelectorAll('[data-profile]').forEach(b=>b.addEventListener('click',async()=>{
+  if(state.plan!=='Ultimate'){showToast('Graphics profiles need Ultimate. Open Account to upgrade.');return;}
   if(!confirm('This will change Fortnite graphics (Engine.ini).\nRevert anytime. Continue?'))return;
-  const r=await api('/api/potato',{profile:b.dataset.profile});showToast(r.message);
+  const r=await api('/api/potato',{profile:b.dataset.profile});showToast(r.message||(r.locked?r.message:'Applied'));
 }));
 
 document.getElementById('boostBtn').addEventListener('click',async()=>{
@@ -2794,10 +3076,60 @@ document.getElementById('restorePointBtn').addEventListener('click',async()=>{co
 document.getElementById('revertAllBtn').addEventListener('click',async()=>{if(!confirm('Revert ALL changes? Reboot recommended after.'))return;const r=await api('/api/revertall');showToast(r.message);await loadTweaks()});
 async function refreshLog(){const r=await api('/api/log');document.getElementById('logBox').textContent=r.log}
 document.getElementById('refreshLogBtn').addEventListener('click',refreshLog);
+function showAcctMsg(text, ok){
+  const el=document.getElementById('acctMsg');
+  if(!el) return;
+  el.style.display='block';
+  el.style.color=ok?'var(--green)':'var(--danger)';
+  el.textContent=text;
+}
+function applyPlanResponse(r){
+  setPlanUI(r.plan, r.planUntil, r.balance);
+  if(state.user){
+    state.user.Plan=r.plan;
+    state.user.PlanUntil=r.planUntil;
+    state.user.Balance=r.balance;
+  }
+  loadTweaks();
+}
+document.getElementById('giftRedeemBtn').addEventListener('click',async()=>{
+  const input=document.getElementById('giftCode');
+  const code=(input.value||'').trim();
+  if(!code){showAcctMsg('Enter a gift code first.',false);return;}
+  const r=await api('/api/gift/redeem',{code});
+  if(r.success){
+    input.value='';
+    applyPlanResponse(r);
+    showAcctMsg(r.message,true);
+    showToast(r.message);
+  } else {
+    showAcctMsg(r.message||'That code did not work.',false);
+  }
+});
+async function buyWithBalance(plan){
+  const r=await api('/api/plan/buy',{plan});
+  if(r.success){
+    applyPlanResponse(r);
+    showAcctMsg(r.message,true);
+    showToast(r.plan+' unlocked');
+  } else {
+    if(typeof r.balance==='number') setPlanUI(state.plan, state.planUntil, r.balance);
+    showAcctMsg(r.message||'Purchase failed.',false);
+  }
+}
+document.getElementById('buyProBtn').addEventListener('click',()=>buyWithBalance('Pro'));
+document.getElementById('buyUltimateBtn').addEventListener('click',()=>buyWithBalance('Ultimate'));
 document.getElementById('activateBtn').addEventListener('click',async()=>{
-  const r=await api('/api/activate',{email:document.getElementById('emailInput').value,key:document.getElementById('keyInput').value});
-  if(r.success){state.plan='Pro';document.getElementById('planBadge').textContent='PRO';showToast('License activated! Plan: Pro')}
-  else showToast(r.message||'Invalid key');
+  const key=(document.getElementById('keyInput').value||'').trim();
+  if(!key){showAcctMsg('Enter a license key first.',false);return;}
+  const r=await api('/api/activate',{key});
+  if(r.success){
+    applyPlanResponse(r);
+    showAcctMsg(r.message||('Plan: '+r.plan),true);
+    showToast('License activated — '+r.plan);
+  } else {
+    showAcctMsg(r.message||'Invalid key.',false);
+  }
 });
 
 
@@ -2861,8 +3193,14 @@ function updateMacroUI(){
 }
 function updateMacroAvailability(){
   const win=state.os==='Windows';
-  ['captureStartBtn','captureEndBtn','macroStartBtn','macroStopBtn'].forEach(id=>{const el=document.getElementById(id);if(el)el.disabled=!win});
-  const w=document.getElementById('macroWarn');if(w)w.style.display=win?'none':'block';
+  const paid=state.plan==='Pro'||state.plan==='Ultimate';
+  ['captureStartBtn','captureEndBtn','macroStartBtn','macroStopBtn'].forEach(id=>{const el=document.getElementById(id);if(el)el.disabled=!win||!paid});
+  const w=document.getElementById('macroWarn');
+  if(w){
+    if(!win){ w.style.display='block'; w.textContent='Drag Macro uses the Windows cursor API, so it is disabled on macOS.'; }
+    else if(!paid){ w.style.display='block'; w.textContent='Drag Macro is a Pro feature. Open Account and upgrade, or redeem a gift code, to unlock it.'; }
+    else { w.style.display='none'; }
+  }
 }
 async function captureMacroPoint(which){
   if(state.os!=='Windows'){showToast('Drag Macro is Windows only');return;}
@@ -3018,8 +3356,10 @@ function Invoke-NovaApi {
         if ($Path -eq "/api/login") {
             $result = Verify-Login $body.email $body.password
             if ($result.success) {
-                $Script:CurrentUser = $result.account
-                $Script:Config.Plan = "Pro"
+                $Script:CurrentUser = Normalize-NovaAccount $result.account
+                $Script:Config.Plan = $Script:CurrentUser.Plan
+                $Script:Config.PlanUntil = $Script:CurrentUser.PlanUntil
+                $Script:Config.Balance = $Script:CurrentUser.Balance
                 $Script:Config.CurrentUser = $result.account.Email
                 Save-Config
             }
@@ -3034,29 +3374,47 @@ function Invoke-NovaApi {
         if ($Path -eq "/api/logout") {
             Logout
             $Script:CurrentUser = $null
+            $Script:Config.Plan = "Free"
+            $Script:Config.PlanUntil = $null
+            $Script:Config.Balance = 0
             $Script:Config.CurrentUser = ""
             Save-Config
             return (ConvertTo-NovaJson @{ success = $true })
         }
 
         if ($Path -eq "/api/tweaks/list") {
+            $activePlan = Get-NovaEffectivePlan
             $tweakObj = [ordered]@{}
             foreach ($t in $Script:Tweaks) {
                 $isAvail = if ($IsWin) { $t.Win } else { $t.Mac }
                 $osLabel = if ($t.Win -and $t.Mac) { "Both" } elseif ($t.Win) { "Windows" } else { "Mac" }
+                $required = Get-NovaTweakRequiredPlan $t
+                $allowed = Test-NovaTweakAllowed $t $activePlan
                 $tweakObj[$t.Id] = @{
                     id        = $t.Id
                     name      = $t.Name
                     desc      = $t.Desc
                     risk      = $t.Risk
-                    free      = $t.Free
+                    free      = ($required -eq "Free")
+                    required  = $required
+                    locked    = [bool]($isAvail -and -not $allowed)
                     cat       = $t.Cat
                     os        = $osLabel
                     available = [bool]$isAvail
                     state     = (Get-NovaTweakState ([string]$t.Id))
                 }
             }
-            return (ConvertTo-NovaJson @{ tweaks = $tweakObj; os = $(if ($IsWin) { "Windows" } else { "Mac" }) })
+            $balance = if ($Script:CurrentUser) { [int]$Script:CurrentUser.Balance } else { [int]$Script:Config.Balance }
+            $planUntil = if ($Script:CurrentUser) { $Script:CurrentUser.PlanUntil } else { $Script:Config.PlanUntil }
+            return (ConvertTo-NovaJson @{
+                tweaks = $tweakObj
+                os = $(if ($IsWin) { "Windows" } else { "Mac" })
+                plan = $activePlan
+                balance = $balance
+                planUntil = $planUntil
+                freeCount = @($Script:Tweaks | Where-Object { $_.Id -in $Script:FreeTweakIds }).Count
+                paidCount = @($Script:Tweaks | Where-Object { -not (Test-NovaProTweak $_) }).Count
+            })
         }
 
         if ($Path -eq "/api/macro/capture") {
@@ -3067,6 +3425,7 @@ function Invoke-NovaApi {
         }
 
         if ($Path -eq "/api/macro/start") {
+            if ((Get-NovaPlanRank (Get-NovaEffectivePlan)) -lt 1) { return (ConvertTo-NovaJson @{ success = $false; locked = $true; required = "Pro"; message = "Drag Macro needs Pro." }) }
             $res = Start-NovaMacro `
                 -StartX ([int]$body.start.x) -StartY ([int]$body.start.y) `
                 -EndX ([int]$body.end.x) -EndY ([int]$body.end.y) `
@@ -3102,6 +3461,18 @@ function Invoke-NovaApi {
             $tw = $Script:Tweaks | Where-Object { $_.Id -eq $body.id } | Select-Object -First 1
             if (-not $tw) { return (ConvertTo-NovaJson @{ message = "Tweak not found." }) }
             $desired = [bool]$body.state
+            if ($desired) {
+                $activePlan = Get-NovaEffectivePlan
+                if (-not (Test-NovaTweakAllowed $tw $activePlan)) {
+                    $required = Get-NovaTweakRequiredPlan $tw
+                    return (ConvertTo-NovaJson @{
+                        success = $false
+                        locked = $true
+                        required = $required
+                        message = "Locked: $($tw.Name) needs $required. Open Settings to upgrade."
+                    })
+                }
+            }
             Set-NovaTweakState ([string]$body.id) $desired
             Save-Config
             $msg = "Reverted: $($tw.Name)"
@@ -3115,41 +3486,49 @@ function Invoke-NovaApi {
                 Invoke-ServiceRestore -Name $tw.Svc
                 $msg = "Reverted: $($tw.Name)"
             }
-            return (ConvertTo-NovaJson @{ message = $msg })
+            return (ConvertTo-NovaJson @{ success = $true; message = $msg })
         }
 
         if ($Path -eq "/api/inputdelay") {
+            if ((Get-NovaPlanRank (Get-NovaEffectivePlan)) -lt 1) { return (ConvertTo-NovaJson @{ success = $false; locked = $true; required = "Pro"; message = "Input Response Accelerator needs Pro." }) }
             Invoke-InputDelayReducer; Invoke-MousePrecision; Invoke-KeyboardLatency; Invoke-USBPolling
             return (ConvertTo-NovaJson @{ message = "Input Response Accelerator applied (10 changes)." })
         }
 
         if ($Path -eq "/api/pingstab") {
+            if ((Get-NovaPlanRank (Get-NovaEffectivePlan)) -lt 1) { return (ConvertTo-NovaJson @{ success = $false; locked = $true; required = "Pro"; message = "Network Spike Smoother needs Pro." }) }
             Invoke-PingStabilizer
             return (ConvertTo-NovaJson @{ message = "Network Spike Smoother applied." })
         }
 
         if ($Path -eq "/api/booster") {
+            if ((Get-NovaPlanRank (Get-NovaEffectivePlan)) -lt 1) { return (ConvertTo-NovaJson @{ success = $false; locked = $true; required = "Pro"; message = "Game Booster needs Pro." }) }
             Invoke-GameBooster
             return (ConvertTo-NovaJson @{ message = "Game Booster complete." })
         }
 
         if ($Path -eq "/api/potato") {
+            if ((Get-NovaPlanRank (Get-NovaEffectivePlan)) -lt 2) { return (ConvertTo-NovaJson @{ success = $false; locked = $true; required = "Ultimate"; message = "Potato Graphics needs Ultimate." }) }
             Invoke-PotatoGraphics
             return (ConvertTo-NovaJson @{ message = "Potato Graphics applied." })
         }
 
         if ($Path -eq "/api/applyall") {
+            $activePlan = Get-NovaEffectivePlan
             $count = 0
+            $skipped = 0
             foreach ($t in $Script:Tweaks) {
                 $isAvail = if ($IsWin) { $t.Win } else { $t.Mac }
-                if ($isAvail) {
-                    Set-NovaTweakState ([string]$t.Id) $true
-                    try { & $t.Action } catch {}
-                    $count++
-                }
+                if (-not $isAvail) { continue }
+                if (-not (Test-NovaTweakAllowed $t $activePlan)) { $skipped++; continue }
+                Set-NovaTweakState ([string]$t.Id) $true
+                try { & $t.Action } catch {}
+                $count++
             }
             Save-Config
-            return (ConvertTo-NovaJson @{ message = "Applied $count tweaks." })
+            $msg = "Applied $count tweaks."
+            if ($skipped -gt 0) { $msg += " $skipped locked tweaks were skipped." }
+            return (ConvertTo-NovaJson @{ message = $msg; applied = $count; skipped = $skipped })
         }
 
         if ($Path -eq "/api/sysinfo") {
@@ -3204,26 +3583,75 @@ function Invoke-NovaApi {
             return (ConvertTo-NovaJson @{ log = $logContent })
         }
 
+        if ($Path -eq "/api/gift/redeem") {
+            if (-not $Script:CurrentUser) { return (ConvertTo-NovaJson @{ success = $false; message = "Sign in to redeem a gift code." }) }
+            $code = ([string]$body.code).Trim().ToUpper()
+            $cents = Test-NovaGiftCode $code
+            if (-not $cents) { return (ConvertTo-NovaJson @{ success = $false; message = "That gift code is not valid." }) }
+            $acc = Normalize-NovaAccount $Script:CurrentUser
+            $redeemed = @($acc.Redeemed)
+            if ($code -in $redeemed) { return (ConvertTo-NovaJson @{ success = $false; message = "That gift code was already redeemed on this account." }) }
+            $acc.Redeemed = @($redeemed + $code)
+            $acc.Balance = [int]$acc.Balance + [int]$cents
+            $Script:CurrentUser = $acc
+            $updated = Save-NovaCurrentAccount
+            return (ConvertTo-NovaJson @{
+                success = $true
+                message = ("Added $" + ([math]::Round($cents / 100, 2)).ToString("0.00") + " to your balance.")
+                balance = [int]$updated.Balance
+                plan = $updated.Plan
+                planUntil = $updated.PlanUntil
+            })
+        }
+
+        if ($Path -eq "/api/plan/buy") {
+            if (-not $Script:CurrentUser) { return (ConvertTo-NovaJson @{ success = $false; message = "Sign in to change your plan." }) }
+            $target = switch (([string]$body.plan).ToLower()) { "pro" { "Pro" } "ultimate" { "Ultimate" } default { $null } }
+            if (-not $target) { return (ConvertTo-NovaJson @{ success = $false; message = "Unknown plan." }) }
+            $acc = Normalize-NovaAccount $Script:CurrentUser
+            if ((Get-NovaPlanRank $acc.Plan) -gt (Get-NovaPlanRank $target)) {
+                return (ConvertTo-NovaJson @{ success = $false; message = "You are already on $($acc.Plan), which is higher than $target." })
+            }
+            $cost = Get-NovaPlanPriceCents $target
+            $balance = [int]$acc.Balance
+            if ($balance -lt $cost) {
+                $short = $cost - $balance
+                return (ConvertTo-NovaJson @{
+                    success = $false
+                    balance = $balance
+                    cost = $cost
+                    shortfall = $short
+                    message = ("Balance is $" + ([math]::Round($balance / 100, 2)).ToString("0.00") + " — you need $" + ([math]::Round($cost / 100, 2)).ToString("0.00") + ". Redeem a gift code or buy a license on the website.")
+                })
+            }
+            $acc.Balance = $balance - $cost
+            $Script:CurrentUser = $acc
+            $updated = Set-NovaAccountPlan $target 30
+            $until = Get-NovaPlanUntil $updated
+            return (ConvertTo-NovaJson @{
+                success = $true
+                plan = $updated.Plan
+                planUntil = $updated.PlanUntil
+                balance = [int]$updated.Balance
+                message = ("$target active through " + $(if ($until) { $until.ToString("MMM d, yyyy") } else { "30 days" }) + ". Balance left: $" + ([math]::Round($updated.Balance / 100, 2)).ToString("0.00") + ".")
+            })
+        }
+
         if ($Path -eq "/api/activate") {
-            $Script:Config.Email = $body.email
-            $Script:Config.LicenseKey = $body.key
-            $success = $false
-            try {
-                $resp = Invoke-RestMethod -Uri "https://api.gumroad.com/v2/licenses/verify" -Method POST -Body @{ product_id = "YOUR_PRODUCT_ID"; license_key = $body.key } -ErrorAction Stop
-                if ($resp.success) { $success = $true }
-            } catch {
-                if ($body.key -match "^Nova Tweaks-") { $success = $true }
+            if (-not $Script:CurrentUser) { return (ConvertTo-NovaJson @{ success = $false; message = "Sign in before activating a license key." }) }
+            $key = ([string]$body.key).Trim()
+            $kind = Test-NovaLicenseKey $key
+            if (-not $kind) {
+                return (ConvertTo-NovaJson @{ success = $false; message = "Invalid or tampered license key." })
             }
-            if ($success) {
-                $Script:Config.Plan = "Pro"
-                Save-Config
-                if ($Script:CurrentUser) {
-                    $accs = @(Load-Accounts)
-                    $a = $accs | Where-Object { $_.Email -eq $Script:CurrentUser.Email } | Select-Object -First 1
-                    if ($a) { $a.Plan = "Pro"; $a.LicenseKey = $body.key; Save-Accounts $accs }
-                }
-            }
-            return (ConvertTo-NovaJson @{ success = $success; message = $(if ($success) { "License activated! Plan: Pro" } else { "Invalid license key." }) })
+            $target = if ($kind -eq "ULT") { "Ultimate" } else { "Pro" }
+            $acc = Normalize-NovaAccount $Script:CurrentUser
+            $acc.LicenseKey = $key
+            $Script:CurrentUser = $acc
+            $updated = Set-NovaAccountPlan $target 30
+            $until = Get-NovaPlanUntil $updated
+            $msg = "$target activated through " + $(if ($until) { $until.ToString("MMM d, yyyy") } else { "30 days" }) + "."
+            return (ConvertTo-NovaJson @{ success = $true; plan = $updated.Plan; planUntil = $updated.PlanUntil; balance = [int]$updated.Balance; message = $msg })
         }
 
         return (ConvertTo-NovaJson @{ success = $false; message = "Unknown endpoint: $Path" })
