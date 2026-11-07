@@ -162,9 +162,22 @@
     noteEl.style.color = warn ? "var(--amber)" : "";
   }
 
+  function directCheckoutLink(plan) {
+    const raw = (plan && (plan.checkout || plan.sellauth || plan.url)) || "";
+    return isUrl(raw) ? raw.trim() : "";
+  }
+
   function openModal(planName, productName) {
     const plan = plans[planName];
-    if (!modal || !plan) return;
+    if (!plan) return;
+
+    const direct = directCheckoutLink(plan);
+    if (direct) {
+      window.open(direct, "_blank", "noopener");
+      return;
+    }
+
+    if (!modal) return;
     activePlan = plan;
     lastFocus = document.activeElement;
 

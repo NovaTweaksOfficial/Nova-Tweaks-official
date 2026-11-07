@@ -23,6 +23,8 @@ window.NOVA_CONFIG = {
   pro: {
     label: "Pro",
     price: 5.99,
+    // Direct checkout (e.g. SellAuth). When set, Buy opens this URL.
+    checkout: "https://nova-tweaks.mysellauth.com/product/nova-tweaks-pro",
     stripe: "",
     paypal: "",
     cashapp: ""
@@ -31,6 +33,8 @@ window.NOVA_CONFIG = {
   ultimate: {
     label: "Ultimate",
     price: 12.99,
+    // Direct checkout (e.g. SellAuth). When set, Buy opens this URL.
+    checkout: "https://nova-tweaks.mysellauth.com/product/nova-tweaks-ultimate",
     stripe: "",
     paypal: "",
     cashapp: ""
