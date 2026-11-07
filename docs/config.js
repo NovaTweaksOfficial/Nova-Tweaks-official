@@ -9,9 +9,9 @@
 window.NOVA_CONFIG = {
   version: "v1",
 
-  windowsDownload: "https://github.com/r00ster21714/fl3sh-optimizer/releases/latest/download/NovaTweaks.exe",
+  windowsDownload: "https://github.com/NovaTweaksOfficial/fl3sh-optimizer/releases/latest/download/NovaTweaks.exe",
   macDownload: "downloads/NovaTweaks-macOS.zip",
-  github: "https://github.com/r00ster21714/fl3sh-optimizer",
+  github: "https://github.com/NovaTweaksOfficial/fl3sh-optimizer",
 
   // Optional trust links
   virusTotal: "",

@@ -19,7 +19,7 @@ The Windows download points at the latest GitHub release asset, so it always ser
 newest build without editing the site:
 
 ```
-https://github.com/r00ster21714/fl3sh-optimizer/releases/latest/download/NovaTweaks.exe
+https://github.com/NovaTweaksOfficial/fl3sh-optimizer/releases/latest/download/NovaTweaks.exe
 ```
 
 ## Enable GitHub Pages (one time)
@@ -27,7 +27,7 @@ https://github.com/r00ster21714/fl3sh-optimizer/releases/latest/download/NovaTwe
 1. Push this folder to `main`.
 2. Repo → **Settings → Pages**.
 3. Source: **Deploy from a branch** → Branch `main`, folder `/docs` → Save.
-4. Wait ~1 minute. URL: `https://r00ster21714.github.io/fl3sh-optimizer/`
+4. Wait ~1 minute. URL: `https://NovaTweaksOfficial.github.io/fl3sh-optimizer/`
 
 Or via API (needs a token with `repo` scope):
 
@@ -35,7 +35,7 @@ Or via API (needs a token with `repo` scope):
 curl -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "Accept: application/vnd.github+json" \
-  https://api.github.com/repos/r00ster21714/fl3sh-optimizer/pages \
+  https://api.github.com/repos/NovaTweaksOfficial/fl3sh-optimizer/pages \
   -d '{"source":{"branch":"main","path":"/docs"}}'
 ```
 
@@ -97,7 +97,7 @@ a substitute for a real licensing backend.
 1. Add a file named `CNAME` in this folder containing only the domain, e.g. `novatweaks.gg`.
 2. At your DNS provider, point the apex at GitHub Pages:
    - `A` records → `185.199.108.153`, `185.199.109.153`, `185.199.110.153`, `185.199.111.153`
-   - or `CNAME` for `www` → `r00ster21714.github.io`
+   - or `CNAME` for `www` → `NovaTweaksOfficial.github.io`
 3. Repo → Settings → Pages → Custom domain → enter the domain → Save → enable **Enforce HTTPS**.
 
 ## Updating the site

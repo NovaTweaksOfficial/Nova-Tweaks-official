@@ -18,7 +18,7 @@
   if (winEl) {
     winEl.href = isUrl(CFG.windowsDownload)
       ? CFG.windowsDownload
-      : "https://github.com/r00ster21714/fl3sh-optimizer/releases/latest/download/NovaTweaks.exe";
+      : "https://github.com/NovaTweaksOfficial/fl3sh-optimizer/releases/latest/download/NovaTweaks.exe";
   }
 
   const macEl = $("#macDownload");
@@ -26,7 +26,7 @@
     macEl.href = CFG.macDownload || "downloads/NovaTweaks-macOS.zip";
   }
 
-  const gh = CFG.github || "https://github.com/r00ster21714/fl3sh-optimizer";
+  const gh = CFG.github || "https://github.com/NovaTweaksOfficial/fl3sh-optimizer";
   const githubLink = $("#githubLink");
   if (githubLink) githubLink.href = gh;
   const releaseLink = $("#releaseLink");
