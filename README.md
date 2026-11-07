@@ -18,10 +18,14 @@ settings (`pmset`, `nvram`, `networksetup`, Spotlight, Time Machine) ask for adm
 action; the app itself never runs as root.
 
 The app also includes a Windows **Drag Macro** (capture start/end, adjustable swipe duration, hold time, repeat
-and loop) and a **BIOS / UEFI** page that detects firmware, memory speed, XMP/EXPO, Secure Boot, boot mode,
+and loop), an **FPS Booster** that applies Game Mode, capture-off, scheduling priority, Fortnite GPU preference,
+power-plan and memory changes, and a **live network panel** that samples real ICMP pings and shows average ping,
+jitter, packet loss and a rolling chart. **Badges and daily streaks** are computed from real account activity —
+sign-in streaks, distinct tweaks applied, network tweaks, clean sweeps, gifts and plan tier. A **BIOS / UEFI**
+page detects firmware, memory speed, XMP/EXPO, Secure Boot, boot mode,
 VBS/HVCI and TPM. Nova Tweaks never flashes or silently edits firmware; it reports what is set, gives UEFI
 guidance, and can restart straight into firmware settings. Utility pages live in a top toolbar under a vibrant
-red sweep outline.
+red sweep outline, and tweak cards are grouped by plain-language subcategory inside each tab.
 
 ## Plans and accounts
 

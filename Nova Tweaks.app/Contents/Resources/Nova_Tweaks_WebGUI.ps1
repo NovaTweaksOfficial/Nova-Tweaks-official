@@ -22,7 +22,7 @@ if (-not (Test-Path $Script:LogPath)) { New-Item -ItemType File -Path $Script:Lo
 
 # ---------- Account System ----------
 function Load-Accounts { if (Test-Path $Script:AccountsPath) { try { return @(Get-Content $Script:AccountsPath -Raw | ConvertFrom-Json) } catch { return @() } }; return @() }
-function Save-Accounts { param($accs) $accs | ConvertTo-Json -Depth 5 | Set-Content $Script:AccountsPath -Encoding UTF8 }
+function Save-Accounts { param($accs) $accs | ConvertTo-Json -Depth 8 | Set-Content $Script:AccountsPath -Encoding UTF8 }
 function Find-Account { param($email) (Load-Accounts) | Where-Object { $_.Email -eq $email } | Select-Object -First 1 }
 function Hash-Pass { param($p) [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($p + "Nova Tweaks_SALT_2026")) }
 function Normalize-NovaAccount { param($acc)
@@ -33,6 +33,17 @@ function Normalize-NovaAccount { param($acc)
     if ($names -notcontains "Balance") { $acc | Add-Member -NotePropertyName Balance -NotePropertyValue 0 -Force }
     if ($names -notcontains "PlanUntil") { $acc | Add-Member -NotePropertyName PlanUntil -NotePropertyValue $null -Force }
     if ($names -notcontains "Redeemed") { $acc | Add-Member -NotePropertyName Redeemed -NotePropertyValue @() -Force }
+    if ($names -notcontains "Streak") { $acc | Add-Member -NotePropertyName Streak -NotePropertyValue 0 -Force }
+    if ($names -notcontains "BestStreak") { $acc | Add-Member -NotePropertyName BestStreak -NotePropertyValue 0 -Force }
+    if ($names -notcontains "LastActiveDay") { $acc | Add-Member -NotePropertyName LastActiveDay -NotePropertyValue "" -Force }
+    if ($names -notcontains "Badges") { $acc | Add-Member -NotePropertyName Badges -NotePropertyValue @() -Force }
+    if ($names -notcontains "AppliedEver") { $acc | Add-Member -NotePropertyName AppliedEver -NotePropertyValue @() -Force }
+    if ($names -notcontains "CleanSweeps") { $acc | Add-Member -NotePropertyName CleanSweeps -NotePropertyValue 0 -Force }
+    if (-not $acc.Badges) { $acc.Badges = @() }
+    if (-not $acc.AppliedEver) { $acc.AppliedEver = @() }
+    if ($null -eq $acc.Streak) { $acc.Streak = 0 }
+    if ($null -eq $acc.BestStreak) { $acc.BestStreak = 0 }
+    if ($null -eq $acc.CleanSweeps) { $acc.CleanSweeps = 0 }
     if ($acc.Plan -ne "Free" -and -not $acc.PlanUntil) {
         # Legacy builds unlocked Pro for everyone; only a dated plan counts as paid.
         $acc.Plan = "Free"
@@ -45,7 +56,7 @@ function Normalize-NovaAccount { param($acc)
 function Create-Account { param($email,$password,$name)
     $accs = @(Load-Accounts)
     if ($accs | Where-Object { $_.Email -eq $email }) { return @{ success=$false; message="Account already exists." } }
-    $acc = @{ Email=$email; PasswordHash=(Hash-Pass $password); Name=$name; Plan="Free"; LicenseKey=""; Balance=0; PlanUntil=$null; Redeemed=@(); Created=(Get-Date).ToString("o"); LastLogin=(Get-Date).ToString("o") }
+    $acc = @{ Email=$email; PasswordHash=(Hash-Pass $password); Name=$name; Plan="Free"; LicenseKey=""; Balance=0; PlanUntil=$null; Redeemed=@(); Streak=0; BestStreak=0; LastActiveDay=""; Badges=@(); AppliedEver=@(); CleanSweeps=0; Created=(Get-Date).ToString("o"); LastLogin=(Get-Date).ToString("o") }
     $accs += $acc; Save-Accounts $accs
     return @{ success=$true; message="Account created."; account=$acc }
 }
@@ -243,7 +254,137 @@ function Add-NovaBalance {
     return (Save-NovaCurrentAccount)
 }
 
+# ---------- Badges and streaks ----------
+function Get-NovaBadgeDefs {
+    return @(
+        @{ id="first-boot";   name="First Boot";      icon="🚀"; desc="Created your Nova Tweaks account." },
+        @{ id="streak-3";     name="Warm Up";         icon="🔥"; desc="Signed in 3 days in a row." },
+        @{ id="week-warrior"; name="Week Warrior";    icon="🗓"; desc="Signed in 7 days in a row." },
+        @{ id="fortnight";    name="Fortnight";       icon="⚔"; desc="Signed in 14 days in a row." },
+        @{ id="monthly-grind";name="Monthly Grind";   icon="🏆"; desc="Signed in 30 days in a row." },
+        @{ id="tinkerer";     name="Tinkerer";        icon="🔧"; desc="Applied 5 different tweaks." },
+        @{ id="optimizer";    name="Optimizer";       icon="⚙"; desc="Applied 25 different tweaks." },
+        @{ id="maxed-out";    name="Maxed Out";       icon="💯"; desc="Applied 75 different tweaks." },
+        @{ id="network-guru"; name="Network Guru";    icon="📡"; desc="Applied 6 or more network tweaks." },
+        @{ id="clean-sweep";  name="Clean Sweep";     icon="🧹"; desc="Used Revert All at least once." },
+        @{ id="gift-hunter";  name="Gift Hunter";     icon="🎁"; desc="Redeemed a giveaway code." },
+        @{ id="pro-player";   name="Pro Player";      icon="🥇"; desc="Activated a Pro or Ultimate plan." },
+        @{ id="ultimate";     name="Ultimate";        icon="👑"; desc="Activated the Ultimate plan." }
+    )
+}
+
+function Update-NovaBadges {
+    if (-not $Script:CurrentUser) { return $false }
+    $acc = Normalize-NovaAccount $Script:CurrentUser
+    $existing = @($acc.Badges | Where-Object { $_ -and $_.id })
+    $have = @{}
+    foreach ($b in $existing) { $have[[string]$b.id] = $b }
+    $want = New-Object System.Collections.Generic.List[string]
+    [void]$want.Add("first-boot")
+    if ([int]$acc.Streak -ge 3) { [void]$want.Add("streak-3") }
+    if ([int]$acc.Streak -ge 7) { [void]$want.Add("week-warrior") }
+    if ([int]$acc.Streak -ge 14) { [void]$want.Add("fortnight") }
+    if ([int]$acc.Streak -ge 30) { [void]$want.Add("monthly-grind") }
+    $appliedCount = @($acc.AppliedEver | Where-Object { $_ }).Count
+    if ($appliedCount -ge 5) { [void]$want.Add("tinkerer") }
+    if ($appliedCount -ge 25) { [void]$want.Add("optimizer") }
+    if ($appliedCount -ge 75) { [void]$want.Add("maxed-out") }
+    $networkIds = @("pingstab","nagle","autotune","qos","dnsgoogle","dnsquad9","flushdnscache","rscdisable","initialrto","wifipowersave","eeeoff","flowcontroloff")
+    $networkApplied = @($networkIds | Where-Object { $_ -in @($acc.AppliedEver) }).Count
+    if ($networkApplied -ge 6) { [void]$want.Add("network-guru") }
+    if ([int]$acc.CleanSweeps -ge 1) { [void]$want.Add("clean-sweep") }
+    if (@($acc.Redeemed | Where-Object { $_ }).Count -ge 1) { [void]$want.Add("gift-hunter") }
+    if ((Get-NovaPlanRank $acc.Plan) -ge 1) { [void]$want.Add("pro-player") }
+    if ($acc.Plan -eq "Ultimate") { [void]$want.Add("ultimate") }
+
+    $changed = $false
+    foreach ($id in $want) {
+        if (-not $have.ContainsKey($id)) {
+            $existing += @{ id=$id; earned=(Get-Date).ToString("o") }
+            $have[$id] = $true
+            $changed = $true
+        }
+    }
+    if ($changed) {
+        $acc.Badges = @($existing)
+        $Script:CurrentUser = $acc
+    }
+    return $changed
+}
+
+function Get-NovaBadgeState {
+    $acc = $null
+    if ($Script:CurrentUser) { $acc = Normalize-NovaAccount $Script:CurrentUser }
+    $earned = @{}
+    if ($acc) {
+        foreach ($b in @($acc.Badges)) {
+            if ($b -and $b.id) { $earned[[string]$b.id] = [string]$b.earned }
+        }
+    }
+    $out = New-Object System.Collections.ArrayList
+    foreach ($d in (Get-NovaBadgeDefs)) {
+        $has = $earned.ContainsKey([string]$d.id)
+        [void]$out.Add(@{
+            id = $d.id; name = $d.name; icon = $d.icon; desc = $d.desc
+            earned = $has
+            earnedOn = $(if ($has) { $earned[[string]$d.id] } else { $null })
+        })
+    }
+    return @($out)
+}
+
+function Add-NovaAppliedTweaks {
+    param([string[]]$Ids)
+    if (-not $Script:CurrentUser -or -not $Ids) { return }
+    $acc = Normalize-NovaAccount $Script:CurrentUser
+    $applied = @($acc.AppliedEver | Where-Object { $_ })
+    $added = $false
+    foreach ($id in $Ids) {
+        if ($id -and $id -notin $applied) {
+            $applied += $id
+            $added = $true
+        }
+    }
+    if ($added) {
+        $acc.AppliedEver = @($applied)
+        $Script:CurrentUser = $acc
+        Update-NovaBadges | Out-Null
+        Save-NovaCurrentAccount | Out-Null
+    }
+}
+
+function Add-NovaAppliedTweak {
+    param([string]$Id)
+    Add-NovaAppliedTweaks -Ids @($Id)
+}
+
+function Update-NovaStreak {
+    if (-not $Script:CurrentUser) { return $null }
+    $acc = Normalize-NovaAccount $Script:CurrentUser
+    $today = (Get-Date).Date
+    $todayKey = $today.ToString("yyyy-MM-dd")
+    $last = $null
+    if ($acc.LastActiveDay) {
+        try { $last = [datetime]::ParseExact([string]$acc.LastActiveDay, "yyyy-MM-dd", $null) } catch {}
+    }
+    $changed = $false
+    if (-not $last -or $last.Date -lt $today.AddDays(-1) -or $last.Date -gt $today) {
+        $acc.Streak = 1
+        $changed = $true
+    } elseif ($last.Date -eq $today.AddDays(-1)) {
+        $acc.Streak = [int]$acc.Streak + 1
+        $changed = $true
+    }
+    if ([string]$acc.LastActiveDay -ne $todayKey) { $acc.LastActiveDay = $todayKey; $changed = $true }
+    if ([int]$acc.Streak -gt [int]$acc.BestStreak) { $acc.BestStreak = [int]$acc.Streak; $changed = $true }
+    $Script:CurrentUser = $acc
+    $badgeChanged = Update-NovaBadges
+    if ($changed -or $badgeChanged) { Save-NovaCurrentAccount | Out-Null }
+    return $Script:CurrentUser
+}
+
 $Script:Logs = [System.Collections.ArrayList]::new()
+$Script:NetHistory = [System.Collections.ArrayList]::new()
 function Write-Log { param([string]$Msg,[string]$Level="INFO"); $line="$(Get-Date -Format 'HH:mm:ss') [$Level] $Msg"; [void]$Script:Logs.Add($line); Add-Content -Path $Script:LogPath -Value "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') [$Level] $Msg" -ErrorAction SilentlyContinue }
 
 # ---------- TWEAK FUNCTIONS ----------
@@ -494,6 +635,154 @@ function Invoke-GameBooster {
     Get-Process | Where-Object { $_.ProcessName -notin $keep -and $_.MainWindowHandle -ne 0 } | ForEach-Object { try { $_.CloseMainWindow() | Out-Null; Write-Log "Closed: $($_.ProcessName)" "OK" } catch {} }
     Invoke-MemoryCleanup
     Write-Log "Game Booster complete." "OK"
+}
+
+# Locate the Fortnite client so the FPS Booster can give it a high GPU preference.
+function Get-NovaFortniteExe {
+    if (-not $IsWin) { return $null }
+    $candidates = New-Object System.Collections.Generic.List[string]
+    if ($env:ProgramFiles) { [void]$candidates.Add((Join-Path $env:ProgramFiles "Epic Games\Fortnite\FortniteGame\Binaries\Win64\FortniteClient-Win64-Shipping.exe")) }
+    if (${env:ProgramFiles(x86)}) { [void]$candidates.Add((Join-Path ${env:ProgramFiles(x86)} "Epic Games\Fortnite\FortniteGame\Binaries\Win64\FortniteClient-Win64-Shipping.exe")) }
+    foreach ($c in $candidates) { if ($c -and (Test-Path $c)) { return $c } }    try {
+        $manifests = Join-Path $env:ProgramData "Epic\EpicGamesLauncher\Data\Manifests"
+        if (Test-Path $manifests) {
+            foreach ($f in Get-ChildItem $manifests -Filter *.item -ErrorAction SilentlyContinue) {
+                try {
+                    $j = Get-Content $f.FullName -Raw | ConvertFrom-Json
+                    if ([string]$j.DisplayName -match "Fortnite") {
+                        $p = Join-Path ([string]$j.InstallLocation) "FortniteGame\Binaries\Win64\FortniteClient-Win64-Shipping.exe"
+                        if (Test-Path $p) { return $p }
+                    }
+                } catch {}
+            }
+        }
+    } catch {}
+    return $null
+}
+
+# FPS Booster: real Windows graphics/scheduling changes, plus a smaller macOS pass.
+function Invoke-FpsBooster {
+    $applied = New-Object System.Collections.Generic.List[string]
+    if ($IsWin) {
+        try {
+            $p = "HKCU:\Software\Microsoft\GameBar"
+            if (-not (Test-Path $p)) { New-Item -Path $p -Force | Out-Null }
+            Set-ItemProperty -Path $p -Name "AutoGameModeEnabled" -Value 1 -Type DWord -Force
+            Set-ItemProperty -Path $p -Name "AllowAutoGameMode" -Value 1 -Type DWord -Force
+            [void]$applied.Add("Windows Game Mode on")
+        } catch {}
+        try {
+            $p = "HKCU:\System\GameConfigStore"
+            if (-not (Test-Path $p)) { New-Item -Path $p -Force | Out-Null }
+            Set-ItemProperty -Path $p -Name "GameDVR_Enabled" -Value 0 -Type DWord -Force
+            $p2 = "HKCU:\Software\Microsoft\Windows\CurrentVersion\GameDVR"
+            if (-not (Test-Path $p2)) { New-Item -Path $p2 -Force | Out-Null }
+            Set-ItemProperty -Path $p2 -Name "AppCaptureEnabled" -Value 0 -Type DWord -Force
+            Set-ItemProperty -Path $p2 -Name "HistoricalCaptureEnabled" -Value 0 -Type DWord -Force
+            [void]$applied.Add("Game DVR / background capture off")
+        } catch {}
+        try {
+            $p = "HKCU:\System\GameConfigStore"
+            if (-not (Test-Path $p)) { New-Item -Path $p -Force | Out-Null }
+            Set-ItemProperty -Path $p -Name "GameDVR_FSEBehaviorMode" -Value 2 -Type DWord -Force
+            Set-ItemProperty -Path $p -Name "GameDVR_HonorUserFSEBehaviorMode" -Value 1 -Type DWord -Force
+            [void]$applied.Add("Fullscreen optimizations off")
+        } catch {}
+        try {
+            $p = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games"
+            if (-not (Test-Path $p)) { New-Item -Path $p -Force | Out-Null }
+            Set-ItemProperty -Path $p -Name "GPU Priority" -Value 8 -Type DWord -Force
+            Set-ItemProperty -Path $p -Name "Priority" -Value 6 -Type DWord -Force
+            Set-ItemProperty -Path $p -Name "Scheduling Category" -Value "High" -Type String -Force
+            Set-ItemProperty -Path $p -Name "SFIO Priority" -Value "High" -Type String -Force
+            [void]$applied.Add("Game CPU/GPU scheduling priority raised")
+        } catch {}
+        $exe = Get-NovaFortniteExe
+        if ($exe) {
+            try {
+                $p = "HKCU:\Software\Microsoft\DirectX\UserGpuPreferences"
+                if (-not (Test-Path $p)) { New-Item -Path $p -Force | Out-Null }
+                Set-ItemProperty -Path $p -Name $exe -Value "GpuPreference=2;" -Type String -Force
+                [void]$applied.Add("Fortnite set to high-performance GPU")
+            } catch {}
+        }
+        $procs = @(Get-Process -Name "FortniteClient-Win64-Shipping" -ErrorAction SilentlyContinue)
+        if ($procs.Count -gt 0) {
+            foreach ($pr in $procs) {
+                try { $pr.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High; [void]$applied.Add("Fortnite process priority set to High") } catch {}
+            }
+        }
+        try { Invoke-PowerPlan; [void]$applied.Add("Ultimate/High Performance power plan") } catch {}
+        try { Invoke-MemoryCleanup; [void]$applied.Add("Memory trimmed and standby list purged") } catch {}
+        Write-Log ("FPS Booster applied: " + ($applied -join ", ")) "OK"
+    } else {
+        try { defaults write NSGlobalDomain NSAppSleepDisabled -bool YES 2>$null; [void]$applied.Add("App Nap off") } catch {}
+        try { defaults write com.apple.universalaccess reduceTransparency -bool true 2>$null; [void]$applied.Add("Transparency reduced") } catch {}
+        try { defaults write com.apple.universalaccess reduceMotion -bool true 2>$null; [void]$applied.Add("Motion reduced") } catch {}
+        try { defaults write NSGlobalDomain NSAutomaticWindowAnimationsEnabled -bool false 2>$null; [void]$applied.Add("Window animations off") } catch {}
+        try { dscacheutil -flushcache 2>$null; killall -HUP mDNSResponder 2>$null; [void]$applied.Add("DNS cache flushed") } catch {}
+        try { purge 2>$null; [void]$applied.Add("Memory purged") } catch {}
+        try { killall Dock 2>$null } catch {}
+        Write-Log ("macOS performance pass applied: " + ($applied -join ", ")) "OK"
+    }
+    return @($applied)
+}
+
+# Live network health: real ICMP ping samples, average, jitter and packet loss.
+function Get-NovaNetworkStats {
+    param([string]$Target = "1.1.1.1", [int]$Count = 4)
+    if ($Target -notmatch "^[A-Za-z0-9\.\-]+$") { $Target = "1.1.1.1" }
+    if ($Count -lt 2) { $Count = 2 }
+    if ($Count -gt 8) { $Count = 8 }
+    $samples = New-Object System.Collections.Generic.List[double]
+    $sent = $Count
+    $received = 0
+    $out = ""
+    try {
+        if ($IsWin) { $out = (& ping -n $Count -w 1200 $Target 2>&1 | Out-String) }
+        else { $out = (& ping -c $Count -W 1200 $Target 2>&1 | Out-String) }
+    } catch { $out = "" }
+    if (-not $out) {
+        return @{ success = $false; message = "Could not run ping on this system."; target = $Target }
+    }
+    foreach ($m in [regex]::Matches($out, "(?:time|Time)[=<]\s*([0-9]+(?:\.[0-9]+)?)\s*ms")) {
+        [void]$samples.Add([double]$m.Groups[1].Value)
+    }
+    if ($IsWin) {
+        $sm = [regex]::Match($out, "Sent\s*=\s*(\d+),\s*Received\s*=\s*(\d+)")
+        if ($sm.Success) { $sent = [int]$sm.Groups[1].Value; $received = [int]$sm.Groups[2].Value }
+        else { $received = $samples.Count }
+    } else {
+        $sm = [regex]::Match($out, "(\d+)\s+packets transmitted,\s+(\d+)\s+(?:packets )?received")
+        if ($sm.Success) { $sent = [int]$sm.Groups[1].Value; $received = [int]$sm.Groups[2].Value }
+        else { $received = $samples.Count }
+    }
+    if ($sent -le 0) { $sent = $Count }
+    if ($received -le 0) { $received = $samples.Count }
+    $avg = $null; $min = $null; $max = $null; $jitter = 0
+    if ($samples.Count -gt 0) {
+        $avg = [math]::Round(($samples | Measure-Object -Average).Average, 1)
+        $min = [math]::Round(($samples | Measure-Object -Minimum).Minimum, 1)
+        $max = [math]::Round(($samples | Measure-Object -Maximum).Maximum, 1)
+        if ($samples.Count -ge 2) {
+            $sum = 0.0
+            for ($i = 1; $i -lt $samples.Count; $i++) { $sum += [math]::Abs($samples[$i] - $samples[$i - 1]) }
+            $jitter = [math]::Round($sum / ($samples.Count - 1), 1)
+        }
+    }
+    $loss = if ($sent -gt 0) { [math]::Round((($sent - $received) / $sent) * 100, 1) } else { 0 }
+    $row = @{ t = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds(); avg = $avg; jitter = $jitter; loss = $loss }
+    [void]$Script:NetHistory.Add($row)
+    while ($Script:NetHistory.Count -gt 60) { $Script:NetHistory.RemoveAt(0) }
+    return @{
+        success = $true
+        target = $Target
+        avg = $avg; min = $min; max = $max; jitter = $jitter; loss = $loss
+        sent = $sent; received = $received
+        samples = @($samples)
+        history = @($Script:NetHistory)
+        at = (Get-Date).ToString("o")
+    }
 }
 
 # BCDEDIT (micro-stutter fix)
@@ -2287,7 +2576,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .logoutbtn:hover{border-color:var(--red);color:var(--red);background:rgba(255,26,46,.05)}
 
 /* Content */
-.maincol{flex:1;display:flex;flex-direction:column;min-width:0;height:100vh}
+.maincol{flex:1;display:flex;flex-direction:column;min-width:0;height:100vh;position:relative}
 .topbar{display:flex;align-items:center;gap:4px;padding:9px 16px;background:linear-gradient(180deg,rgba(13,13,20,.98),rgba(9,9,14,.94));border-bottom:1px solid var(--border);position:relative;z-index:3;overflow-x:auto;flex-shrink:0;box-shadow:0 4px 22px rgba(0,0,0,.38)}
 .topbar::-webkit-scrollbar{height:4px}
 .topbar-label{font-size:9px;text-transform:uppercase;letter-spacing:1.6px;color:var(--textmuted);margin:0 8px 0 4px;font-weight:800;flex-shrink:0}
@@ -2460,6 +2749,42 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
 /* Snow canvas */
 #snowCanvas{position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.5}
 
+/* Workspace + live network rail */
+.workspace{flex:1;display:flex;min-height:0;min-width:0}
+.workspace .content{flex:1;min-width:0}
+.netrail{width:252px;flex-shrink:0;border-left:1px solid var(--border);background:linear-gradient(180deg,rgba(13,13,20,.98),rgba(8,8,12,.98));padding:14px 14px 18px;overflow-y:auto;position:relative;z-index:2}
+.netrail.hidden{display:none}
+.netrail-head{display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:800;letter-spacing:.3px;margin-bottom:12px}
+.netrail-head .live-dot{margin-right:6px}
+.netclose{background:transparent;border:1px solid var(--border);color:var(--textmuted);border-radius:6px;width:22px;height:22px;cursor:pointer;line-height:1;font-size:14px}
+.netclose:hover{border-color:var(--red);color:var(--red)}
+.netmetrics{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.netmetric{background:rgba(0,0,0,.34);border:1px solid var(--border);border-radius:9px;padding:9px 10px}
+.netmetric-v{font-size:17px;font-weight:900;font-family:'JetBrains Mono',monospace;letter-spacing:-.5px}
+.netmetric-l{font-size:8.5px;text-transform:uppercase;letter-spacing:1px;color:var(--textmuted);font-weight:800;margin-top:2px}
+.netmetric.wide{grid-column:span 2}
+#netChart,#netChartBig{width:100%;display:block;border:1px solid var(--border);border-radius:9px;background:rgba(0,0,0,.3)}
+.netrail-foot{display:flex;justify-content:space-between;gap:8px;font-size:9.5px;color:var(--textmuted);margin-top:7px;font-family:'JetBrains Mono',monospace}
+.netrail-reopen{display:block!important;position:absolute;right:0;top:58px;z-index:4;background:linear-gradient(135deg,var(--red),var(--red2));border:none;color:#fff;border-radius:8px 0 0 8px;padding:10px 8px;cursor:pointer;box-shadow:0 4px 16px var(--redglow)}
+.netrail-reopen.hidden{display:none!important}
+@media (max-width:1180px){.netrail{display:none;position:absolute;right:0;top:0;bottom:0;z-index:20;box-shadow:-18px 0 40px rgba(0,0,0,.55)}.netrail.open{display:block}.netrail-reopen{display:block!important}}
+
+/* Badges */
+.badgegrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.achievement{display:flex;align-items:center;gap:9px;padding:9px 10px;border:1px solid var(--border);border-radius:9px;background:rgba(0,0,0,.26);transition:all .2s}
+.achievement:hover{border-color:var(--border2);transform:translateY(-1px)}
+.achievement.locked{opacity:.4;filter:grayscale(1)}
+.achievement.earned{border-color:rgba(255,26,46,.28);background:linear-gradient(135deg,rgba(255,26,46,.09),rgba(0,0,0,.22))}
+.achicon{font-size:20px;line-height:1}
+.achname{font-size:11.5px;font-weight:700;line-height:1.2}
+.achdesc{font-size:9.5px;color:var(--textmuted);margin-top:2px;line-height:1.3}
+.tweakgrid{display:block}
+.subgroup{margin-bottom:4px}
+.subgroup .grid{margin-top:8px}
+.subcount{font-size:10px;color:var(--textmuted);font-weight:600;letter-spacing:0}
+.fpslist{color:var(--textdim);font-size:12.5px;line-height:1.9}
+.fpslist b{color:var(--text)}
+
 /* Draggable hint */
 .draggable{cursor:move}
 </style>
@@ -2532,6 +2857,8 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
   <span class="topbar-label">Tools</span>
   <button class="navbtn" data-page="crosshair"><span class="navicon">🎯</span>Crosshair</button>
   <button class="navbtn" data-page="booster"><span class="navicon">⚡</span>Game Booster</button>
+  <button class="navbtn" data-page="fps"><span class="navicon">🚀</span>FPS Booster</button>
+  <button class="navbtn" data-page="network"><span class="navicon">📡</span>Network</button>
   <button class="navbtn" data-page="potato"><span class="navicon">🥔</span>Potato Graphics</button>
   <button class="navbtn" data-page="macro"><span class="navicon">🖱</span>Drag Macro</button>
   <button class="navbtn" data-page="bios"><span class="navicon">🧬</span>BIOS / UEFI</button>
@@ -2541,6 +2868,7 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
   <button class="navbtn" data-page="settings"><span class="navicon">✦</span>Settings</button>
 </div>
 
+<div class="workspace">
 <div class="content">
 <!-- HOME -->
 <div class="page active" id="page-home">
@@ -2597,6 +2925,17 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
       <div style="font-size:32px;font-weight:900;background:linear-gradient(135deg,var(--purple),#8833cc);-webkit-background-clip:text;-webkit-text-fill-color:transparent" id="statPlan">FREE</div>
       <div style="font-size:11px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px;margin-top:4px">Your Plan</div>
     </div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+      <h3 style="font-size:16px;margin:0">Badges &amp; Streak</h3>
+      <div style="display:flex;gap:14px;font-size:12px;color:var(--textdim)">
+        <span>🔥 <b id="homeStreak" style="color:var(--text)">0</b> day streak</span>
+        <span>Best <b id="homeBestStreak" style="color:var(--text)">0</b></span>
+        <span><b id="homeBadgeCount" style="color:var(--text)">0</b> earned</span>
+      </div>
+    </div>
+    <div class="badgegrid" id="homeBadges"></div>
   </div>
   <div class="card" style="margin-top:16px">
     <h3 style="margin-bottom:10px;font-size:16px">What's inside Nova Tweaks</h3>
@@ -2775,6 +3114,72 @@ spotify.exe</textarea>
   </div>
 </div>
 
+<!-- FPS BOOSTER -->
+<div class="page" id="page-fps">
+  <h1>FPS Booster</h1>
+  <div class="sub">A real one-click performance pass: game mode, capture off, scheduling priority, GPU preference, power plan and memory cleanup. Pro and above.</div>
+  <div class="livetool">
+    <div class="livetool-header">
+      <div class="livetool-icon">🚀</div>
+      <div><div class="livetool-title">FPS Booster</div><div style="font-size:11px;color:var(--textmuted)">Windows-first, macOS fallback included</div></div>
+    </div>
+    <div class="livetool-desc" id="fpsDesc">Applies real OS-level changes that reduce background overhead and give Fortnite priority. Nothing is faked or log-only.</div>
+    <div class="card">
+      <div class="fpslist" id="fpsSteps">
+        <div>▸ <b>Windows Game Mode</b> — on</div>
+        <div>▸ <b>Game DVR / background capture</b> — off</div>
+        <div>▸ <b>Fullscreen optimizations</b> — off</div>
+        <div>▸ <b>Game CPU/GPU scheduling priority</b> — raised</div>
+        <div>▸ <b>Fortnite GPU preference</b> — high performance (if installed)</div>
+        <div>▸ <b>Fortnite process priority</b> — High (if running)</div>
+        <div>▸ <b>Power plan</b> — Ultimate / High Performance</div>
+        <div>▸ <b>Memory</b> — trimmed and standby list purged</div>
+      </div>
+      <button class="btn full" style="margin-top:14px" id="fpsBoostBtn">🚀 RUN FPS BOOSTER</button>
+      <div style="margin-top:10px;font-size:11.5px;color:var(--textmuted)" id="fpsResult">Not run yet.</div>
+    </div>
+  </div>
+</div>
+
+<!-- NETWORK -->
+<div class="page" id="page-network">
+  <h1>Network</h1>
+  <div class="sub">Live packet health against a real target. Average ping, jitter and packet loss, sampled every few seconds.</div>
+  <div class="cardrow">
+    <div class="card" style="flex:1;min-width:220px;text-align:center">
+      <div class="netmetric-v" id="netAvgBig">—</div>
+      <div class="netmetric-l">Average ping (ms)</div>
+    </div>
+    <div class="card" style="flex:1;min-width:220px;text-align:center">
+      <div class="netmetric-v" id="netJitterBig">—</div>
+      <div class="netmetric-l">Jitter (ms)</div>
+    </div>
+    <div class="card" style="flex:1;min-width:220px;text-align:center">
+      <div class="netmetric-v" id="netLossBig">—</div>
+      <div class="netmetric-l">Packet loss (%)</div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <label style="font-size:12px;color:var(--textdim)">Target</label>
+      <input class="input" id="netTarget" value="1.1.1.1" style="width:150px">
+      <button class="btn sm" id="netPingBtn">Ping now</button>
+      <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="netAuto" checked> Auto sample</label>
+      <span style="font-size:11px;color:var(--textmuted)" id="netStatus">Waiting...</span>
+    </div>
+    <canvas id="netChartBig" height="180"></canvas>
+    <div class="netrail-foot"><span id="netMinMax">min — · max —</span><span id="netTargetBig">1.1.1.1</span></div>
+  </div>
+  <div class="card">
+    <h3 style="margin-bottom:8px;font-size:14px">What this means</h3>
+    <div style="color:var(--textdim);font-size:12.5px;line-height:1.9">
+      <b style="color:var(--text)">Ping</b> is round-trip time. Lower is better.<br>
+      <b style="color:var(--text)">Jitter</b> is how much ping changes between packets. Spiky jitter causes rubber-banding.<br>
+      <b style="color:var(--text)">Loss</b> is packets that never arrived. Anything above 0% is worth fixing.
+    </div>
+  </div>
+</div>
+
 <!-- SETTINGS -->
 <div class="page" id="page-settings">
   <h1>Settings</h1>
@@ -2830,6 +3235,18 @@ spotify.exe</textarea>
   </div>
 
   <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+      <h3 style="margin:0;font-size:14px">Badges &amp; Streak</h3>
+      <div style="display:flex;gap:14px;font-size:12px;color:var(--textdim)">
+        <span>🔥 <b id="setStreak" style="color:var(--text)">0</b> day streak</span>
+        <span>Best <b id="setBestStreak" style="color:var(--text)">0</b></span>
+        <span><b id="setBadgeCount" style="color:var(--text)">0</b>/<span id="setBadgeTotal">0</span></span>
+      </div>
+    </div>
+    <div class="badgegrid" id="settingsBadges"></div>
+  </div>
+
+  <div class="card">
     <h3 style="margin-bottom:6px;font-size:14px">Account sync</h3>
     <div style="font-size:12px;color:var(--textdim);margin-bottom:8px">Export your account to a sync code, then import it on another device.</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
@@ -2849,13 +3266,28 @@ spotify.exe</textarea>
   </div>
 </div>
 </div>
+
+<div class="netrail" id="netRail">
+  <div class="netrail-head"><span><span class="live-dot"></span>Network</span><button class="netclose" id="netClose" title="Hide network panel">×</button></div>
+  <div class="netmetrics">
+    <div class="netmetric"><div class="netmetric-v" id="netAvg">—</div><div class="netmetric-l">Ping ms</div></div>
+    <div class="netmetric"><div class="netmetric-v" id="netJitter">—</div><div class="netmetric-l">Jitter ms</div></div>
+    <div class="netmetric wide"><div class="netmetric-v" id="netLoss">—</div><div class="netmetric-l">Packet loss %</div></div>
+  </div>
+  <canvas id="netChart" height="92"></canvas>
+  <div class="netrail-foot"><span id="netMinMaxSm">min — · max —</span><span id="netTargetSm">1.1.1.1</span></div>
+  <div style="margin-top:12px;font-size:10.5px;color:var(--textmuted);line-height:1.7">Live ICMP samples. Jitter is the average change between packets.</div>
+  <button class="btn ghost sm full" style="margin-top:10px" id="netOpenPage">Open Network page</button>
+</div>
+</div>
+<button class="netrail-reopen hidden" id="netReopen" title="Show network panel">📡</button>
 </div>
 </div>
 
 <div class="toast" id="toast"></div>
 
 <script>
-const state={plan:'Free',tweaks:{},os:'unknown',user:null,balance:0,planUntil:null};
+const state={plan:'Free',tweaks:{},os:'unknown',user:null,balance:0,planUntil:null,badges:[],streak:0,bestStreak:0,appliedEver:0};
 window.onerror=(m,u,l)=>{const e=document.getElementById('loginError');if(e)e.textContent='JS Error: '+m+' (line '+l+')';console.error(m,u,l);};
 // Snowfall
 (function(){
@@ -2959,6 +3391,8 @@ document.querySelectorAll('.navbtn').forEach(b=>b.addEventListener('click',()=>{
   if(b.dataset.page==='log')refreshLog();
   if(b.dataset.page==='bios')loadBios();
   if(b.dataset.page==='macro')refreshMacroStatus();
+  if(b.dataset.page==='settings')renderBadges();
+  if(b.dataset.page==='network'){ if(!netAutoTimer) startNetAuto(); }
 }));
 
 document.getElementById('logoutBtn').addEventListener('click',async()=>{await api('/api/logout');if(window.chrome&&window.chrome.webview){window.chrome.webview.postMessage('nova-reload')}else{location.reload()}});
@@ -2986,7 +3420,11 @@ async function loadTweaks(){
   state.tweaks=r.tweaks||{};
   state.os=r.os||'unknown';
   if(r.plan) setPlanUI(r.plan, r.planUntil, r.balance);
-  renderCatBar();renderTweaks();updateCounts();updateMacroAvailability();
+  state.badges=r.badges||[];
+  state.streak=r.streak||0;
+  state.bestStreak=r.bestStreak||0;
+  state.appliedEver=r.appliedEver||0;
+  renderCatBar();renderTweaks();updateCounts();updateMacroAvailability();renderBadges();
 }
 function tweaksFor(cat){
   const all=Object.values(state.tweaks);
@@ -2994,23 +3432,20 @@ function tweaksFor(cat){
   if(cat==='Mac') return all.filter(t=>t.os==='Mac'||t.os==='Both');
   return all.filter(t=>t.available&&t.cat===cat);
 }
-function renderTweaks(){
-  const grid=document.getElementById('tweakGrid');
-  const list=tweaksFor(currentCat);
-  grid.innerHTML=list.map(t=>{
-    const locked = !!t.locked && !t.state;
-    const checked=t.state?'checked':'';
-    const disabled=(!t.available||locked)?'disabled':'';
-    const riskCls=t.risk.toLowerCase();
-    const tier=t.required||'Free';
-    const tierCls=tier==='Ultimate'?'ult':tier.toLowerCase();
-    const planBadge=`<span class="badge tier tier-${tierCls}">${tier.toUpperCase()}</span>`;
-    const availBadge=t.available?'':'<span class="badge unavailable">Not on this PC</span>';
-    const lockBadge=locked?'<span class="badge unavailable">🔒 Locked</span>':'';
-    const newBadge=t.id==='inputdelay'||t.id==='pingstab'||t.id==='bcdedit'?'<span class="badge new">NEW</span>':'';
-    const osCls='os-'+(t.os||'').toLowerCase();
-    const osBadge='<span class="badge '+osCls+'">'+(t.os||'')+'</span>';
-    return `<div class="tweakcard rotating-outline${locked?' locked':''}" data-tweak="${t.id}">
+function tweakCard(t){
+  const locked = !!t.locked && !t.state;
+  const checked=t.state?'checked':'';
+  const disabled=(!t.available||locked)?'disabled':'';
+  const riskCls=t.risk.toLowerCase();
+  const tier=t.required||'Free';
+  const tierCls=tier==='Ultimate'?'ult':tier.toLowerCase();
+  const planBadge=`<span class="badge tier tier-${tierCls}">${tier.toUpperCase()}</span>`;
+  const availBadge=t.available?'':'<span class="badge unavailable">Not on this PC</span>';
+  const lockBadge=locked?'<span class="badge unavailable">🔒 Locked</span>':'';
+  const newBadge=t.id==='inputdelay'||t.id==='pingstab'||t.id==='bcdedit'?'<span class="badge new">NEW</span>':'';
+  const osCls='os-'+(t.os||'').toLowerCase();
+  const osBadge='<span class="badge '+osCls+'">'+(t.os||'')+'</span>';
+  return `<div class="tweakcard rotating-outline${locked?' locked':''}" data-tweak="${t.id}">
       <div class="tweakhead">
         <span class="badge ${riskCls}">${t.risk}</span>${osBadge}${availBadge}${planBadge}${lockBadge}${newBadge}
         <label class="toggle"><input type="checkbox" data-id="${t.id}" ${checked} ${disabled}><span class="slider"></span></label>
@@ -3018,7 +3453,25 @@ function renderTweaks(){
       <div class="tweakname">${t.name}</div>
       <div class="tweakdesc">${t.desc}</div>
     </div>`;
-  }).join('');
+}
+function renderTweaks(){
+  const grid=document.getElementById('tweakGrid');
+  const list=tweaksFor(currentCat);
+  const groups=[];
+  const bySub={};
+  for(const t of list){
+    const sub=t.sub||'Other';
+    if(!bySub[sub]){bySub[sub]=[];groups.push(sub);}
+    bySub[sub].push(t);
+  }
+  grid.innerHTML=groups.map(sub=>`<div class="subgroup">
+      <div style="display:flex;align-items:center;gap:8px;margin:18px 0 2px">
+        <h3 style="font-size:13px;margin:0;letter-spacing:.2px">${sub}</h3>
+        <span class="subcount">${bySub[sub].length} tweak${bySub[sub].length===1?'':'s'}</span>
+        <div style="flex:1;height:1px;background:var(--border)"></div>
+      </div>
+      <div class="grid">${bySub[sub].map(tweakCard).join('')}</div>
+    </div>`).join('');
   grid.querySelectorAll('.tweakcard.locked').forEach(card=>card.addEventListener('click',e=>{
     if(e.target.closest('.toggle'))return;
     const t=state.tweaks[card.dataset.tweak];
@@ -3033,6 +3486,7 @@ function renderTweaks(){
     tw.state=cb.checked;
     showToast(r.message||(cb.checked?'Applied':'Reverted'));
     updateCounts();
+    try{const b=await api('/api/badges');if(b.success){state.badges=b.badges;state.streak=b.streak;state.bestStreak=b.bestStreak;renderBadges();}}catch{}
   }));
 }
 function updateCounts(){
@@ -3053,6 +3507,29 @@ function updateCounts(){
   const sc=document.getElementById('statCats'); if(sc) sc.textContent=total? (new Set(all.map(t=>t.cat))).size : 10;
 }
 
+function badgeCard(b){
+  const cls=b.earned?'achievement earned':'achievement locked';
+  const when=b.earned&&b.earnedOn?'<div class="achdesc">Earned '+new Date(b.earnedOn).toLocaleDateString()+'</div>':'<div class="achdesc">'+b.desc+'</div>';
+  return `<div class="${cls}" title="${b.desc}"><div class="achicon">${b.icon}</div><div><div class="achname">${b.name}</div>${when}</div></div>`;
+}
+function renderBadges(){
+  const badges=state.badges||[];
+  const earned=badges.filter(b=>b.earned).length;
+  const home=document.getElementById('homeBadges');
+  if(home) home.innerHTML=badges.length?badges.map(badgeCard).join(''):'<div style="color:var(--textmuted);font-size:12px">Sign in to start earning badges.</div>';
+  const set=document.getElementById('settingsBadges');
+  if(set) set.innerHTML=badges.length?badges.map(badgeCard).join(''):'<div style="color:var(--textmuted);font-size:12px">Sign in to start earning badges.</div>';
+  const hs=document.getElementById('homeStreak'), hb=document.getElementById('homeBestStreak'), hc=document.getElementById('homeBadgeCount');
+  if(hs) hs.textContent=state.streak||0;
+  if(hb) hb.textContent=state.bestStreak||0;
+  if(hc) hc.textContent=earned;
+  const ss=document.getElementById('setStreak'), sb=document.getElementById('setBestStreak'), sc2=document.getElementById('setBadgeCount'), st=document.getElementById('setBadgeTotal');
+  if(ss) ss.textContent=state.streak||0;
+  if(sb) sb.textContent=state.bestStreak||0;
+  if(sc2) sc2.textContent=earned;
+  if(st) st.textContent=badges.length;
+}
+
 const profiles=[{name:'Fortnite',desc:'DX11 and Performance mode',plan:'Ultimate',icon:'FN'},{name:'Fortnite Competitive',desc:'Fixed floor (lowest settings)',plan:'Ultimate',icon:'FC'},{name:'Marvel Rivals',desc:'Low-graphics competitive profile',plan:'Ultimate',icon:'MR'},{name:'AMD/Intel Potato',desc:'Works on any GPU. Removes texture packs.',plan:'Ultimate',icon:'AI'}];
 document.getElementById('profileList').innerHTML=profiles.map(p=>`<div class="profilecard"><div class="profileicon">${p.icon}</div><div style="flex:1"><div style="font-weight:700;font-size:14px">${p.name}</div><div style="font-size:12px;color:var(--textdim);margin-top:2px">${p.desc}</div></div><span class="badge tier tier-ult">${p.plan.toUpperCase()}</span><button class="btn sm" data-profile="${p.name}">Apply</button></div>`).join('');
 document.querySelectorAll('[data-profile]').forEach(b=>b.addEventListener('click',async()=>{
@@ -3065,6 +3542,133 @@ document.getElementById('boostBtn').addEventListener('click',async()=>{
   const wl=document.getElementById('whitelist').value.split('\n').map(s=>s.trim()).filter(Boolean);
   const r=await api('/api/booster',{whitelist:wl});showToast(r.message);
 });
+
+// FPS Booster
+document.getElementById('fpsBoostBtn').addEventListener('click',async()=>{
+  if(state.plan==='Free'){showToast('FPS Booster needs Pro. Open Settings to upgrade.');return;}
+  const btn=document.getElementById('fpsBoostBtn');
+  const out=document.getElementById('fpsResult');
+  btn.disabled=true;const old=btn.textContent;btn.textContent='Running...';
+  out.textContent='Applying real system changes...';
+  try{
+    const r=await api('/api/fpsbooster',{});
+    if(r.locked||r.success===false){out.textContent=r.message||'FPS Booster is locked.';showToast(r.message||'Locked');}
+    else{
+      out.textContent=r.message||'FPS Booster applied.';
+      showToast('FPS Booster applied');
+      if(Array.isArray(r.steps)&&r.steps.length){
+        document.getElementById('fpsSteps').innerHTML=r.steps.map(s=>'<div>✓ <b>'+escHtml(s)+'</b></div>').join('');
+      }
+      await loadTweaks();
+    }
+  }catch(e){out.textContent='FPS Booster failed: '+e;}
+  btn.disabled=false;btn.textContent=old;
+});
+
+// Live network health (rail + full page)
+let netAutoTimer=null;
+let netHistory=[];
+function netNum(v){return (v===null||v===undefined||isNaN(v))?'—':String(v);}
+function netSet(id,val){const el=document.getElementById(id);if(el)el.textContent=val;}
+function drawNetChart(id,values){
+  const c=document.getElementById(id);if(!c)return;
+  const dpr=window.devicePixelRatio||1;
+  const w=c.clientWidth||c.offsetWidth||240;
+  const h=c.dataset.chartH?parseInt(c.dataset.chartH,10):(parseInt(c.getAttribute('height'),10)||90);
+  c.dataset.chartH=h;
+  c.width=Math.max(1,Math.round(w*dpr));c.height=Math.round(h*dpr);
+  const ctx=c.getContext('2d');ctx.setTransform(1,0,0,1,0,0);ctx.scale(dpr,dpr);ctx.clearRect(0,0,w,h);
+  ctx.strokeStyle='rgba(255,255,255,.06)';ctx.lineWidth=1;
+  for(let i=1;i<4;i++){const y=(h/4)*i;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}
+  const pts=values.filter(v=>v!==null&&v!==undefined&&!isNaN(v));
+  if(pts.length<2){
+    ctx.fillStyle='rgba(255,255,255,.25)';ctx.font='10px Inter,sans-serif';ctx.fillText('Waiting for samples…',10,h/2);
+    return;
+  }
+  const max=Math.max(20,Math.max(...pts))*1.25;
+  const step=w/Math.max(1,values.length-1);
+  let started=false;
+  ctx.beginPath();
+  values.forEach((v,i)=>{
+    if(v===null||v===undefined||isNaN(v)){started=false;return;}
+    const x=i*step,y=h-8-(v/max)*(h-16);
+    if(!started){ctx.moveTo(x,y);started=true;}else ctx.lineTo(x,y);
+  });
+  const grad=ctx.createLinearGradient(0,0,w,0);
+  grad.addColorStop(0,'#ff1a2e');grad.addColorStop(1,'#ff8a95');
+  ctx.strokeStyle=grad;ctx.lineWidth=2;ctx.lineJoin='round';ctx.stroke();
+  const last=pts[pts.length-1];
+  const lx=(values.length-1)*step,ly=h-8-(last/max)*(h-16);
+  ctx.beginPath();ctx.arc(lx,ly,2.5,0,Math.PI*2);ctx.fillStyle='#ff8a95';ctx.fill();
+}
+function applyNetStats(r){
+  if(!r||r.success===false){
+    netSet('netStatus',r&&r.message?r.message:'Ping failed');
+    return;
+  }
+  const avg=netNum(r.avg), jit=netNum(r.jitter), loss=netNum(r.loss);
+  netSet('netAvg',avg);netSet('netJitter',jit);netSet('netLoss',loss);
+  netSet('netAvgBig',avg);netSet('netJitterBig',jit);netSet('netLossBig',loss);
+  netSet('netMinMax','min '+netNum(r.min)+' ms · max '+netNum(r.max)+' ms');
+  netSet('netMinMaxSm','min '+netNum(r.min)+' · max '+netNum(r.max));
+  netSet('netTargetSm',r.target||'1.1.1.1');
+  netSet('netTargetBig',r.target||'1.1.1.1');
+  netSet('netStatus','Updated '+new Date().toLocaleTimeString());
+  const hist=Array.isArray(r.history)?r.history:[];
+  netHistory=hist.map(h=>h.avg);
+  if(netHistory.length) drawNetChart('netChart',netHistory);
+  if(netHistory.length) drawNetChart('netChartBig',netHistory);
+}
+async function pingNow(){
+  const target=(document.getElementById('netTarget')?.value||'1.1.1.1').trim()||'1.1.1.1';
+  if(!netHistory.length) netSet('netStatus','Sampling '+target+'…');
+  try{
+    const r=await api('/api/net/stats',{target});
+    applyNetStats(r);
+  }catch(e){ netSet('netStatus','Ping error: '+e); }
+}
+function startNetAuto(){
+  const auto=document.getElementById('netAuto');
+  if(auto&&!auto.checked){stopNetAuto();return;}
+  stopNetAuto();
+  pingNow();
+  netAutoTimer=setInterval(pingNow,5000);
+}
+function stopNetAuto(){if(netAutoTimer){clearInterval(netAutoTimer);netAutoTimer=null;}}
+document.getElementById('netPingBtn').addEventListener('click',pingNow);
+document.getElementById('netAuto').addEventListener('change',e=>{if(e.target.checked)startNetAuto();else stopNetAuto();});
+document.getElementById('netClose').addEventListener('click',()=>{
+  document.getElementById('netRail').classList.add('hidden');
+  document.getElementById('netRail').classList.remove('open');
+  document.getElementById('netReopen').classList.remove('hidden');
+  try{localStorage.setItem('nova_netrail','0')}catch{}
+});
+document.getElementById('netReopen').addEventListener('click',()=>{
+  document.getElementById('netRail').classList.remove('hidden');
+  document.getElementById('netRail').classList.add('open');
+  document.getElementById('netReopen').classList.add('hidden');
+  try{localStorage.setItem('nova_netrail','1')}catch{}
+  drawNetChart('netChart',netHistory);
+});
+document.getElementById('netOpenPage').addEventListener('click',()=>{document.querySelector('[data-page=network]').click();});
+(function(){
+  try{
+    const closed = localStorage.getItem('nova_netrail')==='0';
+    if(closed || window.innerWidth<=1180){
+      document.getElementById('netRail').classList.add('hidden');
+      document.getElementById('netReopen').classList.remove('hidden');
+    }
+  }catch{}
+})();
+window.addEventListener('resize',()=>{
+  drawNetChart('netChart',netHistory);drawNetChart('netChartBig',netHistory);
+  const rail=document.getElementById('netRail');
+  if(window.innerWidth<=1180 && !rail.classList.contains('open')){
+    rail.classList.add('hidden');
+    document.getElementById('netReopen').classList.remove('hidden');
+  }
+});
+
 document.getElementById('applyAllBtn').addEventListener('click',async()=>{const r=await api('/api/applyall');showToast(r.message);await loadTweaks()});
 document.getElementById('removeAllBtn').addEventListener('click',async()=>{if(!confirm('Remove ALL tweaks? This reverts every tweak.'))return;const r=await api('/api/revertall');showToast(r.message);await loadTweaks()});
 document.getElementById('removeCatBtn').addEventListener('click',async()=>{if(!confirm('Remove all tweaks in '+currentCat+'?'))return;const ids=tweaksFor(currentCat).filter(t=>t.available).map(t=>t.id);for(const id of ids){await api('/api/tweak/toggle',{id,state:false})}showToast('Removed '+ids.length+' tweaks in '+currentCat);await loadTweaks()});
@@ -3295,7 +3899,7 @@ document.getElementById('importSyncBtn').addEventListener('click',async()=>{
   }catch(e){showToast('Invalid sync code');}
 });
 
-renderStats();renderCatBar();loadTweaks();
+renderStats();renderCatBar();loadTweaks();startNetAuto();
 const h=new Date().getHours();document.getElementById('greeting').textContent=h<12?'Good morning':h<18?'Good afternoon':'Good evening';
 </script>
 </body>
@@ -3335,6 +3939,101 @@ function Set-NovaTweakState {
     $Script:Config.TweakStates[$Id] = $State
 }
 
+# Plain-language subcategory used to group tweak cards inside their existing tab.
+function Get-NovaTweakSub {
+    param($Tweak)
+    $id = [string]$Tweak.Id
+    $cat = [string]$Tweak.Cat
+    $name = ([string]$Tweak.Name).ToLower()
+    $desc = ([string]$Tweak.Desc).ToLower()
+
+    switch ($cat) {
+        "General" {
+            if ($id -in @("memory","temp","fontcache","cleariconcache","clearrecyclebin")) { return "Cleanup & Storage" }
+            if ($id -in @("startup")) { return "Boot & Startup" }
+            if ($id -in @("disableballoontips","disableinfotips","searchboxhide","taskviewhide","widgetstaskbarhide","desktopslideshowoff","lockstoriesoff","activityfeedoff")) { return "Shell & Notifications" }
+            if ($name -match "startup|boot") { return "Boot & Startup" }
+            if ($name -match "clean|temp|cache|recycle|memory") { return "Cleanup & Storage" }
+            return "System"
+        }
+        "Input" {
+            if ($id -in @("mouseprec","mousesens10","disableenhancepointer","disablemousetrails","setmousespeed1","mousekeysoff","scrollinactiveoff")) { return "Mouse & Aim" }
+            if ($id -in @("kbdlag","filterkeysoff","stickykeysoff","togglekeysoff","setkeyboarddelay0","setkeyboardspeed31","cursorblinkoff")) { return "Keyboard" }
+            if ($id -in @("inputdelay","usb","foregroundboost","hungapptimeout","autokillhung")) { return "Input Pipeline" }
+            if ($name -match "mouse|pointer|aim") { return "Mouse & Aim" }
+            if ($name -match "keyboard|key |keys|cursor|blink") { return "Keyboard" }
+            return "Input Pipeline"
+        }
+        "Network" {
+            if ($id -in @("dnsgoogle","dnsquad9","dnsauto","flushdnscache","flusharp")) { return "DNS & Resolution" }
+            if ($id -in @("teredooff","isatapoff","six4off","disableipv6")) { return "IPv6 & Tunnels" }
+            if ($id -in @("netdiscoveryoff","filesharingoff","disablellmnr","disablenetbios","disablesmb1")) { return "Discovery & Sharing" }
+            if ($id -in @("pingstab","wifipowersave","eeeoff","flowcontroloff","woloff","smbmultichannel")) { return "Adapter & Wi-Fi" }
+            if ($id -in @("nagle","autotune","qos","rscdisable","initialrto","disableinterruptmoderation","enablerss")) { return "TCP & Offloads" }
+            if ($name -match "dns") { return "DNS & Resolution" }
+            if ($name -match "offload|tcp|nagle|autotun|qos|interrupt|rss") { return "TCP & Offloads" }
+            if ($name -match "adapter|ethernet|wi-fi|wifi|power saving|flow control") { return "Adapter & Wi-Fi" }
+            return "Latency & Adapters"
+        }
+        "Power" {
+            if ($id -in @("corepark","powerthrottle","timer")) { return "CPU Scheduling" }
+            if ($id -in @("hags")) { return "GPU Scheduling" }
+            if ($id -in @("power","faststartup","hibernate","usbss","nosleep","displaysleepoff","disksleepoff","batterysaveroff","macpower")) { return "Power Plan & Sleep" }
+            if ($name -match "gpu|graphics|hardware-accelerated") { return "GPU Scheduling" }
+            if ($name -match "cpu|core|timer|throttl") { return "CPU Scheduling" }
+            return "Power Plan & Sleep"
+        }
+        "Visual" {
+            if ($id -in @("transp","disablelockscreenblur")) { return "Transparency & Blur" }
+            if ($id -in @("fontcache","disablefontsmoothing2","disablecursorshadow","disablelistviewalpha")) { return "Text & Cursors" }
+            if ($id -in @("visual","menu","disablemenuanim","winanimoff","disabletaskbaranim","disableaeropeek","disableshake","disableshadow","macwinanim","macdock","macfinderanim","macreducemotion","macappnap")) { return "Animations & Effects" }
+            if ($name -match "transparen|blur|acrylic|mica") { return "Transparency & Blur" }
+            if ($name -match "font|cursor|text|clear") { return "Text & Cursors" }
+            if ($name -match "animation|effect|peek|shake|shadow|menu") { return "Animations & Effects" }
+            return "Shell & Appearance"
+        }
+        "Services" {
+            if ($name -match "xbox|game") { return "Xbox & Gaming" }
+            if ($name -match "telemetry|diagnostic|error|feedback|advertis|consumer|activity|copilot|recall|insider") { return "Telemetry & Diagnostics" }
+            if ($name -match "update|delivery|bits|download") { return "Update & Delivery" }
+            if ($name -match "audio|bluetooth|print|fax|tablet|touch|phone|media") { return "Media & Devices" }
+            if ($name -match "remote|rss|smb|remote access|connection sharing|ras|telephony|netbios|llmnr") { return "Remote & Sharing" }
+            if ($name -match "search|prefetch|superfetch|defrag|maintenance|sysmain") { return "Maintenance & Search" }
+            return "Background Services"
+        }
+        "Game" {
+            if ($id -in @("potato","gamemode","mpo","fullopt","gamedvr","fpsbooster")) { return "Fortnite & Rendering" }
+            if ($id -in @("bcdedit","timer")) { return "Stutter & Scheduling" }
+            if ($name -match "stutter|stutter|scheduling|timer|bcd") { return "Stutter & Scheduling" }
+            return "Game"
+        }
+        "Storage" {
+            if ($name -match "clean|temp|cache|recycle|winsxs|space") { return "Disk Cleanup" }
+            if ($name -match "ntfs|8\.3|trim|filesystem|last access") { return "Filesystem & NTFS" }
+            if ($name -match "health|smart|defrag|optimize") { return "Disk Health" }
+            return "Storage"
+        }
+        "Firmware" {
+            if ($id -in @("vbsdisable","memoryintegrityoff","hypervisoroff","smartscreen","defendercloud")) { return "Virtualization & Security" }
+            if ($name -match "virtual|vbs|hypervisor|integrity|secure boot|defender|smartscreen") { return "Virtualization & Security" }
+            if ($name -match "memory|xmp|expo|ram|hags|gpu") { return "CPU & Memory" }
+            if ($name -match "boot|uefi|bios|firmware") { return "Boot & Firmware" }
+            return "Firmware"
+        }
+        "Privacy" {
+            if ($name -match "telemetry|advertis|activity|feedback|tips|consumer|copilot|recall|lock") { return "Telemetry & Tracking" }
+            if ($name -match "search|cortana|widget|news|web") { return "Search & Web" }
+            if ($name -match "remote|share|smb|netbios|llmnr|onedrive") { return "Sharing & Remote" }
+            return "Privacy"
+        }
+    }
+    if ($name -match "xbox|game") { return "Gaming" }
+    if ($name -match "dns") { return "DNS & Resolution" }
+    if ($name -match "mouse|pointer") { return "Mouse & Aim" }
+    if ($name -match "keyboard|keys") { return "Keyboard" }
+    return "Other"
+}
+
 function Invoke-NovaApi {
     param([string]$Path, [string]$BodyJson)
 
@@ -3349,7 +4048,11 @@ function Invoke-NovaApi {
     try {
         if ($Path -eq "/api/autologin") {
             $acc = $Script:CurrentUser
-            if ($acc) { return (ConvertTo-NovaJson @{ success = $true; account = $acc }) }
+            if ($acc) {
+                Update-NovaStreak | Out-Null
+                $acc = $Script:CurrentUser
+                return (ConvertTo-NovaJson @{ success = $true; account = $acc })
+            }
             return (ConvertTo-NovaJson @{ success = $false })
         }
 
@@ -3362,6 +4065,8 @@ function Invoke-NovaApi {
                 $Script:Config.Balance = $Script:CurrentUser.Balance
                 $Script:Config.CurrentUser = $result.account.Email
                 Save-Config
+                Update-NovaStreak | Out-Null
+                $result.account = $Script:CurrentUser
             }
             return (ConvertTo-NovaJson $result)
         }
@@ -3383,6 +4088,7 @@ function Invoke-NovaApi {
         }
 
         if ($Path -eq "/api/tweaks/list") {
+            if ($Script:CurrentUser) { Update-NovaStreak | Out-Null }
             $activePlan = Get-NovaEffectivePlan
             $tweakObj = [ordered]@{}
             foreach ($t in $Script:Tweaks) {
@@ -3399,6 +4105,7 @@ function Invoke-NovaApi {
                     required  = $required
                     locked    = [bool]($isAvail -and -not $allowed)
                     cat       = $t.Cat
+                    sub       = (Get-NovaTweakSub $t)
                     os        = $osLabel
                     available = [bool]$isAvail
                     state     = (Get-NovaTweakState ([string]$t.Id))
@@ -3406,14 +4113,37 @@ function Invoke-NovaApi {
             }
             $balance = if ($Script:CurrentUser) { [int]$Script:CurrentUser.Balance } else { [int]$Script:Config.Balance }
             $planUntil = if ($Script:CurrentUser) { $Script:CurrentUser.PlanUntil } else { $Script:Config.PlanUntil }
+            $badges = @(Get-NovaBadgeState)
+            $streak = if ($Script:CurrentUser) { [int]$Script:CurrentUser.Streak } else { 0 }
+            $bestStreak = if ($Script:CurrentUser) { [int]$Script:CurrentUser.BestStreak } else { 0 }
+            $appliedEver = if ($Script:CurrentUser) { @($Script:CurrentUser.AppliedEver | Where-Object { $_ }).Count } else { 0 }
             return (ConvertTo-NovaJson @{
                 tweaks = $tweakObj
                 os = $(if ($IsWin) { "Windows" } else { "Mac" })
                 plan = $activePlan
                 balance = $balance
                 planUntil = $planUntil
+                badges = $badges
+                streak = $streak
+                bestStreak = $bestStreak
+                appliedEver = $appliedEver
                 freeCount = @($Script:Tweaks | Where-Object { $_.Id -in $Script:FreeTweakIds }).Count
                 paidCount = @($Script:Tweaks | Where-Object { -not (Test-NovaProTweak $_) }).Count
+            })
+        }
+
+        if ($Path -eq "/api/badges") {
+            if ($Script:CurrentUser) { Update-NovaStreak | Out-Null }
+            $badges = @(Get-NovaBadgeState)
+            $streak = if ($Script:CurrentUser) { [int]$Script:CurrentUser.Streak } else { 0 }
+            $bestStreak = if ($Script:CurrentUser) { [int]$Script:CurrentUser.BestStreak } else { 0 }
+            return (ConvertTo-NovaJson @{
+                success = $true
+                badges = $badges
+                streak = $streak
+                bestStreak = $bestStreak
+                earned = @($badges | Where-Object { $_.earned }).Count
+                total = @($badges).Count
             })
         }
 
@@ -3486,6 +4216,7 @@ function Invoke-NovaApi {
                 Invoke-ServiceRestore -Name $tw.Svc
                 $msg = "Reverted: $($tw.Name)"
             }
+            if ($desired) { Add-NovaAppliedTweak ([string]$tw.Id) }
             return (ConvertTo-NovaJson @{ success = $true; message = $msg })
         }
 
@@ -3507,6 +4238,20 @@ function Invoke-NovaApi {
             return (ConvertTo-NovaJson @{ message = "Game Booster complete." })
         }
 
+        if ($Path -eq "/api/fpsbooster") {
+            if ((Get-NovaPlanRank (Get-NovaEffectivePlan)) -lt 1) { return (ConvertTo-NovaJson @{ success = $false; locked = $true; required = "Pro"; message = "FPS Booster needs Pro." }) }
+            $steps = @(Invoke-FpsBooster)
+            Add-NovaAppliedTweak "fpsbooster"
+            $detail = if ($steps.Count -gt 0) { $steps -join ", " } else { "no supported changes were found" }
+            return (ConvertTo-NovaJson @{ success = $true; steps = $steps; message = "FPS Booster applied: $detail." })
+        }
+
+        if ($Path -eq "/api/net/stats") {
+            $target = if ($body.target) { [string]$body.target } else { "1.1.1.1" }
+            $stats = Get-NovaNetworkStats -Target $target -Count 4
+            return (ConvertTo-NovaJson $stats)
+        }
+
         if ($Path -eq "/api/potato") {
             if ((Get-NovaPlanRank (Get-NovaEffectivePlan)) -lt 2) { return (ConvertTo-NovaJson @{ success = $false; locked = $true; required = "Ultimate"; message = "Potato Graphics needs Ultimate." }) }
             Invoke-PotatoGraphics
@@ -3517,15 +4262,18 @@ function Invoke-NovaApi {
             $activePlan = Get-NovaEffectivePlan
             $count = 0
             $skipped = 0
+            $appliedIds = New-Object System.Collections.Generic.List[string]
             foreach ($t in $Script:Tweaks) {
                 $isAvail = if ($IsWin) { $t.Win } else { $t.Mac }
                 if (-not $isAvail) { continue }
                 if (-not (Test-NovaTweakAllowed $t $activePlan)) { $skipped++; continue }
                 Set-NovaTweakState ([string]$t.Id) $true
                 try { & $t.Action } catch {}
+                [void]$appliedIds.Add([string]$t.Id)
                 $count++
             }
             Save-Config
+            if ($appliedIds.Count -gt 0) { Add-NovaAppliedTweaks -Ids @($appliedIds) }
             $msg = "Applied $count tweaks."
             if ($skipped -gt 0) { $msg += " $skipped locked tweaks were skipped." }
             return (ConvertTo-NovaJson @{ message = $msg; applied = $count; skipped = $skipped })
@@ -3575,6 +4323,13 @@ function Invoke-NovaApi {
 
         if ($Path -eq "/api/revertall") {
             Revert-All
+            if ($Script:CurrentUser) {
+                $acc = Normalize-NovaAccount $Script:CurrentUser
+                $acc.CleanSweeps = [int]$acc.CleanSweeps + 1
+                $Script:CurrentUser = $acc
+                Update-NovaBadges | Out-Null
+                Save-NovaCurrentAccount | Out-Null
+            }
             return (ConvertTo-NovaJson @{ message = "All changes reverted. Reboot recommended." })
         }
 
