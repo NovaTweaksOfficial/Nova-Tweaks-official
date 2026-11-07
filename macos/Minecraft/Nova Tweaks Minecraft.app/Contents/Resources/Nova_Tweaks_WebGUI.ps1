@@ -1,15 +1,31 @@
-#Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Nova Tweaks ULTIMATE - Red Theme + All Tweaks + Accounts + Auto-Login
+    Nova Tweaks - performance suite (Fortnite/Minecraft profiles, Windows + macOS dev/Minecraft variants)
 .DESCRIPTION
-    The complete suite with every performance tweak: Input Response Accelerator,
-    Network Spike Smoother, Mouse Precision, Keyboard Latency, USB Polling, Game Booster,
-    Potato Graphics, and 30+ system tweaks. All in a vibrant red GUI.
+    Nova Tweaks performance suite with real, reversible tweaks and Free/Pro/Ultimate tiers.
 #>
+
+# Admin is required for many Windows system tweaks; enforce on Windows only (macOS localhost/dev runs unprivileged).
+if (($IsWindows -or $env:OS -eq 'Windows_NT') -and -not ($env:NOVA_SKIP_ADMIN -eq '1')) {
+    try {
+        $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+        $p = New-Object Security.Principal.WindowsPrincipal($id)
+        if (-not $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+            $args = @('-NoProfile','-ExecutionPolicy','Bypass','-File',"`"$PSCommandPath`"")
+            Start-Process -FilePath (Get-Process -Id $PID).Path -ArgumentList $args -Verb RunAs
+            exit
+        }
+    } catch {}
+}
 
 $IsWin = $IsWindows -or ($env:OS -eq "Windows_NT")
 $IsMac = $IsMacOS -or ($env:OS -ne "Windows_NT" -and (Test-Path "/System/Library/CoreServices/SystemVersion.plist"))
+# Dev-only: preview the Windows UI/catalog on macOS. Does NOT execute Windows system changes.
+$Script:WindowsPreview = (-not $IsWin) -and ($env:NOVA_WINDOWS_PREVIEW -eq '1')
+function Get-NovaViewIsWin { return ($IsWin -or $Script:WindowsPreview) }
+# Single-product app variants (separate apps; no in-app game switch). Defaults preserve the combined Windows app.
+$Script:FixedGame = if ($env:NOVA_FIXED_GAME -in @('Fortnite','Minecraft')) { $env:NOVA_FIXED_GAME } else { $null }
+$Script:AppVariant = if ($env:NOVA_APP_VARIANT) { [string]$env:NOVA_APP_VARIANT } else { $null }
 
 $Script:Root = if ($IsWin) { Join-Path $env:USERPROFILE "NovaTweaks" } else { Join-Path $env:HOME ".novatweaks" }
 $Script:BackupDir = Join-Path $Script:Root "backups"
@@ -84,7 +100,7 @@ function Auto-Login {
 }
 function Logout { if (Test-Path $Script:TokenPath) { Remove-Item $Script:TokenPath -Force } }
 
-$Script:Config = @{ Plan="Free"; PlanUntil=$null; Balance=0; TweakStates=@{}; Email=""; LicenseKey=""; CurrentUser="" }
+$Script:Config = @{ Plan="Free"; PlanUntil=$null; Balance=0; TweakStates=@{}; Email=""; LicenseKey=""; CurrentUser=""; Game="Fortnite" }
 if (Test-Path $Script:ConfigPath) {
     try {
         $l = Get-Content $Script:ConfigPath -Raw | ConvertFrom-Json
@@ -102,7 +118,21 @@ if (Test-Path $Script:ConfigPath) {
 if (-not $Script:Config.Plan -or $Script:Config.Plan -notin @("Free","Pro","Ultimate")) { $Script:Config.Plan = "Free" }
 if (-not $Script:Config.PSObject.Properties.Name -contains "Balance") { $Script:Config | Add-Member -NotePropertyName Balance -NotePropertyValue 0 -Force }
 if (-not $Script:Config.PSObject.Properties.Name -contains "PlanUntil") { $Script:Config | Add-Member -NotePropertyName PlanUntil -NotePropertyValue $null -Force }
+if (-not $Script:Config.PSObject.Properties.Name -contains "Game" -or -not $Script:Config.Game -or $Script:Config.Game -notin @("Fortnite","Minecraft")) { $Script:Config.Game = "Fortnite" }
 function Save-Config { $Script:Config | ConvertTo-Json -Depth 5 | Set-Content $Script:ConfigPath -Encoding UTF8 }
+
+function Get-NovaGame {
+    if ($Script:FixedGame) { return $Script:FixedGame }
+    if ($Script:Config.Game -eq "Minecraft") { return "Minecraft" }
+    return "Fortnite"
+}
+
+function Test-NovaTweakForGame {
+    param($Tweak)
+    if (-not $Tweak) { return $false }
+    if (-not $Tweak.Game) { return $true }
+    return ([string]$Tweak.Game -eq (Get-NovaGame))
+}
 
 # ---------- Tier helpers ----------
 $Script:GiftSecret = "NovaTweaks-Gift-S3cr3t-2026-ChangeMe"
@@ -165,13 +195,13 @@ $Script:FreeTweakIds = @(
     "memory","temp","startup","mouseprec","power","visual","menu","transp",
     "disableballoontips","disablemenuanim","disablecursorshadow","gamemode",
     "faststartup","hibernate","ntfslast","trim","disableprintspooler","disablefax",
-    "winanimoff","displaysleepoff","nosleep","macpower","macappnap","macwinanim",
-    "macpurge","macdock","macfinderanim","macmouseaccel","mackeyrepeat","macreducemotion"
+    "winanimoff","displaysleepoff","nosleep","clearrecyclebin",
+    "mcoptions","mcmipmap","mcfullscreen","mcgpu","mcfsopt","mcpriority","mccache","mcgamebar"
 )
 $Script:UltimateTweakIds = @(
     "potato","mpo","fullopt","bcdedit","hags","corepark","timer","usbss","powerthrottle",
     "defendercloud","smartscreen","disablewuauserv","wuautorestart","wins",
-    "hypervisoroff","vbsdisable","memoryintegrityoff"
+    "hypervisoroff","vbsdisable","memoryintegrityoff","mcjvm"
 )
 
 function Get-NovaEffectivePlan {
@@ -1992,11 +2022,310 @@ function Invoke-TransparencyOff {
     } catch { Write-Log "Transparency tweak failed: $($_.Exception.Message)" "WARN" }
 }
 
+# ---------- Minecraft helpers ----------
+function Get-MinecraftDir {
+    if ($IsWin) {
+        if (-not $env:APPDATA) { return $null }
+        return (Join-Path $env:APPDATA ".minecraft")
+    }
+    if ($IsMac) {
+        if (-not $env:HOME) { return $null }
+        return (Join-Path $env:HOME "Library/Application Support/minecraft")
+    }
+    return $null
+}
+
+function Get-MinecraftJavaExe {
+    $candidates = New-Object System.Collections.Generic.List[string]
+    try { $cmd = Get-Command javaw.exe -ErrorAction SilentlyContinue; if ($cmd) { [void]$candidates.Add($cmd.Source) } } catch {}
+    $roots = @()
+    if (${env:ProgramFiles(x86)}) { $roots += (Join-Path ${env:ProgramFiles(x86)} "Minecraft Launcher\runtime") }
+    if ($env:ProgramFiles) { $roots += (Join-Path $env:ProgramFiles "Minecraft Launcher\runtime") }
+    foreach ($root in $roots) {
+        if ($root -and (Test-Path $root)) {
+            try {
+                $hit = Get-ChildItem -Path $root -Recurse -Filter "javaw.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+                if ($hit) { [void]$candidates.Add($hit.FullName) }
+            } catch {}
+        }
+    }
+    foreach ($c in $candidates) { if ($c -and (Test-Path $c)) { return $c } }
+    return $null
+}
+
+function Get-MinecraftOptionsBackup {
+    param([string]$Dir)
+    $path = Join-Path $Dir "nova-options-backup.json"
+    $ht = @{}
+    if (Test-Path $path) {
+        try {
+            $j = Get-Content $path -Raw | ConvertFrom-Json
+            foreach ($p in $j.PSObject.Properties) { $ht[$p.Name] = [string]$p.Value }
+        } catch {}
+    }
+    return @{ Path = $path; Values = $ht }
+}
+
+function Save-MinecraftOptionsBackup {
+    param([string]$Path, $Values)
+    try { ($Values | ConvertTo-Json -Depth 4) | Set-Content $Path -Encoding UTF8 } catch {}
+}
+
+function Invoke-MinecraftOptionSet {
+    param([string]$Key, [string]$Value)
+    $dir = Get-MinecraftDir
+    if (-not $dir) { Write-Log "APPDATA is not available." "WARN"; return }
+    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    $file = Join-Path $dir "options.txt"
+    $backup = Get-MinecraftOptionsBackup -Dir $dir
+    $lines = @()
+    if (Test-Path $file) { try { $lines = @(Get-Content $file) } catch {} }
+    if (-not $backup.Values.ContainsKey($Key)) {
+        $orig = $lines | Where-Object { $_ -match ("^" + [regex]::Escape($Key) + ":") } | Select-Object -First 1
+        if ($null -eq $orig -or "$orig" -eq "") { $backup.Values[$Key] = "__NOVA_MISSING__" } else { $backup.Values[$Key] = [string]$orig }
+        Save-MinecraftOptionsBackup -Path $backup.Path -Values $backup.Values
+    }
+    $newLine = "$Key`:$Value"
+    $found = $false
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -match ("^" + [regex]::Escape($Key) + ":")) { $lines[$i] = $newLine; $found = $true; break }
+    }
+    if (-not $found) { $lines += $newLine }
+    try { $lines | Set-Content $file -Encoding UTF8; Write-Log "Minecraft option '$Key' set to $Value." "OK" } catch { Write-Log "Could not write options.txt: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-MinecraftOptionRestore {
+    param([string]$Key)
+    $dir = Get-MinecraftDir
+    if (-not $dir) { return }
+    $file = Join-Path $dir "options.txt"
+    $backup = Get-MinecraftOptionsBackup -Dir $dir
+    if (-not $backup.Values.ContainsKey($Key)) { return }
+    $original = [string]$backup.Values[$Key]
+    $lines = @()
+    if (Test-Path $file) { try { $lines = @(Get-Content $file) } catch {} }
+    if ($original -eq "__NOVA_MISSING__") {
+        $lines = @($lines | Where-Object { $_ -notmatch ("^" + [regex]::Escape($Key) + ":") })
+    } else {
+        $found = $false
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match ("^" + [regex]::Escape($Key) + ":")) { $lines[$i] = $original; $found = $true; break }
+        }
+        if (-not $found) { $lines += $original }
+    }
+    try { $lines | Set-Content $file -Encoding UTF8 } catch {}
+    $backup.Values.Remove($Key)
+    Save-MinecraftOptionsBackup -Path $backup.Path -Values $backup.Values
+    Write-Log "Minecraft option '$Key' restored." "OK"
+}
+
+$Script:MinecraftPresetKeys = @("renderDistance","simulationDistance","maxFps","enableVsync","graphicsMode","particles","entityShadows","ao")
+
+function Invoke-MinecraftPreset {
+    Invoke-MinecraftOptionSet -Key "renderDistance" -Value "8"
+    Invoke-MinecraftOptionSet -Key "simulationDistance" -Value "5"
+    Invoke-MinecraftOptionSet -Key "maxFps" -Value "260"
+    Invoke-MinecraftOptionSet -Key "enableVsync" -Value "false"
+    Invoke-MinecraftOptionSet -Key "graphicsMode" -Value "0"
+    Invoke-MinecraftOptionSet -Key "particles" -Value "2"
+    Invoke-MinecraftOptionSet -Key "entityShadows" -Value "false"
+    Invoke-MinecraftOptionSet -Key "ao" -Value "false"
+    Write-Log "Minecraft performance preset applied." "OK"
+}
+
+function Restore-MinecraftPreset {
+    foreach ($k in $Script:MinecraftPresetKeys) { Invoke-MinecraftOptionRestore -Key $k }
+    Write-Log "Minecraft performance preset restored." "OK"
+}
+
+function Invoke-MinecraftJvmArgs {
+    $dir = Get-MinecraftDir
+    if (-not $dir) { return }
+    $file = Join-Path $dir "launcher_profiles.json"
+    if (-not (Test-Path $file)) { Write-Log "launcher_profiles.json not found. Launch Minecraft once first." "WARN"; return }
+    $backup = "$file.nova-backup"
+    if (-not (Test-Path $backup)) { Copy-Item $file $backup -Force }
+    try {
+        $raw = Get-Content $file -Raw | ConvertFrom-Json
+        $totalGb = 8
+        try {
+            if ($IsWin) {
+                $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
+                if ($cs -and $cs.TotalPhysicalMemory) { $totalGb = [math]::Floor($cs.TotalPhysicalMemory / 1GB) }
+            } elseif ($IsMac) {
+                $mem = [long](sysctl -n hw.memsize 2>$null)
+                if ($mem -gt 0) { $totalGb = [math]::Floor($mem / 1GB) }
+            }
+        } catch {}
+        $xmx = [int][math]::Max(2, [math]::Min(8, [math]::Floor($totalGb / 2)))
+        $args = "-Xmx${xmx}G -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40 -XX:G1HeapRegionSize=8M -XX:G1ReservePercent=20 -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem -XX:MaxTenuringThreshold=1"
+        foreach ($p in $raw.profiles.PSObject.Properties) {
+            $p.Value | Add-Member -NotePropertyName javaArgs -NotePropertyValue $args -Force
+        }
+        ($raw | ConvertTo-Json -Depth 20) | Set-Content $file -Encoding UTF8
+        Write-Log "Minecraft JVM arguments set to ${xmx}G with G1GC." "OK"
+    } catch { Write-Log "Could not update launcher_profiles.json: $($_.Exception.Message)" "WARN" }
+}
+
+function Restore-MinecraftJvmArgs {
+    $dir = Get-MinecraftDir
+    if (-not $dir) { return }
+    $file = Join-Path $dir "launcher_profiles.json"
+    $backup = "$file.nova-backup"
+    if (Test-Path $backup) {
+        Copy-Item $backup $file -Force
+        Remove-Item $backup -Force
+        Write-Log "Minecraft launcher profiles restored." "OK"
+    } else {
+        Write-Log "No Minecraft launcher backup found." "WARN"
+    }
+}
+
+function Invoke-MinecraftPriority {
+    param([string]$Priority = "High")
+    if (-not $IsWin) { Write-Log "Minecraft tweaks are Windows only." "WARN"; return }
+    $procs = @()
+    try {
+        $procs = Get-CimInstance Win32_Process -Filter "Name='javaw.exe' OR Name='java.exe' OR Name='Minecraft.Windows.exe'" -ErrorAction SilentlyContinue | Where-Object {
+            $_.Name -eq "Minecraft.Windows.exe" -or ([string]$_.CommandLine -match "minecraft")
+        }
+    } catch {}
+    if ($procs.Count -eq 0) { Write-Log "Start Minecraft first, then apply Java priority." "WARN"; return }
+    $changed = 0
+    foreach ($p in $procs) {
+        try { (Get-Process -Id $p.ProcessId -ErrorAction Stop).PriorityClass = $Priority; $changed++ } catch {}
+    }
+    Write-Log "Minecraft process priority set to $Priority for $changed process(es)." "OK"
+}
+
+function Set-MinecraftGpuPreference {
+    param([switch]$Remove)
+    if (-not $IsWin) { return }
+    $key = "HKCU:\Software\Microsoft\DirectX\UserGpuPreferences"
+    if (-not (Test-Path $key)) { New-Item -Path $key -Force | Out-Null }
+    $paths = New-Object System.Collections.Generic.List[string]
+    $java = Get-MinecraftJavaExe
+    if ($java) { [void]$paths.Add($java) }
+    try {
+        $pkg = Get-AppxPackage -Name "Microsoft.MinecraftUWP" -ErrorAction SilentlyContinue
+        if ($pkg -and $pkg.InstallLocation) {
+            $storeExe = Join-Path $pkg.InstallLocation "Minecraft.Windows.exe"
+            if (Test-Path $storeExe) { [void]$paths.Add($storeExe) }
+        }
+    } catch {}
+    if ($paths.Count -eq 0) { Write-Log "Minecraft Java/Store executable not found." "WARN"; return }
+    foreach ($p in $paths) {
+        try {
+            if ($Remove) { Remove-ItemProperty -Path $key -Name $p -ErrorAction SilentlyContinue }
+            else { Set-ItemProperty -Path $key -Name $p -Value "GpuPreference=2;" -Type String -Force }
+        } catch {}
+    }
+    Write-Log $(if ($Remove) { "Minecraft GPU preference cleared." } else { "Minecraft set to high-performance GPU." }) "OK"
+}
+
+function Set-MinecraftFullscreenOpt {
+    param([switch]$Remove)
+    if (-not $IsWin) { return }
+    $key = "HKCU:\Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers"
+    if (-not (Test-Path $key)) { New-Item -Path $key -Force | Out-Null }
+    $exes = New-Object System.Collections.Generic.List[string]
+    $java = Get-MinecraftJavaExe
+    if ($java) { [void]$exes.Add($java) }
+    if ($exes.Count -eq 0) { Write-Log "Minecraft Java executable not found." "WARN"; return }
+    foreach ($e in $exes) {
+        try {
+            if ($Remove) { Remove-ItemProperty -Path $key -Name $e -ErrorAction SilentlyContinue }
+            else { Set-ItemProperty -Path $key -Name $e -Value "~ DISABLEDXMAXIMIZEDWINDOWEDMODE" -Type String -Force }
+        } catch {}
+    }
+    Write-Log $(if ($Remove) { "Minecraft fullscreen optimizations restored." } else { "Minecraft fullscreen optimizations disabled." }) "OK"
+}
+
+function Clear-MinecraftCache {
+    $dir = Get-MinecraftDir
+    if (-not $dir) { return }
+    $targets = @((Join-Path $dir "logs"), (Join-Path $dir "crash-reports"))
+    $removed = 0
+    foreach ($t in $targets) {
+        if (Test-Path $t) {
+            try { Get-ChildItem $t -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue; $removed++ } catch {}
+        }
+    }
+    $tmp = if ($env:TEMP) { $env:TEMP } elseif ($env:TMPDIR) { $env:TMPDIR } else { $null }
+    if ($tmp) {
+        try { Get-ChildItem $tmp -Filter "minecraft*" -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue; $removed++ } catch {}
+    }
+    Write-Log "Minecraft logs, crash reports and temp files cleared ($removed locations)." "OK"
+}
+
+$Script:MinecraftGameBarValues = @(
+    @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\GameDVR"; Name = "AppCaptureEnabled"; Value = 0 },
+    @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\GameDVR"; Name = "HistoricalCaptureEnabled"; Value = 0 },
+    @{ Path = "HKCU:\System\GameConfigStore"; Name = "GameDVR_Enabled"; Value = 0 },
+    @{ Path = "HKCU:\Software\Microsoft\GameBar"; Name = "ShowStartupPanel"; Value = 0 },
+    @{ Path = "HKCU:\Software\Microsoft\GameBar"; Name = "UseNexusForGameBarEnabled"; Value = 0 }
+)
+
+function Get-MinecraftGameBarBackupPath {
+    $dir = Get-MinecraftDir
+    if (-not $dir) { return $null }
+    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    return (Join-Path $dir "nova-gamebar-backup.json")
+}
+
+function Invoke-MinecraftGameBar {
+    if (-not $IsWin) { Write-Log "Minecraft tweaks are Windows only." "WARN"; return }
+    $backupPath = Get-MinecraftGameBarBackupPath
+    if (-not $backupPath) { Write-Log "APPDATA is not available." "WARN"; return }
+    $backup = @{}
+    if (Test-Path $backupPath) {
+        try {
+            $j = Get-Content $backupPath -Raw | ConvertFrom-Json
+            foreach ($p in $j.PSObject.Properties) { $backup[$p.Name] = [string]$p.Value }
+        } catch {}
+    }
+    foreach ($item in $Script:MinecraftGameBarValues) {
+        $id = "$($item.Path)|$($item.Name)"
+        try {
+            $existing = Get-ItemProperty -Path $item.Path -Name $item.Name -ErrorAction SilentlyContinue
+            if ($backup.ContainsKey($id)) { }
+            elseif ($null -ne $existing -and $null -ne $existing.($item.Name)) { $backup[$id] = [string]$existing.($item.Name) }
+            else { $backup[$id] = "__NOVA_MISSING__" }
+            if (-not (Test-Path $item.Path)) { New-Item -Path $item.Path -Force | Out-Null }
+            Set-ItemProperty -Path $item.Path -Name $item.Name -Value $item.Value -Type DWord -Force -ErrorAction Stop
+        } catch { Write-Log "Could not set Game Bar value $($item.Name): $($_.Exception.Message)" "WARN" }
+    }
+    try { ($backup | ConvertTo-Json -Depth 4) | Set-Content $backupPath -Encoding UTF8 } catch {}
+    Write-Log "Xbox Game Bar overlay and background capture disabled." "OK"
+}
+
+function Restore-MinecraftGameBar {
+    if (-not $IsWin) { Write-Log "Minecraft tweaks are Windows only." "WARN"; return }
+    $backupPath = Get-MinecraftGameBarBackupPath
+    if (-not $backupPath -or -not (Test-Path $backupPath)) { Write-Log "No Game Bar backup found." "WARN"; return }
+    try {
+        $j = Get-Content $backupPath -Raw | ConvertFrom-Json
+        foreach ($item in $Script:MinecraftGameBarValues) {
+            $id = "$($item.Path)|$($item.Name)"
+            $p = $j.PSObject.Properties | Where-Object { $_.Name -eq $id } | Select-Object -First 1
+            if (-not $p) { continue }
+            $original = [string]$p.Value
+            if ($original -eq "__NOVA_MISSING__") {
+                Remove-ItemProperty -Path $item.Path -Name $item.Name -ErrorAction SilentlyContinue
+            } else {
+                Set-ItemProperty -Path $item.Path -Name $item.Name -Value ([int]$original) -Type DWord -Force -ErrorAction SilentlyContinue
+            }
+        }
+        Remove-Item $backupPath -Force -ErrorAction SilentlyContinue
+        Write-Log "Xbox Game Bar settings restored." "OK"
+    } catch { Write-Log "Could not restore Game Bar settings: $($_.Exception.Message)" "WARN" }
+}
+
 # ---------- TWEAK DEFINITIONS ----------
 $Script:Tweaks = @(
     # General
     @{Id="memory";Name="Memory cleanup (trim + purge)";Desc="Trims idle process working sets and purges standby/inactive memory. Frees RAM.";Risk="Safe";Free=$true;Win=$true;Mac=$true;Cat="General";Action={Invoke-MemoryCleanup}},
-    @{Id="temp";Name="Temp + cache cleanup";Desc="Clears temp folders, browser cache, and Fortnite shader cache. Frees disk space.";Risk="Safe";Free=$true;Win=$true;Mac=$true;Cat="General";Action={Invoke-TempCleanup}},
+    @{Id="temp";Name="Temp + cache cleanup";Desc="Clears temp folders, browser cache, and game shader cache. Frees disk space.";Risk="Safe";Free=$true;Win=$true;Mac=$true;Cat="General";Action={Invoke-TempCleanup}},
     @{Id="startup";Name="Disable startup delay";Desc="Removes the artificial startup app delay timer for faster boot.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="General";Action={Invoke-StartupDelayOff}},
     @{Id="spotlight";Name="Disable Spotlight indexing";Desc="Stops Spotlight from indexing. Frees disk I/O. Reversible.";Risk="Caution";Free=$false;Win=$false;Mac=$true;Cat="General";Action={try{mdutil -i off / 2>$null;Write-Log "Spotlight disabled on /." "OK"}catch{Write-Log "Spotlight tweak failed." "WARN"};Off={Invoke-MacRoot -Command "mdutil -i on /" -Label "Spotlight enabled."}}},
     # Input
@@ -2024,7 +2353,7 @@ $Script:Tweaks = @(
     @{Id="services";Name="Disable background services";Desc="Stops Xbox, telemetry and diagnostic services. Reduces background CPU.";Risk="Caution";Free=$false;Win=$true;Mac=$false;Cat="Services";Action={Invoke-Services}},
     @{Id="sysmain";Name="Disable SysMain (Superfetch)";Desc="Stops background prefetching. Recommended on SSDs.";Risk="Caution";Free=$false;Win=$true;Mac=$false;Cat="Services";Action={Invoke-DisableSysMain}},
     # Game
-    @{Id="potato";Name="Potato Graphics (Engine.ini)";Desc="Lowers Fortnite render quality for max FPS and visibility. Changes appearance.";Risk="Caution";Free=$false;Win=$true;Mac=$false;Cat="Game";Action={Invoke-PotatoGraphics}},
+    @{Id="potato";Name="Potato Graphics (Engine.ini)";Desc="Lowers Fortnite render quality for max FPS and visibility. Changes appearance.";Risk="Caution";Free=$false;Win=$true;Mac=$false;Cat="Game";Game="Fortnite";Action={Invoke-PotatoGraphics}},
     @{Id="gamedvr";Name="Disable Game DVR / Game Bar";Desc="Turns off Xbox Game Bar recording overlay that hooks into games.";Risk="Safe";Free=$false;Win=$true;Mac=$false;Cat="Game";Action={Invoke-RegistryTweaks}},
     @{Id="bcdedit";Name="BCDEDIT micro-stutter fix";Desc="Disables dynamic tick, enables platform clock, enhances TSC sync. Reduces micro-stutters.";Risk="Caution";Free=$false;Win=$true;Mac=$false;Cat="Game";Action={Invoke-BCDEdit}},
     @{Id="disableballoontips";Name="Disable Balloon Tips";Desc="Turns off notification balloon tips.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Visual";Action={Invoke-RegSet -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "ShowInfoTip" -Value 0}},
@@ -2078,7 +2407,7 @@ $Script:Tweaks = @(
     # Game / GPU
     @{Id="gamemode";Name="Enable Game Mode";Desc="Turns on Windows Game Mode for prioritized CPU/GPU scheduling.";Risk="Safe";Free=$true;Cat="Game";Win=$true;Mac=$false;Action={Invoke-GameModeOn}},
     @{Id="mpo";Name="Disable MPO (Multiplane Overlay)";Desc="Disables MPO to fix stuttering and alt-tab issues in games.";Risk="Caution";Free=$false;Cat="Game";Win=$true;Mac=$false;Action={Invoke-MPOOff}},
-    @{Id="fullopt";Name="Disable Fullscreen Optimizations";Desc="Disables FSO for lower input lag in fullscreen exclusive mode.";Risk="Safe";Free=$false;Cat="Game";Win=$true;Mac=$false;Action={Invoke-DisableFullscreenOpt}},
+    @{Id="fullopt";Name="Disable Fullscreen Optimizations";Desc="Disables FSO for lower input lag in fullscreen exclusive mode.";Risk="Safe";Free=$false;Cat="Game";Game="Fortnite";Win=$true;Mac=$false;Action={Invoke-DisableFullscreenOpt}},
     # Power
     @{Id="powerthrottle";Name="Disable Power Throttling";Desc="Stops Windows from throttling background app CPU.";Risk="Safe";Free=$false;Cat="Power";Win=$true;Mac=$false;Action={Invoke-PowerThrottlingOff}},
     @{Id="usbss";Name="Disable USB Selective Suspend";Desc="Keeps USB devices awake to reduce input latency.";Risk="Safe";Free=$false;Cat="Power";Win=$true;Mac=$false;Action={Invoke-USBSelectiveSuspendOff}},
@@ -2284,7 +2613,7 @@ $Script:Tweaks = @(
     @{Id="clearamdshader";Name="Clear AMD shader cache";Desc="Deletes AMD DX and GL shader caches. Frees space if you change drivers often.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Storage";Action={Invoke-Cleanup -Paths @("$env:LOCALAPPDATA\AMD\DxCache","$env:LOCALAPPDATA\AMD\GLCache") -Label "AMD shader cache"}},
     @{Id="cleardonotcache";Name="Clear Delivery Optimization cache";Desc="Deletes cached update chunks used for peer-to-peer delivery. Frees disk space.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Storage";Action={Invoke-Cmd -Cmd "Delete-DeliveryOptimizationCache -Force -ErrorAction SilentlyContinue"}},
     @{Id="clearcrashdumps";Name="Clear crash dumps";Desc="Deletes user and system crash dump files. Frees disk space after a crash.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Storage";Action={Invoke-Cleanup -Paths @("$env:LOCALAPPDATA\CrashDumps","C:\Windows\Minidump") -Label "Crash dumps"}},
-    @{Id="clearfortnitecache";Name="Clear Fortnite shader cache";Desc="Deletes Fortnite's generated shader cache. The game rebuilds it on next launch.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Storage";Action={Invoke-Cleanup -Paths @("$env:LOCALAPPDATA\FortniteGame\Saved\ShaderCache") -Label "Fortnite shader cache"}},
+    @{Id="clearfortnitecache";Name="Clear Fortnite shader cache";Desc="Deletes Fortnite's generated shader cache. The game rebuilds it on next launch.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Storage";Game="Fortnite";Action={Invoke-Cleanup -Paths @("$env:LOCALAPPDATA\FortniteGame\Saved\ShaderCache") -Label "Fortnite shader cache"}},
     @{Id="optimizessd";Name="Retrim system drive";Desc="Runs Optimize-Volume with -ReTrim on C: to refresh SSD free blocks. Frees performance on full drives.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Storage";Action={Invoke-Cmd -Cmd "Optimize-Volume -DriveLetter C -ReTrim -ErrorAction SilentlyContinue"}},
 
     # ---------- v5.3 EXPANSION: FIRMWARE-ADJACENT ----------
@@ -2501,7 +2830,16 @@ $Script:Tweaks = @(
 
     # ---------- v5.3 EXPANSION: macOS GAME ----------
     @{Id="macgamecenter";Name="Disable Game Center (Mac)";Desc="Stops the Game Center daemon from running in the background.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Game";Action={Invoke-MacDefaults -Domain "com.apple.gamed" -Key "Disabled" -Type bool -Value "true"; Invoke-MacRefresh -Names @("gamed")}},
-    @{Id="macfortnitecache";Name="Clear Fortnite cache (Mac)";Desc="Deletes Fortnite shader and log caches. The game rebuilds them on next launch.";Risk="Caution";Free=$true;Win=$false;Mac=$true;Cat="Game";Action={Invoke-MacCleanup -Paths @("$env:HOME/Library/Application Support/Epic/FortniteGame/Saved/ShaderCache","$env:HOME/Library/Application Support/Epic/FortniteGame/Saved/Logs") -Label "Fortnite cache"}}
+    # ---------- MINECRAFT (Windows) ----------
+    @{Id="mcoptions";Name="Minecraft Performance Preset";Desc="Sets render distance 8, simulation distance 5, 260 FPS cap, VSync off, fast graphics, minimal particles, no entity shadows and no smooth lighting. Original values are saved for restore.";Risk="Safe";Free=$true;Win=$true;Mac=$true;Cat="Game";Game="Minecraft";Action={Invoke-MinecraftPreset};Off={Restore-MinecraftPreset}},
+    @{Id="mcmipmap";Name="Minecraft Mipmap Tuning";Desc="Sets mipmap levels to 4, which smooths distant blocks with less shimmer and minimal GPU cost.";Risk="Safe";Free=$true;Win=$true;Mac=$true;Cat="Game";Game="Minecraft";Action={Invoke-MinecraftOptionSet -Key "mipmapLevels" -Value "4"};Off={Invoke-MinecraftOptionRestore -Key "mipmapLevels"}},
+    @{Id="mcfullscreen";Name="Minecraft Fullscreen Mode";Desc="Sets Minecraft to launch in true fullscreen, which usually lowers input latency and avoids borderless capture overhead.";Risk="Safe";Free=$true;Win=$true;Mac=$true;Cat="Game";Game="Minecraft";Action={Invoke-MinecraftOptionSet -Key "fullscreen" -Value "true"};Off={Invoke-MinecraftOptionRestore -Key "fullscreen"}},
+    @{Id="mcgpu";Name="Minecraft High-Performance GPU";Desc="Adds the Minecraft Java and Store executables to Windows' high-performance GPU preference. Laptops with two GPUs stop picking the integrated one.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Game";Game="Minecraft";Action={Set-MinecraftGpuPreference};Off={Set-MinecraftGpuPreference -Remove}},
+    @{Id="mcfsopt";Name="Minecraft Fullscreen Optimizations Off";Desc="Disables Windows fullscreen optimizations for the Minecraft Java executable so the game controls the display path.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Game";Game="Minecraft";Action={Set-MinecraftFullscreenOpt};Off={Set-MinecraftFullscreenOpt -Remove}},
+    @{Id="mcpriority";Name="Minecraft High Process Priority";Desc="Raises the priority of the running Minecraft Java or Store process to High. Start Minecraft first, then apply.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Game";Game="Minecraft";Action={Invoke-MinecraftPriority -Priority "High"};Off={Invoke-MinecraftPriority -Priority "Normal"}},
+    @{Id="mccache";Name="Clear Minecraft Logs & Crash Reports";Desc="Deletes old Minecraft logs, crash reports and leftover temporary files. Worlds, resource packs and shader packs are never touched.";Risk="Safe";Free=$true;Win=$true;Mac=$true;Cat="Game";Game="Minecraft";Action={Clear-MinecraftCache}},
+    @{Id="mcgamebar";Name="Minecraft Game Bar & Capture Off";Desc="Disables the Xbox Game Bar overlay, background capture and startup panel so nothing records or overlays Minecraft.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Game";Game="Minecraft";Action={Invoke-MinecraftGameBar};Off={Restore-MinecraftGameBar}},
+    @{Id="mcjvm";Name="Minecraft G1GC JVM Arguments";Desc="Writes tuned G1GC JVM arguments into each launcher profile, with heap sized from your installed RAM (2-8 GB). A full launcher_profiles.json backup is kept.";Risk="Caution";Free=$false;Win=$true;Mac=$true;Cat="Game";Game="Minecraft";Action={Invoke-MinecraftJvmArgs};Off={Restore-MinecraftJvmArgs}}
 )
 
 if (-not $Script:Config.TweakStates) { $Script:Config.TweakStates = @{} }
@@ -2625,6 +2963,35 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .content{flex:1;overflow-y:auto;padding:28px 32px;background:radial-gradient(ellipse at top right,rgba(255,26,46,.05),transparent 50%);position:relative;z-index:1;min-height:0}
 .page{display:none;animation:fadeIn .35s cubic-bezier(.4,0,.2,1)}.page.active{display:block}
 @keyframes fadeIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+
+/* Game profile switch */
+.gameswitch{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.gamebtn{display:flex;align-items:center;gap:12px;text-align:left;padding:14px;border:1px solid var(--border);border-radius:12px;background:rgba(255,255,255,.02);color:var(--text);cursor:pointer;transition:all .22s;font-family:inherit}
+.gamebtn:hover{border-color:rgba(255,26,46,.55);background:rgba(255,26,46,.06);transform:translateY(-1px)}
+.gamebtn.active{border-color:var(--red);background:linear-gradient(135deg,rgba(255,26,46,.16),rgba(255,26,46,.03));box-shadow:0 0 22px rgba(255,26,46,.16)}
+.gamebtn .gameicon{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;background:#0a0a10;border:1px solid var(--border2);flex-shrink:0}
+.gamebtn b{display:block;font-size:13.5px}
+.gamebtn span{display:block;font-size:11px;color:var(--textdim);margin-top:2px}
+.gamebtn.active .gameicon{border-color:rgba(255,26,46,.6);box-shadow:0 0 14px rgba(255,26,46,.25)}
+
+/* Game welcome overlay */
+.game-welcome{position:fixed;inset:0;z-index:20000;display:none;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,rgba(255,26,46,.14),rgba(5,5,8,.97) 62%);backdrop-filter:blur(10px);overflow:hidden}
+.game-welcome.show{display:flex;animation:gameFade .35s ease both}
+.game-welcome.out{animation:gameOut .45s ease both}
+.game-welcome::before{content:'';position:absolute;width:150vmax;height:150vmax;background:conic-gradient(from 0deg,transparent 0 78%,rgba(255,26,46,.16) 84%,transparent 90% 100%);animation:gameSweep 2.4s linear infinite;pointer-events:none}
+.game-welcome-inner{position:relative;text-align:center;padding:32px;max-width:92vw}
+.game-welcome-icon{font-size:72px;line-height:1;filter:drop-shadow(0 0 28px rgba(255,26,46,.45));animation:gamePop .7s cubic-bezier(.2,.9,.25,1.2) both}
+.game-welcome-title{font-size:clamp(34px,6vw,66px);font-weight:900;letter-spacing:-2px;margin-top:16px;background:linear-gradient(135deg,#fff,var(--red3),var(--red));-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:gameRise .7s .15s cubic-bezier(.2,.8,.2,1) both}
+.game-welcome-sub{font-size:12px;text-transform:uppercase;letter-spacing:5px;color:var(--textdim);margin-top:12px;animation:gameRise .7s .3s cubic-bezier(.2,.8,.2,1) both}
+.game-welcome-bar{width:min(320px,70vw);height:4px;border-radius:4px;background:rgba(255,255,255,.08);margin:28px auto 0;overflow:hidden}
+.game-welcome-bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--red),var(--red3),#ff8a95);box-shadow:0 0 16px rgba(255,26,46,.6);animation:gameLoad 2.4s .2s cubic-bezier(.3,.1,.2,1) both}
+@keyframes gameFade{from{opacity:0}to{opacity:1}}
+@keyframes gameOut{from{opacity:1}to{opacity:0}}
+@keyframes gameSweep{to{transform:rotate(360deg)}}
+@keyframes gamePop{from{opacity:0;transform:scale(.5) rotate(-12deg)}to{opacity:1;transform:scale(1) rotate(0)}}
+@keyframes gameRise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+@keyframes gameLoad{0%{width:0}55%{width:62%}100%{width:100%}}
+@media (max-width:720px){.gameswitch{grid-template-columns:1fr}}
 h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
 .sub{color:var(--textdim);font-size:13.5px;margin-bottom:24px;line-height:1.5}
 
@@ -2873,8 +3240,8 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
 <!-- MAIN APP -->
 <div id="appContainer" style="display:none;width:100%;height:100vh;position:relative;z-index:1;">
 <div class="sidebar">
-  <div class="brand">Nova Tweaks</div>
-  <div class="brandsub">Performance Suite</div>
+  <div class="brand" id="brandName">Nova Tweaks</div>
+  <div class="brandsub" id="brandSub">Performance Suite</div>
   <div class="planbadge free" id="planBadge">FREE</div>
   <button class="navbtn active" data-page="home"><span class="navicon">◆</span>Home</button>
   <button class="navbtn" data-page="tweaks"><span class="navicon">⚙</span>All Tweaks</button>
@@ -2984,7 +3351,7 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
 <!-- ALL TWEAKS -->
 <div class="page" id="page-tweaks">
   <h1>All Tweaks</h1>
-  <div class="sub">@@TWEAK_SUB@@ Each one is a card with a risk label, OS badge (Windows/macOS/Both) and a switch.</div>
+  <div class="sub" id="tweakSub">@@TWEAK_SUB@@ Each one is a card with a risk label, profile badge and a switch.</div>
   <div class="catbar" id="catBar"></div>
   <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
     <button class="btn danger sm" id="removeAllBtn">Remove All Tweaks</button>
@@ -3159,7 +3526,7 @@ spotify.exe</textarea>
   <div class="livetool">
     <div class="livetool-header">
       <div class="livetool-icon">🚀</div>
-      <div><div class="livetool-title">FPS Booster</div><div style="font-size:11px;color:var(--textmuted)">Windows-first, macOS fallback included</div></div>
+      <div><div class="livetool-title">FPS Booster</div><div style="font-size:11px;color:var(--textmuted)">Real Windows system changes</div></div>
     </div>
     <div class="livetool-desc" id="fpsDesc">Applies real OS-level changes that reduce background overhead and give Fortnite priority. Nothing is faked or log-only.</div>
     <div class="card">
@@ -3221,7 +3588,24 @@ spotify.exe</textarea>
 <!-- SETTINGS -->
 <div class="page" id="page-settings">
   <h1>Settings</h1>
-  <div class="sub">Plan, balance and license.</div>
+  <div class="sub">Game profile, plan, balance and license.</div>
+
+  <div class="card" id="gameSwitchCard" style="margin-bottom:14px">
+    <h3 style="margin-bottom:6px;font-size:14px">Game profile</h3>
+    <div style="font-size:12px;color:var(--textdim)">Switch the tweak catalog between Fortnite and Minecraft. Shared Windows tweaks stay in both profiles.</div>
+    <div class="gameswitch">
+      <button class="gamebtn active" data-game="Fortnite">
+        <span class="gameicon">🎮</span>
+        <span><b>Fortnite Tweaks</b><span>Fortnite, rendering &amp; competitive</span></span>
+      </button>
+      <button class="gamebtn" data-game="Minecraft">
+        <span class="gameicon">⛏</span>
+        <span><b>Minecraft Tweaks</b><span>Java &amp; Store, options.txt &amp; JVM</span></span>
+      </button>
+    </div>
+    <div id="gameNote" style="margin-top:10px;font-size:11.5px;color:var(--textmuted)">Current profile: Fortnite. Changing games plays a short welcome animation.</div>
+  </div>
+
   <div class="acctgrid">
     <div class="acctcard">
       <div class="acctlabel">Current plan</div>
@@ -3252,7 +3636,7 @@ spotify.exe</textarea>
     <div style="font-size:12px;color:var(--textdim);margin-bottom:12px">30 days per purchase. Balance is deducted immediately; no card is stored.</div>
     <div class="tierlist">
       <div class="tierrow"><div><b>Pro</b><div style="color:var(--textdim);font-size:11.5px">$5.99 · most tweaks, all crosshairs, macro</div></div><button class="btn sm" id="buyProBtn">Use balance</button></div>
-      <div class="tierrow"><div><b>Ultimate</b><div style="color:var(--textdim);font-size:11.5px">$12.99 · all 375 tweaks, Potato Graphics</div></div><button class="btn sm" id="buyUltimateBtn">Use balance</button></div>
+      <div class="tierrow"><div><b>Ultimate</b><div style="color:var(--textdim);font-size:11.5px">$12.99 · all 383 tweaks, Minecraft JVM, Potato Graphics</div></div><button class="btn sm" id="buyUltimateBtn">Use balance</button></div>
     </div>
     <div style="margin-top:12px;font-size:11.5px;color:var(--textmuted);line-height:1.7">
       Card, PayPal and Cash App checkout is on the website. A paid upgrade arrives as a license key — paste it below.
@@ -3267,7 +3651,7 @@ spotify.exe</textarea>
     <div style="margin-top:12px;color:var(--textdim);font-size:11.5px;line-height:1.8">
       <b style="color:var(--text)">Free</b> — 30 core tweaks, restore point, Classic crosshair.<br>
       <b style="color:var(--text)">Pro</b> — most tweaks, every crosshair style, drag macro, ping and input work.<br>
-      <b style="color:var(--text)">Ultimate</b> — all 375 tweaks, advanced services, firmware controls, Potato Graphics.
+      <b style="color:var(--text)">Ultimate</b> — all 383 tweaks, Minecraft JVM tuning, advanced services, firmware controls, Potato Graphics.
     </div>
     <div id="acctMsg" style="display:none;margin-top:12px;font-size:12px;line-height:1.6"></div>
   </div>
@@ -3322,10 +3706,19 @@ spotify.exe</textarea>
 </div>
 </div>
 
+<div class="game-welcome" id="gameWelcome">
+  <div class="game-welcome-inner">
+    <div class="game-welcome-icon" id="gameWelcomeIcon">⛏</div>
+    <div class="game-welcome-title" id="gameWelcomeTitle">Welcome to Minecraft Tweaks</div>
+    <div class="game-welcome-sub" id="gameWelcomeSub">Loading your new profile</div>
+    <div class="game-welcome-bar"><i></i></div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
-const state={plan:'Free',tweaks:{},os:'unknown',user:null,balance:0,planUntil:null,badges:[],streak:0,bestStreak:0,appliedEver:0};
+const state={plan:'Free',tweaks:{},os:'unknown',game:'Fortnite',previewWindows:false,user:null,balance:0,planUntil:null,badges:[],streak:0,bestStreak:0,appliedEver:0};
 window.onerror=(m,u,l)=>{const e=document.getElementById('loginError');if(e)e.textContent='JS Error: '+m+' (line '+l+')';console.error(m,u,l);};
 // Snowfall
 (function(){
@@ -3355,6 +3748,52 @@ window.onerror=(m,u,l)=>{const e=document.getElementById('loginError');if(e)e.te
   document.addEventListener('mousedown',onDown);document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);
 })();
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000)}
+
+const GAME_PROFILES={
+  Fortnite:{brand:'Nova Tweaks',sub:'Fortnite Performance Suite',welcome:'Welcome to Fortnite Tweaks',icon:'🎮',note:'Current profile: Fortnite. Fortnite and shared Windows tweaks are loaded.'},
+  Minecraft:{brand:'Minecraft Tweaks',sub:'Minecraft Performance Suite',welcome:'Welcome to Minecraft Tweaks',icon:'⛏',note:'Current profile: Minecraft. Minecraft and shared Windows tweaks are loaded.'}
+};
+function applyGameBranding(game){
+  const key=(game==='Minecraft')?'Minecraft':'Fortnite';
+  const p=GAME_PROFILES[key];
+  state.game=key;
+  const fixed = !!state.fixedGame;
+  const brand = fixed ? 'Nova Tweaks' : p.brand;
+  const sub = fixed ? (key==='Minecraft' ? 'Nova Tweaks (Minecraft) Performance Suite' : 'Nova Tweaks (Fortnite) Performance Suite') : p.sub;
+  const title = fixed ? ('Nova Tweaks ('+key+')') : p.brand;
+  const bn=document.getElementById('brandName'); if(bn) bn.textContent=brand;
+  const bs=document.getElementById('brandSub'); if(bs) bs.textContent=sub;
+  document.title=title;
+  document.querySelectorAll('.gamebtn').forEach(b=>b.classList.toggle('active',b.dataset.game===key));
+  const note=document.getElementById('gameNote'); if(note) note.textContent = fixed ? ('This Nova Tweaks app is dedicated to '+key+'.') : p.note;
+  const card=document.getElementById('gameSwitchCard'); if(card) card.style.display = fixed ? 'none' : '';
+}
+async function switchGame(game){
+  const key=(game==='Minecraft')?'Minecraft':'Fortnite';
+  if(key===state.game) return;
+  if(state.fixedGame){ showToast('This app is dedicated to '+state.fixedGame+' tweaks.'); return; }
+  const p=GAME_PROFILES[key];
+  applyGameBranding(key);
+  const w=document.getElementById('gameWelcome');
+  const icon=document.getElementById('gameWelcomeIcon');
+  const title=document.getElementById('gameWelcomeTitle');
+  const sub=document.getElementById('gameWelcomeSub');
+  if(icon) icon.textContent=p.icon;
+  if(title) title.textContent=p.welcome;
+  if(sub) sub.textContent='Loading your '+(key==='Minecraft'?'blocks and':'"Fortnite"')+' tweak profile';
+  if(w){
+    w.classList.remove('show','out');
+    void w.offsetWidth;
+    w.classList.add('show');
+  }
+  try{ await api('/api/game',{game:key}); }catch(e){}
+  await new Promise(r=>setTimeout(r,2200));
+  try{ currentCat='General'; await loadTweaks(); }catch(e){}
+  await new Promise(r=>setTimeout(r,500));
+  if(w){ w.classList.add('out'); await new Promise(r=>setTimeout(r,500)); w.classList.remove('show','out'); }
+  showToast('Switched to '+key+' Tweaks');
+}
+document.querySelectorAll('.gamebtn').forEach(b=>b.addEventListener('click',()=>switchGame(b.dataset.game)));
 async function api(path,body={}){
   const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   return r.json();
@@ -3433,7 +3872,21 @@ document.querySelectorAll('.navbtn').forEach(b=>b.addEventListener('click',()=>{
   if(b.dataset.page==='network'){ if(!netAutoTimer) startNetAuto(); }
 }));
 
-document.getElementById('logoutBtn').addEventListener('click',async()=>{await api('/api/logout');if(window.chrome&&window.chrome.webview){window.chrome.webview.postMessage('nova-reload')}else{location.reload()}});
+document.getElementById('logoutBtn').addEventListener('click',async()=>{
+  try{await api('/api/logout')}catch(e){}
+  if(window.chrome&&window.chrome.webview){window.chrome.webview.postMessage('nova-reload');return;}
+  if(window.__novaNative || (window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.nova)){
+    try{if(typeof stopNetAuto==='function')stopNetAuto()}catch(e){}
+    try{if(window.state){state.user=null;state.plan='Free';state.planUntil=null;state.balance=0;}}catch(e){}
+    const app=document.getElementById('appContainer'); if(app) app.style.display='none';
+    const ov=document.getElementById('loginOverlay'); if(ov) ov.style.display='';
+    const st=document.getElementById('loginStatus'); if(st) st.textContent='';
+    const er=document.getElementById('loginError'); if(er) er.textContent='';
+    const pw=document.getElementById('loginPass'); if(pw) pw.value='';
+    return;
+  }
+  location.reload();
+});
 
 async function renderStats(){
   let r={};
@@ -3448,12 +3901,11 @@ async function renderStats(){
   document.getElementById('statsRow').innerHTML=stats.map(s=>`<div class="statcard"><div class="statlabel">${s.label}</div><div class="statval" style="background:linear-gradient(135deg,${s.color},var(--textdim));-webkit-background-clip:text;-webkit-text-fill-color:transparent">${s.value}</div></div>`).join('');
 }
 
-const cats=['General','Input','Network','Power','Visual','Services','Game','Storage','Firmware','Privacy','Windows','Mac'];
+const cats=['General','Input','Network','Power','Visual','Services','Game','Storage','Firmware','Privacy','Windows'];
 let currentCat='General';
 function catCount(c){
   const all=Object.values(state.tweaks||{});
   if(c==='Windows') return all.filter(t=>t.os==='Windows'||t.os==='Both').length;
-  if(c==='Mac') return all.filter(t=>t.os==='Mac'||t.os==='Both').length;
   return all.filter(t=>t.available&&t.cat===c).length;
 }
 function renderCatBar(){
@@ -3461,21 +3913,41 @@ function renderCatBar(){
   document.querySelectorAll('.catbtn').forEach(b=>b.addEventListener('click',()=>{currentCat=b.dataset.cat;renderCatBar();renderTweaks()}));
 }
 
+function ensurePreviewBanner(on){
+  let b=document.getElementById('previewBanner');
+  if(!on){ if(b) b.style.display='none'; return; }
+  if(!b){
+    b=document.createElement('div');
+    b.id='previewBanner';
+    b.style.cssText='position:sticky;top:0;z-index:50;margin:-4px 0 14px;padding:10px 14px;border:1px solid rgba(255,170,0,.45);background:linear-gradient(135deg,rgba(255,170,0,.14),rgba(255,26,46,.06));border-radius:10px;color:#ffdca8;font-size:12px;line-height:1.5';
+    b.innerHTML='<b style="color:#fff">Windows Preview (macOS dev mode)</b> — You’re seeing the Windows UI and tweak availability as Windows users see it. Toggling tweaks is simulated only; no Windows system changes are made on this Mac.';
+    const c=document.querySelector('.content'); if(c) c.insertBefore(b,c.firstChild);
+  }
+  b.style.display='block';
+}
+
 async function loadTweaks(){
   const r=await api('/api/tweaks/list');
   state.tweaks=r.tweaks||{};
   state.os=r.os||'unknown';
+  state.previewWindows=!!r.previewWindows;
+  state.fixedGame=r.fixedGame||null;
+  state.appVariant=r.appVariant||null;
+  ensurePreviewBanner(state.previewWindows);
+  if(r.game) applyGameBranding(r.game);
+  else if(state.fixedGame) applyGameBranding(state.fixedGame);
   if(r.plan) setPlanUI(r.plan, r.planUntil, r.balance);
   state.badges=r.badges||[];
   state.streak=r.streak||0;
   state.bestStreak=r.bestStreak||0;
   state.appliedEver=r.appliedEver||0;
+  const tsub=document.getElementById('tweakSub');
+  if(tsub) tsub.textContent=Object.keys(state.tweaks).length+' working tweaks in the '+state.game+' profile. Every change is reversible.';
   renderCatBar();renderTweaks();updateCounts();updateMacroAvailability();renderBadges();
 }
 function tweaksFor(cat){
   const all=Object.values(state.tweaks);
   if(cat==='Windows') return all.filter(t=>t.os==='Windows'||t.os==='Both');
-  if(cat==='Mac') return all.filter(t=>t.os==='Mac'||t.os==='Both');
   return all.filter(t=>t.available&&t.cat===cat);
 }
 function tweakCard(t){
@@ -3952,13 +4424,13 @@ const h=new Date().getHours();document.getElementById('greeting').textContent=h<
 </html>
 '@
 
-# Show the real counts for the platform the UI is running on, so the macOS
-# build never advertises Windows-only tweaks it cannot apply.
+# Show real Windows counts plus the active game profile.
 $totalTweaks = @($Script:Tweaks).Count
 $allCats = @($Script:Tweaks | ForEach-Object { $_.Cat } | Select-Object -Unique)
-$availableTweaks = @($Script:Tweaks | Where-Object { if ($IsWin) { $_.Win } else { $_.Mac } })
-$insideLead = "$totalTweaks hand-built tweaks across $($allCats -join ', '). $($availableTweaks.Count) apply on this platform."
-$tweakSub = "$totalTweaks working tweaks across $($allCats.Count) categories. $($availableTweaks.Count) apply on this platform; the Windows and Mac tabs show every tweak."
+$availableTweaks = @($Script:Tweaks | Where-Object { $_.Win })
+$gameTweaks = @($Script:Tweaks | Where-Object { Test-NovaTweakForGame $_ })
+$insideLead = "$totalTweaks hand-built tweaks across $($allCats -join ', '). $($availableTweaks.Count) apply on Windows."
+$tweakSub = "$totalTweaks working tweaks across $($allCats.Count) categories. $($gameTweaks.Count) load in the $(Get-NovaGame) profile; every change is reversible."
 $Script:HtmlPage = $Script:HtmlPage.Replace('@@INSIDE_LEAD@@', $insideLead).Replace('@@TWEAK_SUB@@', $tweakSub)
 $Script:HtmlPage = $Script:HtmlPage.Replace('@@TWEAK_COUNT@@', [string]$totalTweaks)
 $Script:HtmlPage = $Script:HtmlPage.Replace('@@CAT_COUNT@@', [string]$allCats.Count)
@@ -4048,6 +4520,7 @@ function Get-NovaTweakSub {
             return "Background Services"
         }
         "Game" {
+            if ($id -like "mc*") { return "Minecraft" }
             if ($id -in @("potato","gamemode","mpo","fullopt","gamedvr","fpsbooster")) { return "Fortnite & Rendering" }
             if ($id -in @("bcdedit","timer")) { return "Stutter & Scheduling" }
             if ($name -match "stutter|stutter|scheduling|timer|bcd") { return "Stutter & Scheduling" }
@@ -4133,12 +4606,27 @@ function Invoke-NovaApi {
             return (ConvertTo-NovaJson @{ success = $true })
         }
 
+        if ($Path -eq "/api/game") {
+            if ($Script:FixedGame) { return (ConvertTo-NovaJson @{ success = $false; fixed = $true; game = (Get-NovaGame); message = "This Nova Tweaks app is dedicated to $(Get-NovaGame)." }) }
+            $game = [string]$body.game
+            if (-not $game) { return (ConvertTo-NovaJson @{ success = $true; game = (Get-NovaGame) }) }
+            if ($game -notin @("Fortnite","Minecraft")) {
+                return (ConvertTo-NovaJson @{ success = $false; message = "Unknown game."; game = (Get-NovaGame) })
+            }
+            $Script:Config.Game = $game
+            Save-Config
+            return (ConvertTo-NovaJson @{ success = $true; game = $game; message = "Switched to $game Tweaks." })
+        }
+
         if ($Path -eq "/api/tweaks/list") {
             if ($Script:CurrentUser) { Update-NovaStreak | Out-Null }
             $activePlan = Get-NovaEffectivePlan
+            $activeGame = Get-NovaGame
             $tweakObj = [ordered]@{}
+            $viewWin = Get-NovaViewIsWin
             foreach ($t in $Script:Tweaks) {
-                $isAvail = if ($IsWin) { $t.Win } else { $t.Mac }
+                if (-not (Test-NovaTweakForGame $t)) { continue }
+                $isAvail = if ($viewWin) { $t.Win } else { $t.Mac }
                 $osLabel = if ($t.Win -and $t.Mac) { "Both" } elseif ($t.Win) { "Windows" } else { "Mac" }
                 $required = Get-NovaTweakRequiredPlan $t
                 $allowed = Test-NovaTweakAllowed $t $activePlan
@@ -4153,10 +4641,12 @@ function Invoke-NovaApi {
                     cat       = $t.Cat
                     sub       = (Get-NovaTweakSub $t)
                     os        = $osLabel
+                    game      = $(if ($t.Game) { [string]$t.Game } else { "Shared" })
                     available = [bool]$isAvail
                     state     = (Get-NovaTweakState ([string]$t.Id))
                 }
             }
+            $gameTweaks = @($Script:Tweaks | Where-Object { Test-NovaTweakForGame $_ })
             $balance = if ($Script:CurrentUser) { [int]$Script:CurrentUser.Balance } else { [int]$Script:Config.Balance }
             $planUntil = if ($Script:CurrentUser) { $Script:CurrentUser.PlanUntil } else { $Script:Config.PlanUntil }
             $badges = @(Get-NovaBadgeState)
@@ -4165,7 +4655,8 @@ function Invoke-NovaApi {
             $appliedEver = if ($Script:CurrentUser) { @($Script:CurrentUser.AppliedEver | Where-Object { $_ }).Count } else { 0 }
             return (ConvertTo-NovaJson @{
                 tweaks = $tweakObj
-                os = $(if ($IsWin) { "Windows" } else { "Mac" })
+                os = $(if ($viewWin) { "Windows" } else { "Mac" })
+                game = $activeGame
                 plan = $activePlan
                 balance = $balance
                 planUntil = $planUntil
@@ -4173,8 +4664,11 @@ function Invoke-NovaApi {
                 streak = $streak
                 bestStreak = $bestStreak
                 appliedEver = $appliedEver
-                freeCount = @($Script:Tweaks | Where-Object { $_.Id -in $Script:FreeTweakIds }).Count
-                paidCount = @($Script:Tweaks | Where-Object { -not (Test-NovaProTweak $_) }).Count
+                previewWindows = [bool]$Script:WindowsPreview
+                fixedGame = $Script:FixedGame
+                appVariant = $Script:AppVariant
+                freeCount = @($gameTweaks | Where-Object { (Get-NovaTweakRequiredPlan $_) -eq "Free" }).Count
+                paidCount = @($gameTweaks | Where-Object { (Get-NovaTweakRequiredPlan $_) -ne "Free" }).Count
             })
         }
 
@@ -4234,8 +4728,10 @@ function Invoke-NovaApi {
         }
 
         if ($Path -eq "/api/tweak/toggle") {
+            if ($Script:WindowsPreview) { return (ConvertTo-NovaJson @{ success = $false; preview = $true; message = "Windows preview: showing the Windows UI only. No system changes are made on this Mac." }) }
             $tw = $Script:Tweaks | Where-Object { $_.Id -eq $body.id } | Select-Object -First 1
             if (-not $tw) { return (ConvertTo-NovaJson @{ message = "Tweak not found." }) }
+            if (-not (Test-NovaTweakForGame $tw)) { return (ConvertTo-NovaJson @{ success = $false; message = "That tweak belongs to a different game profile. Switch games in Settings first." }) }
             $desired = [bool]$body.state
             if ($desired) {
                 $activePlan = Get-NovaEffectivePlan
@@ -4285,6 +4781,7 @@ function Invoke-NovaApi {
         }
 
         if ($Path -eq "/api/fpsbooster") {
+            if ($Script:WindowsPreview) { return (ConvertTo-NovaJson @{ success = $false; preview = $true; message = "Windows preview: FPS Booster is simulated only; no system changes are made on this Mac." }) }
             if ((Get-NovaPlanRank (Get-NovaEffectivePlan)) -lt 1) { return (ConvertTo-NovaJson @{ success = $false; locked = $true; required = "Pro"; message = "FPS Booster needs Pro." }) }
             $steps = @(Invoke-FpsBooster)
             Add-NovaAppliedTweak "fpsbooster"
@@ -4305,11 +4802,13 @@ function Invoke-NovaApi {
         }
 
         if ($Path -eq "/api/applyall") {
+            if ($Script:WindowsPreview) { return (ConvertTo-NovaJson @{ success = $false; preview = $true; message = "Windows preview: no system changes are made on this Mac." }) }
             $activePlan = Get-NovaEffectivePlan
             $count = 0
             $skipped = 0
             $appliedIds = New-Object System.Collections.Generic.List[string]
             foreach ($t in $Script:Tweaks) {
+                if (-not (Test-NovaTweakForGame $t)) { continue }
                 $isAvail = if ($IsWin) { $t.Win } else { $t.Mac }
                 if (-not $isAvail) { continue }
                 if (-not (Test-NovaTweakAllowed $t $activePlan)) { $skipped++; continue }
@@ -4326,16 +4825,21 @@ function Invoke-NovaApi {
         }
 
         if ($Path -eq "/api/sysstats") {
-            return (ConvertTo-NovaJson (Get-NovaSysStats))
+            $s = Get-NovaSysStats
+            if ($Script:WindowsPreview) { try { $s.os = "Windows (preview)" } catch {} }
+            return (ConvertTo-NovaJson $s)
         }
 
         if ($Path -eq "/api/sysinfo") {
-            $info = "OS: $(if ($IsWin) { 'Windows' } else { 'macOS' })`n"
+            $viewWin = Get-NovaViewIsWin
+            $info = "OS: $(if ($Script:WindowsPreview) { 'Windows (preview on macOS)' } elseif ($IsWin) { 'Windows' } else { 'macOS' })`n"
             if ($IsWin) {
                 $cpu = (Get-CimInstance Win32_Processor).Name
                 $gpu = (Get-CimInstance Win32_VideoController | Select-Object -First 1).Name
                 $ram = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 1)
                 $info += "CPU: $cpu`nGPU: $gpu`nRAM: $ram GB"
+            } elseif ($Script:WindowsPreview) {
+                $info += "CPU: $(sysctl -n machdep.cpu.brand_string 2>$null)`nRAM: $([math]::Round((sysctl -n hw.memsize 2>$null) / 1GB, 1)) GB`nNote: preview mode shows Windows tweaks/UI; this Mac's hardware is listed for reference."
             } else {
                 $info += "CPU: $(sysctl -n machdep.cpu.brand_string 2>$null)`nRAM: $([math]::Round((sysctl -n hw.memsize 2>$null) / 1GB, 1)) GB"
             }
@@ -4363,6 +4867,7 @@ function Invoke-NovaApi {
         }
 
         if ($Path -eq "/api/restorepoint") {
+            if ($Script:WindowsPreview) { return (ConvertTo-NovaJson @{ success = $false; preview = $true; message = "Windows preview: restore points are Windows-only and not created on this Mac." }) }
             $msg = "Restore point: not supported on this OS."
             if ($IsWin) {
                 try { Checkpoint-Computer -Description "Nova Tweaks" -RestorePointType "MODIFY_SETTINGS" -ErrorAction Stop; $msg = "Restore point created." }
@@ -4372,6 +4877,7 @@ function Invoke-NovaApi {
         }
 
         if ($Path -eq "/api/revertall") {
+            if ($Script:WindowsPreview) { return (ConvertTo-NovaJson @{ success = $false; preview = $true; message = "Windows preview: no system changes are made on this Mac." }) }
             Revert-All
             if ($Script:CurrentUser) {
                 $acc = Normalize-NovaAccount $Script:CurrentUser
@@ -4459,9 +4965,49 @@ function Invoke-NovaApi {
             return (ConvertTo-NovaJson @{ success = $true; plan = $updated.Plan; planUntil = $updated.PlanUntil; balance = [int]$updated.Balance; message = $msg })
         }
 
+        if ($Path -eq "/__html" -or $Path -eq "/__init" -or $Path -eq "__html" -or $Path -eq "__init") {
+            return (ConvertTo-NovaJson @{ html = $Script:HtmlPage })
+        }
+
         return (ConvertTo-NovaJson @{ success = $false; message = "Unknown endpoint: $Path" })
     } catch {
         return (ConvertTo-NovaJson @{ success = $false; message = $_.Exception.Message })
+    }
+}
+
+# ---------- Native stdio bridge (no localhost) ----------
+function Start-NovaStdioServer {
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+    $utf8 = New-Object System.Text.UTF8Encoding($false)
+    $stdin = [Console]::OpenStandardInput()
+    $reader = New-Object System.IO.StreamReader($stdin, $utf8)
+    $stdout = [Console]::OpenStandardOutput()
+    $writer = New-Object System.IO.StreamWriter($stdout, $utf8)
+    $writer.AutoFlush = $true
+    try {
+        while ($null -ne ($line = $reader.ReadLine())) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            $id = $null
+            try {
+                $msg = $line | ConvertFrom-Json
+                $id = $msg.id
+                $path = [string]$msg.path
+                $bodyJson = if ($null -ne $msg.body) { [string]$msg.body } else { "" }
+                if ($path -eq "/__html" -or $path -eq "/__init" -or $path -eq "__html" -or $path -eq "__init") {
+                    $resp = ConvertTo-NovaJson @{ html = $Script:HtmlPage }
+                } else {
+                    $resp = Invoke-NovaApi -Path $path -BodyJson $bodyJson
+                    if (-not $resp) { $resp = "{}" }
+                }
+                $writer.WriteLine((ConvertTo-NovaJson @{ id = $id; body = [string]$resp }))
+            } catch {
+                $err = ConvertTo-NovaJson @{ success = $false; message = $_.Exception.Message }
+                $writer.WriteLine((ConvertTo-NovaJson @{ id = $id; body = [string]$err }))
+            }
+        }
+    } finally {
+        try { $writer.Dispose() } catch {}
+        try { $reader.Dispose() } catch {}
     }
 }
 
@@ -4494,7 +5040,14 @@ function Start-NovaWebServer {
     $url = "http://localhost:$port"
     Write-Host "Nova Tweaks UI running at $url" -ForegroundColor Red
     if (-not $env:NOVA_NOOPEN) {
-        if ($IsMac) { Start-Process "open" -ArgumentList $url | Out-Null }
+        if ($IsMac) {
+            $chrome = @("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge", "/Applications/Chromium.app/Contents/MacOS/Chromium") | Where-Object { Test-Path $_ } | Select-Object -First 1
+            if ($env:NOVA_APP_WINDOW -eq '1' -and $chrome) {
+                Start-Process $chrome -ArgumentList @("--app=$url", "--user-data-dir=$env:HOME/.novatweaks/chrome-app-profile") | Out-Null
+            } else {
+                Start-Process "open" -ArgumentList $url | Out-Null
+            }
+        }
         elseif ($IsWin) { Start-Process $url | Out-Null }
     }
 
@@ -4684,7 +5237,9 @@ public class NovaWebViewNative {
 }
 
 # ---------- Entry ----------
-if ($IsWin) {
+if ($env:NOVA_STDIO_BRIDGE -eq '1') {
+    Start-NovaStdioServer
+} elseif ($IsWin) {
     try {
         Start-NovaWebView
     } catch {

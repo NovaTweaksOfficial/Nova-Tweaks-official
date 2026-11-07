@@ -3,24 +3,24 @@
 Static marketing + download + checkout site for Nova Tweaks. No build step, no framework,
 no external requests at runtime. Deployed from this `docs/` folder.
 
+## Products (separate apps)
+- **Nova Tweaks (Fortnite) — Windows**: separate app for Fortnite.
+- **Nova Tweaks (Minecraft) — Windows**: separate app with Minecraft-specific tweaks (options.txt, JVM/G1GC, GPU preference, fullscreen optimizations, process priority, Game Bar/capture; reversible/backups).
+- **Nova Tweaks (Minecraft) — macOS**: native app (WKWebView + local engine, **no localhost**) with supported Minecraft file/JVM tweaks.
+
 ## Files
 
 | File | Purpose |
 | --- | --- |
-| `index.html` | Single-page storefront: hero, features, catalog, pricing, giveaways, download, FAQ |
+| `index.html` | Single-page storefront: supported games, features, catalog, pricing, downloads, FAQ |
 | `styles.css` | All styling (dark + red theme, responsive, reduced-motion aware) |
-| `app.js` | Nav, reveal animations, checkout modal, payment link builders |
-| `config.js` | **Edit this** — prices, download URLs, payment links, trust links |
-| `assets/app-home.png`, `assets/app-tweaks.png` | Real app screenshots |
-| `downloads/NovaTweaks-macOS.zip` | macOS app bundle |
+| `app.js` | Nav, reveal animations, checkout modal, per-product download/payment link handling |
+| `config.js` | **Edit this** — prices, per-product download URLs, payment links, trust links |
+| `assets/app-home.png`, `assets/app-tweaks.png` | App screenshots |
+| `downloads/Nova-Tweaks-Minecraft-macOS.zip` | macOS Minecraft native app bundle |
 | `favicon.svg` | Site icon |
 
-The Windows download points at the latest GitHub release asset, so it always serves the
-newest build without editing the site:
-
-```
-https://github.com/NovaTweaksOfficial/fl3sh-optimizer/releases/latest/download/NovaTweaks.exe
-```
+Windows download URLs are configured in `config.js` (`windowsFortniteDownload`, `windowsMinecraftDownload`, with `windowsDownload` as fallback). Set them to real per-product release assets when separate CI builds are published. The macOS Minecraft download is served from `downloads/Nova-Tweaks-Minecraft-macOS.zip` (or the URL set in `config.js`).
 
 ## Enable GitHub Pages (one time)
 
@@ -60,10 +60,10 @@ pro: {
 
 Prices in the pricing cards and checkout modal are read from `config.js`, so change the price
 in one place. Keep the app's plan prices in `Get-NovaPlanPriceCents` in
-`Nova_Tweaks_WebGUI.ps1` in sync.
+`shared/Nova_Tweaks_WebGUI.ps1` in sync.
 
 After payment, issue a license key and send it to the buyer. The buyer pastes it into
-**Settings → Account → License key** in the app.
+**Settings → Account → License key** in the app. Checkout links remain disabled/"launching soon" until real Stripe/PayPal/Cash App links, cashtag/support email, and domain are configured.
 
 ## Issue license keys and gift codes
 
@@ -71,23 +71,20 @@ Run the key tool from the repo root:
 
 ```powershell
 # $15 of in-app giveaway balance
-pwsh ./tools/New-NovaKey.ps1 -Type Gift -Amount 15
+pwsh ./shared/tools/New-NovaKey.ps1 -Type Gift -Amount 15
 
 # 30-day Pro key
-pwsh ./tools/New-NovaKey.ps1 -Type Pro
+pwsh ./shared/tools/New-NovaKey.ps1 -Type Pro
 
 # 30-day Ultimate key
-pwsh ./tools/New-NovaKey.ps1 -Type Ultimate
-
-# bulk
-pwsh ./tools/New-NovaKey.ps1 -Type Pro -Count 10 > pro-keys.txt
+pwsh ./shared/tools/New-NovaKey.ps1 -Type Ultimate
 ```
 
 Send gift codes to giveaway winners. They redeem under **Settings → Account → Redeem a gift code**, and the
 balance can pay for Pro or Ultimate in the same panel. Send license keys to website buyers.
 
-The secrets in `tools/New-NovaKey.ps1` must match `$Script:GiftSecret` and `$Script:LicenseSecret` in
-`Nova_Tweaks_WebGUI.ps1`. Change both before a public launch. Validation is offline and client-side; it is not
+The secrets in `shared/tools/New-NovaKey.ps1` must match `$Script:GiftSecret` and `$Script:LicenseSecret` in
+`shared/Nova_Tweaks_WebGUI.ps1`. Change both before a public launch. Validation is offline and client-side; it is not
 a substitute for a real licensing backend.
 
 ## Attach a `.gg` domain
@@ -102,13 +99,11 @@ a substitute for a real licensing backend.
 
 ## Updating the site
 
-- **New Windows build:** publish a GitHub release; the download link follows `latest`.
-- **New macOS build:** replace `docs/downloads/NovaTweaks-macOS.zip`.
-- **New screenshots:** replace the two PNGs in `docs/assets/` (keep them around 1600px wide).
+- **Windows builds:** publish GitHub release assets and set `windowsFortniteDownload` / `windowsMinecraftDownload` in `config.js` (or update `windowsDownload` fallback).
+- **macOS Minecraft build:** replace `docs/downloads/Nova-Tweaks-Minecraft-macOS.zip` (native app bundle). Rebuild/resync from `macos/Minecraft/Nova Tweaks Minecraft.app` as needed.
+- **Screenshots:** replace PNGs in `docs/assets/` (keep ~1600px wide).
 - **Version label:** `version` in `config.js`.
 
-## Security messaging
+## Security / status messaging
 
-The site is deliberately explicit that the Windows build is not code-signed yet, explains the
-SmartScreen / Defender false-positive path, and links Microsoft's file-submission page and
-VirusTotal. Set `virusTotal` in `config.js` once you have a report URL.
+The site is explicit that Windows builds may be unsigned (SmartScreen/Defender false-positive guidance) and that the macOS Minecraft app is a native app (no localhost) but current builds may require PowerShell 7 (`pwsh`) and may be unsigned/unnotarized until distribution packaging is finalized. No telemetry. Set `virusTotal` in `config.js` when you have a report URL.

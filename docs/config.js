@@ -9,8 +9,11 @@
 window.NOVA_CONFIG = {
   version: "v1",
 
+  // Legacy/fallback Windows download (combined build). Prefer per-product URLs when separate builds are published.
   windowsDownload: "https://github.com/NovaTweaksOfficial/fl3sh-optimizer/releases/latest/download/NovaTweaks.exe",
-  macDownload: "downloads/NovaTweaks-macOS.zip",
+  windowsFortniteDownload: "",
+  windowsMinecraftDownload: "",
+  macMinecraftDownload: "downloads/Nova-Tweaks-Minecraft-macOS.zip",
   github: "https://github.com/NovaTweaksOfficial/fl3sh-optimizer",
 
   // Optional trust links

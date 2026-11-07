@@ -14,16 +14,29 @@
     $$("#versionBadge").forEach((el) => (el.textContent = CFG.version));
   }
 
+  const fallbackWin = isUrl(CFG.windowsDownload)
+    ? CFG.windowsDownload
+    : "https://github.com/NovaTweaksOfficial/fl3sh-optimizer/releases/latest/download/NovaTweaks.exe";
   const winEl = $("#winDownload");
-  if (winEl) {
-    winEl.href = isUrl(CFG.windowsDownload)
-      ? CFG.windowsDownload
-      : "https://github.com/NovaTweaksOfficial/fl3sh-optimizer/releases/latest/download/NovaTweaks.exe";
-  }
+  if (winEl) winEl.href = fallbackWin;
+  const winFort = $("#winFortniteDownload");
+  if (winFort) winFort.href = isUrl(CFG.windowsFortniteDownload) ? CFG.windowsFortniteDownload : fallbackWin;
+  const winMc = $("#winMinecraftDownload");
+  if (winMc) winMc.href = isUrl(CFG.windowsMinecraftDownload) ? CFG.windowsMinecraftDownload : fallbackWin;
 
-  const macEl = $("#macDownload");
-  if (macEl) {
-    macEl.href = CFG.macDownload || "downloads/NovaTweaks-macOS.zip";
+  const macMcEl = $("#macMinecraftDownload");
+  if (macMcEl) {
+    if (isUrl(CFG.macMinecraftDownload) || (CFG.macMinecraftDownload && CFG.macMinecraftDownload.charAt(0) !== "#")) {
+      macMcEl.href = CFG.macMinecraftDownload;
+      macMcEl.classList.remove("btn-ghost");
+      macMcEl.classList.add("btn-primary");
+    } else {
+      macMcEl.href = "#download";
+      macMcEl.addEventListener("click", (e) => {
+        e.preventDefault();
+        alert("Nova Tweaks Minecraft (macOS) download is being prepared. Check back soon or follow the GitHub releases.");
+      });
+    }
   }
 
   const gh = CFG.github || "https://github.com/NovaTweaksOfficial/fl3sh-optimizer";
@@ -149,14 +162,15 @@
     noteEl.style.color = warn ? "var(--amber)" : "";
   }
 
-  function openModal(planName) {
+  function openModal(planName, productName) {
     const plan = plans[planName];
     if (!modal || !plan) return;
     activePlan = plan;
     lastFocus = document.activeElement;
 
-    if (titleEl) titleEl.textContent = "Get " + plan.label;
-    if (subEl) subEl.textContent = money(plan.price) + " / month · cancel anytime";
+    const product = (productName || "Nova Tweaks").trim();
+    if (titleEl) titleEl.textContent = "Get " + plan.label + " — " + product;
+    if (subEl) subEl.textContent = money(plan.price) + " / month · " + product + " · cancel anytime";
 
     methods.forEach((m) => {
       if (!m.el) return;
@@ -200,7 +214,7 @@
   }
 
   $$("[data-buy]").forEach((btn) => {
-    btn.addEventListener("click", () => openModal(btn.getAttribute("data-buy")));
+    btn.addEventListener("click", () => openModal(btn.getAttribute("data-buy"), btn.getAttribute("data-product")));
   });
 
   if (modal) {

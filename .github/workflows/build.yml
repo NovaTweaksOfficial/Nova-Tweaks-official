@@ -25,7 +25,7 @@ jobs:
       - name: Verify tweaks
         shell: pwsh
         run: |
-          pwsh -NoProfile -ExecutionPolicy Bypass -File ./tools/Check-Tweaks.ps1
+          pwsh -NoProfile -ExecutionPolicy Bypass -File ./shared/tools/Check-Tweaks.ps1
 
       - name: Install PS2EXE
         shell: pwsh
@@ -36,7 +36,7 @@ jobs:
       - name: Compile to EXE
         shell: pwsh
         run: |
-          $scriptPath = "Nova_Tweaks_WebGUI.ps1"
+          $scriptPath = "shared/Nova_Tweaks_WebGUI.ps1"
           $outputPath = "NovaTweaks.exe"
           if (-not (Test-Path $scriptPath)) {
             Write-Error "Script not found: $scriptPath"
