@@ -179,22 +179,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         uc.add(bridge, name: "nova")
 
         webView.setValue(false, forKey: "drawsBackground")
+        let fixedGame = ProcessInfo.processInfo.environment["NOVA_FIXED_GAME"] ?? "Minecraft"
+        let winTitle = "Nova Tweaks (\(fixedGame))"
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1280, height: 860),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable],
                           backing: .buffered, defer: false)
-        window.title = "Nova Tweaks"
+        window.title = winTitle
         window.center()
         window.contentView = webView
         window.delegate = self
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
 
-        webView.loadHTMLString("<html><body style='margin:0;background:#050508;color:#8888a0;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh'>Loading Nova Tweaks…</body></html>", baseURL: nil)
+        webView.loadHTMLString("<html><body style='margin:0;background:#050508;color:#8888a0;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh'>Loading \(winTitle)…</body></html>", baseURL: nil)
 
         do { try bridge.start() }
         catch {
             let msg = (error as NSError).localizedDescription
-            webView.loadHTMLString("<html><body style='background:#050508;color:#ff6b7a;font-family:system-ui;padding:28px'><h2>Nova Tweaks</h2><pre style='white-space:pre-wrap'>\(msg)</pre></body></html>", baseURL: nil)
+            let errTitle = "Nova Tweaks (\(ProcessInfo.processInfo.environment["NOVA_FIXED_GAME"] ?? "Minecraft"))"
+            webView.loadHTMLString("<html><body style='background:#050508;color:#ff6b7a;font-family:system-ui;padding:28px'><h2>\(errTitle)</h2><pre style='white-space:pre-wrap'>\(msg)</pre></body></html>", baseURL: nil)
         }
     }
 

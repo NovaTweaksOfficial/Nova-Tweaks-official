@@ -3758,8 +3758,8 @@ function applyGameBranding(game){
   const p=GAME_PROFILES[key];
   state.game=key;
   const fixed = !!state.fixedGame;
-  const brand = fixed ? 'Nova Tweaks' : p.brand;
-  const sub = fixed ? (key==='Minecraft' ? 'Nova Tweaks (Minecraft) Performance Suite' : 'Nova Tweaks (Fortnite) Performance Suite') : p.sub;
+  const brand = fixed ? ('Nova Tweaks ('+key+')') : p.brand;
+  const sub = fixed ? (key==='Minecraft' ? 'Minecraft Performance Suite' : 'Fortnite Performance Suite') : p.sub;
   const title = fixed ? ('Nova Tweaks ('+key+')') : p.brand;
   const bn=document.getElementById('brandName'); if(bn) bn.textContent=brand;
   const bs=document.getElementById('brandSub'); if(bs) bs.textContent=sub;
@@ -5158,7 +5158,8 @@ public class NovaWebViewNative {
     [IO.File]::WriteAllText($Script:WebUiPath, $Script:HtmlPage)
 
     $form = New-Object System.Windows.Forms.Form
-    $form.Text = "Nova Tweaks"
+    $winTitle = if ($Script:FixedGame) { "Nova Tweaks ($($Script:FixedGame))" } else { "Nova Tweaks" }
+    $form.Text = $winTitle
     $form.StartPosition = "CenterScreen"
     $form.Size = New-Object System.Drawing.Size(1440, 900)
     $form.MinimumSize = New-Object System.Drawing.Size(1100, 720)
@@ -5182,6 +5183,13 @@ public class NovaWebViewNative {
             $sender.CoreWebView2.Settings.AreDefaultContextMenusEnabled = $false
             $sender.CoreWebView2.Settings.AreDevToolsEnabled = $false
             $sender.CoreWebView2.Settings.IsStatusBarEnabled = $false
+            $sender.CoreWebView2.add_DocumentTitleChanged({
+                param($s, $a)
+                try {
+                    $t = $s.DocumentTitle
+                    if ($t) { $form.Text = $t }
+                } catch {}
+            })
         } catch {}
 
         $Script:WebUiVirtual = $false
