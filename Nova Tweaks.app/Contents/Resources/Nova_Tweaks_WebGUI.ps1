@@ -728,6 +728,44 @@ function Invoke-FpsBooster {
     return @($applied)
 }
 
+# Real CPU load, memory usage, free disk and platform for the home tiles.
+function Get-NovaSysStats {
+    $out = @{ cpu = $null; ram = $null; diskFree = $null; os = $(if ($IsWin) { "Windows" } else { "macOS" }) }
+    try {
+        if ($IsWin) {
+            $load = Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue | Measure-Object -Property LoadPercentage -Average
+            if ($load -and $null -ne $load.Average) { $out.cpu = [math]::Round($load.Average) }
+            $osInfo = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
+            if ($osInfo -and $osInfo.TotalVisibleMemorySize -gt 0) {
+                $out.ram = [math]::Round((1 - ($osInfo.FreePhysicalMemory / $osInfo.TotalVisibleMemorySize)) * 100)
+            }
+            $drive = Get-PSDrive -Name ($env:SystemDrive.TrimEnd(':')) -ErrorAction SilentlyContinue
+            if ($drive) { $out.diskFree = [math]::Round($drive.Free / 1GB, 1) }
+        } else {
+            $ncpu = 0; try { $ncpu = [int](sysctl -n hw.ncpu 2>$null) } catch {}
+            if ($ncpu -lt 1) { $ncpu = 1 }
+            $sum = 0.0
+            $lines = & ps -A -o %cpu= 2>$null
+            foreach ($line in $lines) { $v = 0.0; if ([double]::TryParse(([string]$line).Trim(), [ref]$v)) { $sum += $v } }
+            $out.cpu = [math]::Round($sum / $ncpu)
+            $total = 0.0; try { $total = [double](sysctl -n hw.memsize 2>$null) } catch {}
+            $pageSize = 4096; $freePages = 0
+            $vm = & vm_stat 2>$null
+            foreach ($line in $vm) {
+                if ($line -match "page size of (\d+) bytes") { $pageSize = [int]$matches[1] }
+                if ($line -match "Pages free:\s+(\d+)") { $freePages += [int]$matches[1] }
+                if ($line -match "Pages inactive:\s+(\d+)") { $freePages += [int]$matches[1] }
+            }
+            if ($total -gt 0) { $out.ram = [math]::Round((1 - (($freePages * $pageSize) / $total)) * 100) }
+            $df = & df -k / 2>$null | Select-Object -Last 1
+            if ($df) { $parts = ($df -split "\s+"); if ($parts.Count -ge 4) { $out.diskFree = [math]::Round([double]$parts[3] / 1048576, 1) } }
+        }
+    } catch {}
+    if ($null -ne $out.cpu) { $out.cpu = [math]::Max(0, [math]::Min(100, $out.cpu)) }
+    if ($null -ne $out.ram) { $out.ram = [math]::Max(0, [math]::Min(100, $out.ram)) }
+    return $out
+}
+
 # Live network health: real ICMP ping samples, average, jitter and packet loss.
 function Get-NovaNetworkStats {
     param([string]$Target = "1.1.1.1", [int]$Count = 4)
@@ -2799,7 +2837,7 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
       <div class="login-logo" style="font-size:56px">Nova Tweaks</div>
       <div class="login-sub" style="letter-spacing:6px">Performance Suite</div>
       <div style="display:flex;gap:18px;justify-content:center;margin-top:14px;flex-wrap:wrap">
-        <div style="text-align:center"><div id="onlineCount" style="font-size:22px;font-weight:900;color:var(--text)">1</div><div style="font-size:9px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px">Users Online</div></div>
+        <div style="text-align:center"><div id="onlineCount" style="font-size:22px;font-weight:900;color:var(--text)">1</div><div style="font-size:9px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px">Local Sessions</div></div>
         <div style="text-align:center"><div id="tweakStat" style="font-size:22px;font-weight:900;color:var(--text)">@@TWEAK_COUNT@@</div><div style="font-size:9px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px">Tweaks</div></div>
         <div style="text-align:center"><div id="catStat" style="font-size:22px;font-weight:900;color:var(--text)">@@CAT_COUNT@@</div><div style="font-size:9px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px">Categories</div></div>
       </div>
@@ -3397,8 +3435,16 @@ document.querySelectorAll('.navbtn').forEach(b=>b.addEventListener('click',()=>{
 
 document.getElementById('logoutBtn').addEventListener('click',async()=>{await api('/api/logout');if(window.chrome&&window.chrome.webview){window.chrome.webview.postMessage('nova-reload')}else{location.reload()}});
 
-function renderStats(){
-  const stats=[{label:'CPU',value:'7%',color:'var(--red)'},{label:'GPU',value:'8%',color:'var(--red)'},{label:'RAM',value:'37%',color:'var(--warn)'},{label:'TEMP',value:'41°',color:'var(--red)'}];
+async function renderStats(){
+  let r={};
+  try{ r=await api('/api/sysstats',{}); }catch{}
+  const pct=v=>(v===null||v===undefined||isNaN(v))?'—':v+'%';
+  const stats=[
+    {label:'CPU LOAD',value:pct(r.cpu),color:'var(--red)'},
+    {label:'MEMORY USED',value:pct(r.ram),color:'var(--warn)'},
+    {label:'DISK FREE',value:(r.diskFree==null?'—':r.diskFree+' GB'),color:'var(--green)'},
+    {label:'PLATFORM',value:(r.os||'—'),color:'var(--blue)'}
+  ];
   document.getElementById('statsRow').innerHTML=stats.map(s=>`<div class="statcard"><div class="statlabel">${s.label}</div><div class="statval" style="background:linear-gradient(135deg,${s.color},var(--textdim));-webkit-background-clip:text;-webkit-text-fill-color:transparent">${s.value}</div></div>`).join('');
 }
 
@@ -3899,7 +3945,7 @@ document.getElementById('importSyncBtn').addEventListener('click',async()=>{
   }catch(e){showToast('Invalid sync code');}
 });
 
-renderStats();renderCatBar();loadTweaks();startNetAuto();
+renderStats();renderCatBar();loadTweaks();startNetAuto();setInterval(renderStats,15000);
 const h=new Date().getHours();document.getElementById('greeting').textContent=h<12?'Good morning':h<18?'Good afternoon':'Good evening';
 </script>
 </body>
@@ -4277,6 +4323,10 @@ function Invoke-NovaApi {
             $msg = "Applied $count tweaks."
             if ($skipped -gt 0) { $msg += " $skipped locked tweaks were skipped." }
             return (ConvertTo-NovaJson @{ message = $msg; applied = $count; skipped = $skipped })
+        }
+
+        if ($Path -eq "/api/sysstats") {
+            return (ConvertTo-NovaJson (Get-NovaSysStats))
         }
 
         if ($Path -eq "/api/sysinfo") {
