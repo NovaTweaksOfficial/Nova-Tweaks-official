@@ -615,12 +615,33 @@ function Invoke-VisualEffects { if (-not $IsMac) { Write-Log "macOS only." "WARN
 # Mac Power
 function Invoke-MacPower { if (-not $IsMac) { Write-Log "macOS only." "WARN"; return }; Invoke-MacRoot -Command "pmset -c sleep 0; pmset -c disksleep 0; pmset -c displaysleep 10; pmset -a sms 0" -Label "Power settings tuned." | Out-Null }
 
-# Potato Graphics
+# Potato Graphics (safe, config-based; backs up Engine.ini for restore)
 function Invoke-PotatoGraphics {
+    param([switch]$Off)
     if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
     $base = "$env:LOCALAPPDATA\FortniteGame\Saved\Config\WindowsClient"
-    if (-not (Test-Path $base)) { New-Item -ItemType Directory -Path $base -Force | Out-Null }
     $p = Join-Path $base "Engine.ini"
+    $backup = Join-Path $base "Engine.ini.nova-backup"
+    if ($Off) {
+        try {
+            if (Test-Path $backup) {
+                Copy-Item -Path $backup -Destination $p -Force
+                Write-Log "Potato Graphics restored from backup (Engine.ini)." "OK"
+            } elseif (Test-Path $p) {
+                Remove-Item -Path $p -Force -ErrorAction SilentlyContinue
+                Write-Log "Potato Graphics removed (Engine.ini deleted; Fortnite will regenerate defaults)." "OK"
+            } else {
+                Write-Log "No Potato Graphics backup found to restore." "WARN"
+            }
+        } catch { Write-Log "Potato Graphics restore failed: $($_.Exception.Message)" "WARN" }
+        return
+    }
+    if (-not (Test-Path $base)) { New-Item -ItemType Directory -Path $base -Force | Out-Null }
+    try {
+        if ((Test-Path $p) -and -not (Test-Path $backup)) {
+            Copy-Item -Path $p -Destination $backup -Force
+        }
+    } catch {}
     $content = @'
 [Core.System]
 Paths=../../../Engine/Content
@@ -655,7 +676,7 @@ bSmoothFrameRate=False
 bUseVSync=False
 '@
     Set-Content -Path $p -Value $content -Encoding ASCII -Force
-    Write-Log "Potato Graphics applied to Engine.ini." "OK"
+    Write-Log "Potato Graphics applied to Engine.ini (backup saved when possible)." "OK"
 }
 
 # Game Booster
@@ -2388,7 +2409,7 @@ $Script:Tweaks = @(
     @{Id="services";Name="Disable background services";Desc="Stops Xbox, telemetry and diagnostic services. Reduces background CPU.";Risk="Caution";Free=$false;Win=$true;Mac=$false;Cat="Services";Action={Invoke-Services}},
     @{Id="sysmain";Name="Disable SysMain (Superfetch)";Desc="Stops background prefetching. Recommended on SSDs.";Risk="Caution";Free=$false;Win=$true;Mac=$false;Cat="Services";Action={Invoke-DisableSysMain}},
     # Game
-    @{Id="potato";Name="Potato Graphics (Engine.ini)";Desc="Lowers Fortnite render quality for max FPS and visibility. Changes appearance.";Risk="Caution";Free=$false;Win=$true;Mac=$false;Cat="Game";Game="Fortnite";Action={Invoke-PotatoGraphics}},
+    @{Id="potato";Name="Potato Graphics (Engine.ini)";Desc="Lowers Fortnite render quality for max FPS and visibility (config-based). Backs up Engine.ini and is reversible. Changes appearance.";Risk="Caution";Free=$false;Win=$true;Mac=$false;Cat="Game";Game="Fortnite";Action={Invoke-PotatoGraphics};Off={Invoke-PotatoGraphics -Off}},
     @{Id="gamedvr";Name="Disable Game DVR / Game Bar";Desc="Turns off Xbox Game Bar recording overlay that hooks into games.";Risk="Safe";Free=$false;Win=$true;Mac=$false;Cat="Game";Action={Invoke-RegistryTweaks}},
     @{Id="bcdedit";Name="BCDEDIT micro-stutter fix";Desc="Disables dynamic tick, enables platform clock, enhances TSC sync. Reduces micro-stutters.";Risk="Caution";Free=$false;Win=$true;Mac=$false;Cat="Game";Action={Invoke-BCDEdit}},
     @{Id="disableballoontips";Name="Disable Balloon Tips";Desc="Turns off notification balloon tips.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Visual";Action={Invoke-RegSet -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "ShowInfoTip" -Value 0}},
