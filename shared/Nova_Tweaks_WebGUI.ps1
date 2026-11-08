@@ -3120,16 +3120,20 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .logoutbtn:hover{border-color:var(--red);color:var(--red);background:rgba(255,26,46,.05)}
 
 /* Content */
-.maincol{flex:1;display:flex;flex-direction:column;min-width:0;height:100vh;position:relative}
-.topbar{display:flex;align-items:center;gap:6px;padding:10px 14px;background:linear-gradient(180deg,rgba(21,10,12,.92),rgba(16,7,9,.88));border-bottom:1px solid var(--border);position:relative;z-index:3;overflow-x:auto;flex-shrink:0;backdrop-filter:blur(12px)}
+.maincol{flex:1;display:flex;flex-direction:column;min-width:0;height:100vh;position:relative;background:linear-gradient(180deg,rgba(12,5,6,.35),rgba(12,5,6,.1))}
+.topbar{display:flex;align-items:center;gap:4px;padding:8px 12px;background:rgba(12,5,6,.94);border-bottom:1px solid #2a1418;position:relative;z-index:3;overflow-x:auto;flex-shrink:0;backdrop-filter:blur(10px)}
+.topbar .navbtn{border-radius:8px;padding:7px 11px;font-size:12px;font-weight:700;color:var(--textdim)}
+.topbar .navbtn.active{background:rgba(220,38,38,.14);color:#fff;border-color:rgba(220,38,38,.24);box-shadow:none}
 .topbar::-webkit-scrollbar{height:5px}
 .topbar-label{font-size:10px;text-transform:uppercase;letter-spacing:1.8px;color:var(--textmuted);margin:0 6px 0 2px;font-weight:800;flex-shrink:0}
 .topbar .navbtn{width:auto;padding:8px 12px;font-size:12.5px;border-radius:999px;white-space:nowrap;flex-shrink:0;gap:7px;background:rgba(255,255,255,.02)}
 .topbar .navbtn:hover{background:rgba(255,255,255,.045);color:var(--text)}
 .topbar .navbtn.active{background:linear-gradient(135deg,rgba(220,38,38,.22),rgba(185,28,28,.12));border-left:none;padding-left:12px;color:#fff;box-shadow:inset 0 0 0 1px rgba(220,38,38,.32)}
 .topbar .navicon{width:16px;font-size:13px}
-.content{flex:1;overflow-y:auto;padding:24px 28px 34px;background:radial-gradient(ellipse at top right,rgba(220,38,38,.07),transparent 45%);position:relative;z-index:1;min-height:0}
-.page{display:none;animation:fadeIn .35s cubic-bezier(.4,0,.2,1)}.page.active{display:block}
+.content{flex:1;overflow-y:auto;overflow-x:hidden;padding:18px 22px 28px;background:transparent;position:relative;z-index:1;min-height:0}
+.page{display:none;animation:fadeIn .2s ease}.page.active{display:block;min-width:0}
+#page-tweaks.active{display:flex;flex-direction:column;min-height:0}
+#page-tweaks #tweakGrid{flex:0 0 auto;align-content:start}
 @keyframes fadeIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 
 /* Game profile switch */
@@ -3172,12 +3176,16 @@ h1{font-family:"Space Grotesk","Plus Jakarta Sans",sans-serif;font-size:30px;fon
 .statlabel{font-size:10px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1.4px;font-weight:700}
 .statval{font-family:"Space Grotesk","Nova Display",sans-serif;font-size:32px;font-weight:700;margin-top:4px;color:var(--text)}
 
-/* Tweak cards */
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px}
-.tweakcard{background:linear-gradient(180deg,rgba(30,14,18,.62),rgba(21,10,12,.58));border:1px solid var(--border);border-radius:var(--radius);padding:15px 16px;transition:border-color .18s ease, transform .18s ease, box-shadow .18s ease;position:relative;overflow:hidden;backdrop-filter:blur(8px)}
-.tweakcard:hover{border-color:rgba(220,38,38,.3);transform:translateY(-2px);box-shadow:0 14px 34px rgba(0,0,0,.45)}
-.tweakcard::after{content:'';position:absolute;inset:0;background:radial-gradient(circle at 0% 0%,rgba(220,38,38,.07),transparent 48%);pointer-events:none;opacity:0;transition:opacity .2s}
+/* Tweak cards - Nova style, expand down (denser grid, no clipping) */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;align-content:start}
+#tweakGrid{min-height:0}
+#page-tweaks .grid{grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.tweakcard{background:linear-gradient(180deg,rgba(21,10,11,.92),rgba(16,7,9,.88));border:1px solid #2a1418;border-radius:12px;padding:13px 14px;transition:border-color .16s ease, box-shadow .16s ease;position:relative;overflow:hidden;min-width:0}
+.tweakcard:hover{border-color:rgba(220,38,38,.34);box-shadow:0 10px 26px rgba(0,0,0,.38)}
+.tweakcard::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(220,38,38,.04),transparent 40%);pointer-events:none;opacity:0;transition:opacity .16s}
 .tweakcard:hover::after{opacity:1}
+.tweakname{font-size:13.5px;line-height:1.25}
+.tweakdesc{font-size:11.5px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .tweakhead{display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap}
 .badge{padding:3px 9px;border-radius:5px;font-size:9px;font-weight:800;letter-spacing:.5px;text-transform:uppercase}
 .badge.safe{background:linear-gradient(135deg,var(--green),#00cc6a);color:#000;box-shadow:0 2px 8px rgba(0,255,136,.25)}
