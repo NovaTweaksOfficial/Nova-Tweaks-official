@@ -1629,54 +1629,160 @@ public class NovaMacroNative {
     }
 }
 
+$Script:MacroDir = Join-Path $env:HOME ".novatweaks/macro"
+$Script:MacroCtl = Join-Path $Script:MacroDir "ctl.json"
+$Script:MacroStatusFile = Join-Path $Script:MacroDir "status.json"
+$Script:MacroSwift = Join-Path $Script:MacroDir "macro.swift"
+$Script:MacroPid = $null
+
+function Ensure-NovaMacroDir { if (-not (Test-Path $Script:MacroDir)) { New-Item -ItemType Directory -Path $Script:MacroDir -Force | Out-Null } }
+
 function Get-NovaCursorPos {
-    if (-not $IsWin) { return $null }
-    try {
-        Add-Type -AssemblyName System.Windows.Forms -ErrorAction SilentlyContinue
-        $p = [System.Windows.Forms.Cursor]::Position
-        return @{ x = [int]$p.X; y = [int]$p.Y }
-    } catch { return $null }
+    if ($IsWin) {
+        try {
+            Add-Type -AssemblyName System.Windows.Forms -ErrorAction SilentlyContinue
+            $p = [System.Windows.Forms.Cursor]::Position
+            return @{ x = [int]$p.X; y = [int]$p.Y }
+        } catch { return $null }
+    }
+    if ($IsMac) {
+        try {
+            $out = & /usr/bin/swift -e 'import CoreGraphics; if let e=CGEvent(source:nil){ let p=e.location; print("\(Int(p.x)),\(Int(p.y))") }' 2>$null
+            if ($out -match '^(-?\d+),(-?\d+)$') { return @{ x = [int]$Matches[1]; y = [int]$Matches[2] } }
+        } catch {}
+        return $null
+    }
+    return $null
 }
 
 function Start-NovaMacro {
     param([int]$StartX, [int]$StartY, [int]$EndX, [int]$EndY, [int]$Duration = 300, [int]$Hold = 60, [int]$Repeat = 3, [bool]$Loop)
-    if (-not $IsWin) { return @{ success = $false; message = "Drag Macro is Windows only." } }
-    $sync = $Script:MacroSync
-    if ($sync.Running) { return @{ success = $false; message = "A macro is already running." } }
     $Duration = [Math]::Min(5000, [Math]::Max(30, $Duration))
     $Hold = [Math]::Min(5000, [Math]::Max(0, $Hold))
     $Repeat = [Math]::Min(1000, [Math]::Max(1, $Repeat))
-    $sync.Stop = $false
-    $sync.Status = "Starting"
-    $sync.Iteration = 0
-    $sync.StartX = $StartX; $sync.StartY = $StartY
-    $sync.EndX = $EndX; $sync.EndY = $EndY
-    $sync.Duration = $Duration; $sync.Hold = $Hold
-    $sync.Repeat = $Repeat; $sync.Loop = [bool]$Loop
-    $ps = [PowerShell]::Create()
-    [void]$ps.AddScript($Script:MacroWorker).AddArgument($sync)
-    $sync.Worker = $ps
-    $sync.Running = $true
-    [void]$ps.BeginInvoke()
-    return @{ success = $true; message = "Macro started: $Repeat pass(es), $Duration ms per swipe." }
+
+    if ($IsWin) {
+        $sync = $Script:MacroSync
+        if ($sync.Running) { return @{ success = $false; message = "A macro is already running." } }
+        $sync.Stop = $false; $sync.Status = "Starting"; $sync.Iteration = 0
+        $sync.StartX = $StartX; $sync.StartY = $StartY; $sync.EndX = $EndX; $sync.EndY = $EndY
+        $sync.Duration = $Duration; $sync.Hold = $Hold; $sync.Repeat = $Repeat; $sync.Loop = [bool]$Loop
+        $ps = [PowerShell]::Create()
+        [void]$ps.AddScript($Script:MacroWorker).AddArgument($sync)
+        $sync.Worker = $ps; $sync.Running = $true
+        [void]$ps.BeginInvoke()
+        return @{ success = $true; message = "Drag Macro started: $Repeat pass(es), $Duration ms per swipe." }
+    }
+
+    if ($IsMac) {
+        Ensure-NovaMacroDir
+        # stop existing
+        try { if ($Script:MacroPid -and -not $Script:MacroPid.HasExited) { $Script:MacroPid.Kill() } } catch {}
+        $ctl = @{ stop = $false; sx=$StartX; sy=$StartY; ex=$EndX; ey=$EndY; duration=$Duration; hold=$Hold; repeat=$Repeat; loop=[bool]$Loop }
+        $ctl | ConvertTo-Json -Compress | Set-Content -Path $Script:MacroCtl -Encoding UTF8
+        @{ running=$true; status="Starting"; iteration=0 } | ConvertTo-Json -Compress | Set-Content -Path $Script:MacroStatusFile -Encoding UTF8
+        $swift = @'
+import Foundation
+import CoreGraphics
+let home = FileManager.default.homeDirectoryForCurrentUser.path
+let dir = home + "/.novatweaks/macro"
+let ctlPath = dir + "/ctl.json"
+let stPath = dir + "/status.json"
+func readJSON(_ p: String) -> [String: Any]? {
+  guard let d = try? Data(contentsOf: URL(fileURLWithPath:p)),
+        let j = try? JSONSerialization.jsonObject(with:d) as? [String:Any] else { return nil }; return j
+}
+func writeStatus(_ s: [String:Any]) {
+  if let d = try? JSONSerialization.data(withJSONObject:s), let t = String(data:d,encoding:.utf8) { try? t.write(toFile: stPath, atomically:true, encoding:.utf8) }
+}
+func mouse(_ type: CGEventType, _ pt: CGPoint, _ button: CGMouseButton = .left) {
+  CGEvent(mouseEventSource:nil, mouseType:type, mouseCursorPosition:pt, mouseButton:button)?.post(tap:.cghidEventTap)
+}
+guard let c = readJSON(ctlPath) else { writeStatus(["running":false,"status":"Missing config","iteration":0]); exit(0) }
+let sx = c["sx"] as? Int ?? 0, sy = c["sy"] as? Int ?? 0
+let ex = c["ex"] as? Int ?? 0, ey = c["ey"] as? Int ?? 0
+let duration = max(30, c["duration"] as? Int ?? 300)
+let hold = max(0, c["hold"] as? Int ?? 60)
+let rep = max(1, c["repeat"] as? Int ?? 3)
+let loop = c["loop"] as? Bool ?? false
+var iter = 0
+func shouldStop() -> Bool { return (readJSON(ctlPath)?["stop"] as? Bool) ?? false }
+writeStatus(["running":true,"status":"Running","iteration":0])
+while !shouldStop() {
+  iter += 1
+  writeStatus(["running":true,"status":"Running","iteration":iter])
+  let steps = max(4, duration/10)
+  for i in 1...steps {
+    if shouldStop() { break }
+    let t = Double(i)/Double(steps)
+    let x = Double(sx) + (Double(ex)-Double(sx))*t
+    let y = Double(sy) + (Double(ey)-Double(sy))*t
+    let pt = CGPoint(x:x,y:y)
+    mouse(.mouseMoved, pt)
+    usleep(useconds_t(max(1000, (duration/steps)*1000)))
+  }
+  if shouldStop() { break }
+  let endPt = CGPoint(x:Double(ex),y:Double(ey))
+  mouse(.leftMouseDown, endPt)
+  usleep(useconds_t(hold*1000))
+  mouse(.leftMouseUp, endPt)
+  if !loop && iter >= rep { break }
+  usleep(40000)
+}
+writeStatus(["running":false,"status": shouldStop() ? "Stopped" : "Finished","iteration":iter])
+'@
+        $swift | Set-Content -Path $Script:MacroSwift -Encoding UTF8
+        try {
+            $psi = New-Object System.Diagnostics.ProcessStartInfo
+            $psi.FileName = "/usr/bin/swift"
+            $psi.Arguments = ('"' + $Script:MacroSwift.Replace('"','\"') + '"')
+            $psi.UseShellExecute = $false
+            $psi.CreateNoWindow = $true
+            $Script:MacroPid = [System.Diagnostics.Process]::Start($psi)
+            return @{ success = $true; message = "Macro started on macOS ($Repeat pass(es), $Duration ms). If it doesn't move/click, grant Accessibility permission to Terminal/pwsh/Swift in System Settings > Privacy & Security > Accessibility." }
+        } catch {
+            @{ running=$false; status="Failed to start: $($_.Exception.Message)"; iteration=0 } | ConvertTo-Json -Compress | Set-Content -Path $Script:MacroStatusFile -Encoding UTF8
+            return @{ success = $false; message = "macOS macro failed to start: $($_.Exception.Message). Swift and Accessibility permission are required." }
+        }
+    }
+    return @{ success = $false; message = "Macro is not supported on this platform." }
 }
 
 function Stop-NovaMacro {
-    if (-not $IsWin) { return @{ success = $false; message = "Drag Macro is Windows only." } }
-    if (-not $Script:MacroSync.Running) { return @{ success = $true; message = "Macro is not running." } }
-    $Script:MacroSync.Stop = $true
-    $Script:MacroSync.Status = "Stopping"
-    return @{ success = $true; message = "Macro stop requested." }
+    if ($IsWin) {
+        if (-not $Script:MacroSync.Running) { return @{ success = $true; message = "Macro is not running." } }
+        $Script:MacroSync.Stop = $true; $Script:MacroSync.Status = "Stopping"
+        return @{ success = $true; message = "Macro stop requested." }
+    }
+    if ($IsMac) {
+        Ensure-NovaMacroDir
+        try {
+            $ctl = @{ stop = $true }
+            if (Test-Path $Script:MacroCtl) {
+                try { $c = Get-Content $Script:MacroCtl -Raw | ConvertFrom-Json; $c.stop = $true; $c | ConvertTo-Json -Compress | Set-Content -Path $Script:MacroCtl -Encoding UTF8 } catch { $ctl | ConvertTo-Json -Compress | Set-Content -Path $Script:MacroCtl -Encoding UTF8 }
+            } else { $ctl | ConvertTo-Json -Compress | Set-Content -Path $Script:MacroCtl -Encoding UTF8 }
+        } catch {}
+        try { if ($Script:MacroPid -and -not $Script:MacroPid.HasExited) { Start-Sleep -Milliseconds 300; if (-not $Script:MacroPid.HasExited) { $Script:MacroPid.Kill() } } } catch {}
+        try { @{ running=$false; status="Stopped"; iteration=0 } | ConvertTo-Json -Compress | Set-Content -Path $Script:MacroStatusFile -Encoding UTF8 } catch {}
+        return @{ success = $true; message = "Macro stop requested." }
+    }
+    return @{ success = $false; message = "Not supported." }
 }
 
 function Get-NovaMacroStatus {
-    if (-not $IsWin) { return @{ success = $false; running = $false; status = "Windows only" } }
-    $sync = $Script:MacroSync
-    if (-not $sync.Running -and $sync.Worker) {
-        try { $sync.Worker.Dispose() } catch {}
-        $sync.Worker = $null
+    if ($IsWin) {
+        $sync = $Script:MacroSync
+        if (-not $sync.Running -and $sync.Worker) { try { $sync.Worker.Dispose() } catch {}; $sync.Worker = $null }
+        return @{ success = $true; platform = "Windows"; running = [bool]$sync.Running; status = [string]$sync.Status; iteration = [int]$sync.Iteration }
     }
-    return @{ success = $true; running = [bool]$sync.Running; status = [string]$sync.Status; iteration = [int]$sync.Iteration }
+    if ($IsMac) {
+        $running = $false
+        try { if ($Script:MacroPid -and -not $Script:MacroPid.HasExited) { $running = $true } } catch {}
+        $st = @{ running=$running; status=$(if($running){"Running"}else{"Idle"}); iteration=0 }
+        try { if (Test-Path $Script:MacroStatusFile) { $j = Get-Content $Script:MacroStatusFile -Raw | ConvertFrom-Json; $st.running = [bool]$j.running; $st.status = [string]$j.status; $st.iteration = [int]$j.iteration } } catch {}
+        return @{ success = $true; platform = "macOS"; running = [bool]$st.running; status = [string]$st.status; iteration = [int]$st.iteration }
+    }
+    return @{ success = $false; platform = "Unknown"; running = $false; status = "Unsupported" }
 }
 
 # ---------- BIOS / UEFI DETECTION ----------
@@ -3302,18 +3408,7 @@ h1{font-family:"Space Grotesk","Plus Jakarta Sans",sans-serif;font-size:30px;fon
   <div class="brand" id="brandName">Nova Tweaks</div>
   <div class="brandsub" id="brandSub">Performance Suite</div>
   <div class="planbadge free" id="planBadge">FREE</div>
-  <button class="navbtn active" data-page="home"><span class="navicon">◆</span>Dashboard</button>
-  <button class="navbtn" data-page="tweaks"><span class="navicon">⚙</span>All Tweaks</button>
-  <div style="padding:14px 10px 6px;font-size:10px;text-transform:uppercase;letter-spacing:1.8px;color:var(--textmuted);font-weight:800">Nova Tools</div>
-  <button class="navbtn" data-page="network"><span class="navicon">📡</span>Ping Optimizer</button>
-  <button class="navbtn" data-page="potato"><span class="navicon">🥔</span>Potato Graphics</button>
-  <button class="navbtn" data-page="crosshair"><span class="navicon">🎯</span>Crosshair</button>
-  <button class="navbtn" data-page="booster"><span class="navicon">⚡</span>Game Booster</button>
-  <button class="navbtn" data-page="fps"><span class="navicon">🚀</span>FPS Booster</button>
-  <div style="padding:10px 10px 6px;font-size:10px;text-transform:uppercase;letter-spacing:1.8px;color:var(--textmuted);font-weight:800">System</div>
-  <button class="navbtn" data-page="macro"><span class="navicon">🖱</span>Drag Macro</button>
-  <button class="navbtn" data-page="restore"><span class="navicon">↺</span>Restore</button>
-  <button class="navbtn" data-page="settings"><span class="navicon">✦</span>Settings</button>
+  <div style="padding:8px 10px 4px;font-size:10px;color:var(--textmuted);line-height:1.55">All tabs are at the top. Use <b style="color:var(--text)">Tweaks</b> for categories and settings.</div>
   <div class="sidebar-bottom">
     <div class="account-badge" id="accountBadge" style="display:none">
       <div class="account-avatar" id="accountAvatar">G</div>
@@ -3326,18 +3421,19 @@ h1{font-family:"Space Grotesk","Plus Jakarta Sans",sans-serif;font-size:30px;fon
 
 <div class="maincol">
 <div class="topbar">
-  <span class="topbar-label">Tools</span>
+  <button class="navbtn active" data-page="home"><span class="navicon">◆</span>Dashboard</button>
+  <button class="navbtn" data-page="tweaks"><span class="navicon">⚙</span>Tweaks</button>
+  <button class="navbtn" data-page="network"><span class="navicon">📡</span>Ping Optimizer</button>
+  <button class="navbtn" data-page="potato"><span class="navicon">🥔</span>Potato Graphics</button>
   <button class="navbtn" data-page="crosshair"><span class="navicon">🎯</span>Crosshair</button>
   <button class="navbtn" data-page="booster"><span class="navicon">⚡</span>Game Booster</button>
   <button class="navbtn" data-page="fps"><span class="navicon">🚀</span>FPS Booster</button>
-  <button class="navbtn" data-page="network"><span class="navicon">📡</span>Ping Optimizer</button>
-  <button class="navbtn" data-page="potato"><span class="navicon">🥔</span>Potato Graphics</button>
-  <button class="navbtn" data-page="macro"><span class="navicon">🖱</span>Drag Macro</button>
-  <button class="navbtn" data-page="bios"><span class="navicon">🧬</span>BIOS / UEFI</button>
-  <button class="navbtn" data-page="bench"><span class="navicon">📊</span>Benchmark</button>
+  <button class="navbtn" data-page="macro"><span class="navicon">🖱</span>Macro</button>
+  <button class="navbtn" data-page="bios"><span class="navicon">🧬</span>BIOS</button>
   <button class="navbtn" data-page="restore"><span class="navicon">↺</span>Restore</button>
-  <button class="navbtn" data-page="log"><span class="navicon">☰</span>Log</button>
+  <button class="navbtn" data-page="bench"><span class="navicon">📊</span>Benchmark</button>
   <button class="navbtn" data-page="settings"><span class="navicon">✦</span>Settings</button>
+  <button class="navbtn" data-page="log"><span class="navicon">☰</span>Log</button>
 </div>
 
 <div class="workspace">
@@ -3410,8 +3506,16 @@ h1{font-family:"Space Grotesk","Plus Jakarta Sans",sans-serif;font-size:30px;fon
     <div class="badgegrid" id="homeBadges"></div>
   </div>
   <div class="card" style="margin-top:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+      <h3 style="font-size:16px;margin:0">PC Specs</h3>
+      <button class="btn ghost xs" id="homeSysRefreshBtn">Refresh</button>
+    </div>
+    <div style="color:var(--textmuted);font-size:11px;margin-bottom:10px">Your system info (OS, CPU, RAM, GPU where available). Use this to pick safe tweaks for your hardware.</div>
+    <pre id="homeSysInfo" style="margin:0;color:var(--textdim);font-size:12px;font-family:'JetBrains Mono',monospace;line-height:1.6;white-space:pre-wrap">Loading system info...</pre>
+  </div>
+  <div class="card" style="margin-top:16px">
     <h3 style="margin-bottom:10px;font-size:16px">What's inside Nova Tweaks</h3>
-    <div style="color:var(--textdim);font-size:13px;line-height:1.7">@@INSIDE_LEAD@@ Input Response Accelerator (10 changes, ~60% less input lag), Network Spike Smoother (Nagle off, adapter offloads, DNS flush), Mouse Precision (1:1 tracking), Keyboard Latency Fix, USB Polling (1000Hz), BCDEDIT micro-stutter fix, Crosshair Overlay, Game Booster, Potato Graphics, and safe system optimizations. All reversible.</div>
+    <div style="color:var(--textdim);font-size:13px;line-height:1.7">@@INSIDE_LEAD@@ Ping Optimizer, input/latency tweaks, Crosshair, Game Booster, FPS Booster, Potato Graphics (safe/reversible config where supported), decrapifying/cleanup options, and system optimizations. Results vary by hardware, OS, and game — test and use Restore/Revert.</div>
   </div>
 </div>
 
@@ -3540,11 +3644,12 @@ spotify.exe</textarea>
   <button class="btn ghost sm" style="margin-top:12px" id="refreshLogBtn">Refresh</button>
 </div>
 
-<!-- DRAG MACRO -->
+<!-- MACRO -->
 <div class="page" id="page-macro">
-  <h1>Drag Macro</h1>
-  <div class="sub">Capture a start and end point, then Nova Tweaks moves the cursor and left-clicks at the speed you choose. Windows only.</div>
-  <div class="warnbox" id="macroWarn" style="display:none">Drag Macro uses the Windows cursor API, so it is disabled on macOS.</div>
+  <h1 id="macroTitle">Macro</h1>
+  <div class="sub" id="macroSub">Capture a start and end point, then Nova Tweaks moves the cursor and performs the drag/click at the speed you choose. Windows uses the native cursor API; macOS uses Swift/CoreGraphics and requires Accessibility permission.</div>
+  <div class="warnbox" id="macroWarn" style="display:none"></div>
+  <div class="warnbox" id="macroMacNote" style="display:none;background:rgba(255,170,0,.08);border-color:rgba(255,170,0,.35);color:var(--warn)">macOS: Macro automation needs <b>Accessibility</b> permission for the app/process running Nova Tweaks (System Settings → Privacy &amp; Security → Accessibility). If movement/clicks don’t work, grant access and try again.</div>
   <div class="macrow">
     <div class="card">
       <h3 style="margin-bottom:12px;font-size:15px">Path</h3>
@@ -3933,6 +4038,7 @@ document.querySelectorAll('.navbtn').forEach(b=>b.addEventListener('click',()=>{
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('page-'+b.dataset.page).classList.add('active');
   if(b.dataset.page==='log')refreshLog();
+  if(b.dataset.page==='home')loadSysInfoText('homeSysInfo');
   if(b.dataset.page==='bios')loadBios();
   if(b.dataset.page==='macro')refreshMacroStatus();
   if(b.dataset.page==='settings')renderBadges();
@@ -3969,6 +4075,8 @@ async function renderStats(){
 }
 
 const cats=['General','Input','Ping Optimizer','Power','Visual','Services','Game','Storage','Firmware','Privacy','Windows'];
+const catLabels={'General':'General','Input':'Input & Latency','Ping Optimizer':'Networking','Power':'Power','Visual':'Visuals','Services':'Decrapifying & Services','Game':'Game Profiles','Storage':'Storage & Cleanup','Firmware':'BIOS / Firmware','Privacy':'Privacy','Windows':'Windows'};
+function catLabel(c){return catLabels[c]||c;}
 let currentCat='General';
 function catCount(c){
   const all=Object.values(state.tweaks||{});
@@ -3976,7 +4084,7 @@ function catCount(c){
   return all.filter(t=>t.available&&t.cat===c).length;
 }
 function renderCatBar(){
-  document.getElementById('catBar').innerHTML=cats.map(c=>`<button class="catbtn ${c===currentCat?'active':''}" data-cat="${c}">${c}<span style="opacity:.55;margin-left:6px;font-size:10px">${catCount(c)}</span></button>`).join('');
+  document.getElementById('catBar').innerHTML=cats.map(c=>`<button class="catbtn ${c===currentCat?'active':''}" data-cat="${c}" title="${c}">${catLabel(c)}<span style="opacity:.55;margin-left:6px;font-size:10px">${catCount(c)}</span></button>`).join('');
   document.querySelectorAll('.catbtn').forEach(b=>b.addEventListener('click',()=>{currentCat=b.dataset.cat;renderCatBar();renderTweaks()}));
 }
 
@@ -4258,7 +4366,13 @@ document.getElementById('applyAllBtn').addEventListener('click',async()=>{const 
 document.getElementById('removeAllBtn').addEventListener('click',async()=>{if(!confirm('Remove ALL tweaks? This reverts every tweak.'))return;const r=await api('/api/revertall');showToast(r.message);await loadTweaks()});
 document.getElementById('removeCatBtn').addEventListener('click',async()=>{if(!confirm('Remove all tweaks in '+currentCat+'?'))return;const ids=tweaksFor(currentCat).filter(t=>t.available).map(t=>t.id);for(const id of ids){await api('/api/tweak/toggle',{id,state:false})}showToast('Removed '+ids.length+' tweaks in '+currentCat);await loadTweaks()});
 document.getElementById('revertAllBtn2').addEventListener('click',async()=>{if(!confirm('Revert ALL changes? Reboot recommended after.'))return;const r=await api('/api/revertall');showToast(r.message);await loadTweaks()});
-document.getElementById('refreshSysBtn').addEventListener('click',async()=>{const r=await api('/api/sysinfo');document.getElementById('sysInfo').textContent=r.info});
+async function loadSysInfoText(targetId){
+  const el=document.getElementById(targetId); if(!el) return;
+  try{ const r=await api('/api/sysinfo'); el.textContent=(r&&(r.info||r.text||r.message))||JSON.stringify(r,null,2); }
+  catch(e){ el.textContent='Could not load system info.'; }
+}
+document.getElementById('refreshSysBtn').addEventListener('click',()=>loadSysInfoText('sysInfo'));
+const homeSysBtn=document.getElementById('homeSysRefreshBtn'); if(homeSysBtn) homeSysBtn.addEventListener('click',()=>loadSysInfoText('homeSysInfo'));
 document.getElementById('runBenchBtn').addEventListener('click',async()=>{document.getElementById('benchResult').textContent='Running...';const r=await api('/api/bench');document.getElementById('benchResult').textContent=r.result});
 document.getElementById('saveBenchBtn').addEventListener('click',async()=>{const r=await api('/api/savebench',{before:document.getElementById('fpsBefore').value,after:document.getElementById('fpsAfter').value});showToast(r.message)});
 document.getElementById('restorePointBtn').addEventListener('click',async()=>{const r=await api('/api/restorepoint');showToast(r.message)});
@@ -4372,55 +4486,72 @@ function disableOverlay(){chState.on=false;if(overlayCanvas){overlayCanvas.remov
 
 // Drag macro
 const macroState={start:null,end:null,running:false};
+function macroPlatform(){ const o=(state&&state.os)||''; if(/mac/i.test(o)) return 'mac'; if(/win/i.test(o)) return 'win'; return 'unknown'; }
 function macroFmt(p){return p?('X '+p.x+' · Y '+p.y):'Not captured'}
 function updateMacroUI(){
   const s=document.getElementById('macroStart'),e=document.getElementById('macroEnd');
   if(s&&!s.textContent.startsWith('Capturing'))s.textContent=macroFmt(macroState.start);
   if(e&&!e.textContent.startsWith('Capturing'))e.textContent=macroFmt(macroState.end);
-  document.getElementById('macroDurationVal').textContent=document.getElementById('macroDuration').value+' ms';
-  document.getElementById('macroHoldVal').textContent=document.getElementById('macroHold').value+' ms';
+  const dv=document.getElementById('macroDurationVal'), hv=document.getElementById('macroHoldVal');
+  if(dv) dv.textContent=document.getElementById('macroDuration').value+' ms';
+  if(hv) hv.textContent=document.getElementById('macroHold').value+' ms';
 }
 function updateMacroAvailability(){
-  const win=state.os==='Windows';
+  const p=macroPlatform();
   const paid=state.plan==='Pro'||state.plan==='Ultimate';
-  ['captureStartBtn','captureEndBtn','macroStartBtn','macroStopBtn'].forEach(id=>{const el=document.getElementById(id);if(el)el.disabled=!win||!paid});
+  const supported=(p==='win'||p==='mac');
+  ['captureStartBtn','captureEndBtn','macroStartBtn','macroStopBtn'].forEach(id=>{const el=document.getElementById(id);if(el)el.disabled=!supported||!paid});
   const w=document.getElementById('macroWarn');
+  const mn=document.getElementById('macroMacNote');
+  const t=document.getElementById('macroTitle');
+  const sub=document.getElementById('macroSub');
+  if(t) t.textContent=(p==='mac'?'Macro (macOS)':p==='win'?'Drag Macro (Windows)':'Macro');
+  if(sub) sub.textContent=(p==='mac'
+    ? 'Capture a start and end point, then Nova Tweaks runs a macOS macro (Swift/CoreGraphics). Grant Accessibility permission if clicks/movement are blocked.'
+    : 'Capture a start and end point, then Nova Tweaks moves the cursor and performs the drag/click (Windows native cursor API).');
+  if(mn) mn.style.display=(p==='mac'?'block':'none');
   if(w){
-    if(!win){ w.style.display='block'; w.textContent='Drag Macro uses the Windows cursor API, so it is disabled on macOS.'; }
-    else if(!paid){ w.style.display='block'; w.textContent='Drag Macro is a Pro feature. Open Account and upgrade, or redeem a gift code, to unlock it.'; }
+    if(!supported){ w.style.display='block'; w.textContent='Macro is available on Windows and macOS.'; }
+    else if(!paid){ w.style.display='block'; w.textContent='Macro is a Pro feature. Open Settings/Account and upgrade, or redeem a gift code, to unlock it.'; }
     else { w.style.display='none'; }
   }
 }
 async function captureMacroPoint(which){
-  if(state.os!=='Windows'){showToast('Drag Macro is Windows only');return;}
+  const p=macroPlatform();
+  if(p!=='win'&&p!=='mac'){showToast('Macro is not supported on this platform');return;}
   let n=3;const el=document.getElementById(which==='start'?'macroStart':'macroEnd');
   el.textContent='Capturing in '+n+'…';
   const iv=setInterval(()=>{n--;if(n>0)el.textContent='Capturing in '+n+'…';},1000);
   setTimeout(async()=>{
     clearInterval(iv);
     const r=await api('/api/macro/capture');
-    if(r.success){macroState[which]={x:r.x,y:r.y};showToast(which==='start'?'Start point captured':'End point captured');}
-    else showToast(r.message||'Capture failed');
+    if(r&&r.success){macroState[which]={x:r.x,y:r.y};showToast(which==='start'?'Start point captured':'End point captured');}
+    else showToast((r&&r.message)||'Capture failed');
     updateMacroUI();
   },3000);
 }
 async function refreshMacroStatus(){
-  if(state.os!=='Windows')return;
-  const r=await api('/api/macro/status');
-  if(r.success){
-    macroState.running=!!r.running;
-    document.getElementById('macroStatus').textContent=(r.status||'Idle')+(r.iteration?' · pass '+r.iteration:'');
-  }
+  const p=macroPlatform();
+  if(p!=='win'&&p!=='mac') return;
+  try{
+    const r=await api('/api/macro/status');
+    if(r&&r.success!==false){
+      macroState.running=!!r.running;
+      const ms=document.getElementById('macroStatus');
+      if(ms) ms.textContent=(r.status||'Idle')+(r.iteration?' · pass '+r.iteration:'');
+    }
+  }catch{}
 }
 async function startMacro(){
-  if(state.os!=='Windows'){showToast('Drag Macro is Windows only');return;}
+  const p=macroPlatform();
+  if(p!=='win'&&p!=='mac'){showToast('Macro is not supported on this platform');return;}
   if(!macroState.start||!macroState.end){showToast('Capture a start and end point first');return;}
   const body={start:macroState.start,end:macroState.end,duration:+document.getElementById('macroDuration').value,hold:+document.getElementById('macroHold').value,repeat:+document.getElementById('macroRepeat').value,loop:document.getElementById('macroLoop').checked};
   const r=await api('/api/macro/start',body);
-  showToast(r.message);
+  showToast((r&&r.message)||'Macro started');
   refreshMacroStatus();
 }
-async function stopMacro(){const r=await api('/api/macro/stop');showToast(r.message);refreshMacroStatus();}
+async function stopMacro(){try{const r=await api('/api/macro/stop');showToast((r&&r.message)||'Stopped');}catch{};refreshMacroStatus();}
 document.getElementById('captureStartBtn').addEventListener('click',()=>captureMacroPoint('start'));
 document.getElementById('captureEndBtn').addEventListener('click',()=>captureMacroPoint('end'));
 document.getElementById('macroDuration').addEventListener('input',updateMacroUI);
@@ -4484,7 +4615,7 @@ document.getElementById('importSyncBtn').addEventListener('click',async()=>{
   }catch(e){showToast('Invalid sync code');}
 });
 
-renderStats();renderCatBar();loadTweaks();startNetAuto();setInterval(renderStats,15000);
+renderStats();renderCatBar();loadTweaks();loadSysInfoText('homeSysInfo');startNetAuto();setInterval(renderStats,15000);
 const h=new Date().getHours();document.getElementById('greeting').textContent=h<12?'Good morning':h<18?'Good afternoon':'Good evening';
 </script>
 </body>
@@ -4755,14 +4886,16 @@ function Invoke-NovaApi {
         }
 
         if ($Path -eq "/api/macro/capture") {
-            if (-not $IsWin) { return (ConvertTo-NovaJson @{ success = $false; message = "Drag Macro is Windows only." }) }
             $pos = Get-NovaCursorPos
-            if (-not $pos) { return (ConvertTo-NovaJson @{ success = $false; message = "Could not read the cursor position." }) }
-            return (ConvertTo-NovaJson @{ success = $true; x = $pos.x; y = $pos.y })
+            if (-not $pos) {
+                $msg = if ($IsMac) { "Could not read cursor position. On macOS this uses Swift/CoreGraphics; make sure `swift` is available." } else { "Could not read the cursor position." }
+                return (ConvertTo-NovaJson @{ success = $false; message = $msg })
+            }
+            return (ConvertTo-NovaJson @{ success = $true; x = $pos.x; y = $pos.y; platform = $(if($IsWin){"Windows"}elseif($IsMac){"macOS"}else{"Unknown"}) })
         }
 
         if ($Path -eq "/api/macro/start") {
-            if ((Get-NovaPlanRank (Get-NovaEffectivePlan)) -lt 1) { return (ConvertTo-NovaJson @{ success = $false; locked = $true; required = "Pro"; message = "Drag Macro needs Pro." }) }
+            if ((Get-NovaPlanRank (Get-NovaEffectivePlan)) -lt 1) { return (ConvertTo-NovaJson @{ success = $false; locked = $true; required = "Pro"; message = "Macro needs Pro." }) }
             $res = Start-NovaMacro `
                 -StartX ([int]$body.start.x) -StartY ([int]$body.start.y) `
                 -EndX ([int]$body.end.x) -EndY ([int]$body.end.y) `
