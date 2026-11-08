@@ -3737,7 +3737,13 @@ spotify.exe</textarea>
 <!-- NETWORK -->
 <div class="page" id="page-network">
   <h1>Ping Optimizer</h1>
-  <div class="sub">Live packet health against a real target. Average ping, jitter and packet loss, sampled every few seconds.</div>
+  <div class="sub">Live latency monitor (ping, jitter, packet loss). This page <b>measures</b> your connection — it does not change your internet by itself. To apply network optimizations, turn on tweaks in <b>Tweaks → Networking</b>, then test again. Results vary by PC, router, ISP, and game server.</div>
+  <div class="card" style="margin-bottom:14px;border-color:rgba(245,158,11,.28);background:rgba(245,158,11,.06)">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+      <div style="font-size:12.5px;color:var(--textdim);line-height:1.6"><b style="color:var(--text)">Apply optimizations:</b> use the Networking tweaks (toggles show <b>ON</b> and give a notification). Some tweaks need admin, a reboot, or have no automatic restore — Nova will warn you.</div>
+      <button class="btn sm" onclick="currentCat='Ping Optimizer';document.querySelector('[data-page=tweaks]').click();renderCatBar();renderTweaks();">Open Networking Tweaks</button>
+    </div>
+  </div>
   <div class="cardrow">
     <div class="card" style="flex:1;min-width:220px;text-align:center">
       <div class="netmetric-v" id="netAvgBig">—</div>
@@ -3768,7 +3774,8 @@ spotify.exe</textarea>
     <div style="color:var(--textdim);font-size:12.5px;line-height:1.9">
       <b style="color:var(--text)">Ping</b> is round-trip time. Lower is better.<br>
       <b style="color:var(--text)">Jitter</b> is how much ping changes between packets. Spiky jitter causes rubber-banding.<br>
-      <b style="color:var(--text)">Loss</b> is packets that never arrived. Anything above 0% is worth fixing.
+      <b style="color:var(--text)">Loss</b> is packets that never arrived. Anything above 0% is worth fixing.<br><br>
+      <b style="color:var(--text)">Note:</b> Network tweaks may help, do nothing, or (rarely) hurt depending on your setup. Always test in-game and use Restore if needed.
     </div>
   </div>
 </div>
@@ -3935,7 +3942,7 @@ window.onerror=(m,u,l)=>{const e=document.getElementById('loginError');if(e)e.te
   function onUp(){dragging=false}
   document.addEventListener('mousedown',onDown);document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);
 })();
-function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000)}
+function showToast(msg,ms){const t=document.getElementById('toast');if(!t)return;const dur=ms||(typeof msg==='string'&&/no automatic restore|failed|error|locked|preview|admin/i.test(msg)?5200:3200);t.textContent=msg;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),dur)}
 
 const GAME_PROFILES={
   Fortnite:{brand:'Nova Tweaks',sub:'Fortnite Performance Suite',welcome:'Welcome to Fortnite Tweaks',icon:'🎮',note:'Current profile: Fortnite. Fortnite and shared Windows tweaks are loaded.'},
@@ -4151,13 +4158,15 @@ function tweakCard(t){
   const planBadge=`<span class="badge tier tier-${tierCls}">${tier.toUpperCase()}</span>`;
   const availBadge=t.available?'':'<span class="badge unavailable">Not on this PC</span>';
   const lockBadge=locked?'<span class="badge unavailable">🔒 Locked</span>':'';
+  const onBadge=(t.state&&!locked)?'<span class="badge" style="background:rgba(34,197,94,.14);color:#86efac;border:1px solid rgba(34,197,94,.28)">ON</span>':'';
+  const noRestoreBadge=(t.state&&t.hasOff===false)?'<span class="badge" style="background:rgba(245,158,11,.12);color:#fcd34d;border:1px solid rgba(245,158,11,.28)" title="No automatic restore handler. Use Restore or a system restore point if needed.">No auto-restore</span>':'';
   const newBadge=t.id==='inputdelay'||t.id==='pingstab'||t.id==='bcdedit'?'<span class="badge new">NEW</span>':'';
   const osCls='os-'+(t.os||'').toLowerCase();
   const osBadge='<span class="badge '+osCls+'">'+(t.os||'')+'</span>';
-  return `<div class="tweakcard rotating-outline${locked?' locked':''}" data-tweak="${t.id}">
+  return `<div class="tweakcard rotating-outline${locked?' locked':''}${t.state?' on':''}" data-tweak="${t.id}">
       <div class="tweakhead">
-        <span class="badge ${riskCls}">${t.risk}</span>${osBadge}${availBadge}${planBadge}${lockBadge}${newBadge}
-        <label class="toggle"><input type="checkbox" data-id="${t.id}" ${checked} ${disabled}><span class="slider"></span></label>
+        <span class="badge ${riskCls}">${t.risk}</span>${osBadge}${availBadge}${planBadge}${lockBadge}${onBadge}${noRestoreBadge}${newBadge}
+        <label class="toggle" title="${t.state?'Turn off':'Turn on'}"><input type="checkbox" data-id="${t.id}" ${checked} ${disabled}><span class="slider"></span></label>
       </div>
       <div class="tweakname">${t.name}</div>
       <div class="tweakdesc">${t.desc}</div>
@@ -4190,12 +4199,19 @@ function renderTweaks(){
     const id=cb.dataset.id;const tw=state.tweaks[id];
     const prev=!!tw.state;
     if(cb.checked&&tw.risk!=='Safe'){if(!confirm(tw.name+'\n\nRisk: '+tw.risk+'\n'+tw.desc+'\n\nApply?')){cb.checked=prev;return}}
+    if(!cb.checked && tw.hasOff===false){ showToast('Turning off (no automatic restore for this tweak). Check the result message.',4200); }
     const r=await api('/api/tweak/toggle',{id,state:cb.checked});
-    if(r.locked||r.success===false){cb.checked=prev;showToast(r.message||'Locked.');return;}
+    if(r && (r.locked || r.success===false || r.preview)){
+      cb.checked=prev;
+      showToast((r&&r.message)||'Could not change tweak.',5200);
+      return;
+    }
     tw.state=cb.checked;
-    showToast(r.message||(cb.checked?'Applied':'Reverted'));
+    if(r && r.noAutoRestore && !cb.checked) showToast(r.message||('Turned off in app: '+tw.name+'. No automatic restore.'),6500);
+    else showToast((r&&r.message)||(cb.checked?('Applied: '+tw.name):('Turned off: '+tw.name)), cb.checked?3400:4200);
+    renderTweaks();
     updateCounts();
-    try{const b=await api('/api/badges');if(b.success){state.badges=b.badges;state.streak=b.streak;state.bestStreak=b.bestStreak;renderBadges();}}catch{}
+    try{const b=await api('/api/badges');if(b&&b.success){state.badges=b.badges;state.streak=b.streak;state.bestStreak=b.bestStreak;renderBadges();}}catch{}
   }));
 }
 function updateCounts(){
@@ -4857,6 +4873,7 @@ function Invoke-NovaApi {
                     os        = $osLabel
                     game      = $(if ($t.Game) { [string]$t.Game } else { "Shared" })
                     available = [bool]$isAvail
+                    hasOff    = [bool]($t.Off -or $t.Svc)
                     state     = (Get-NovaTweakState ([string]$t.Id))
                 }
             }
@@ -4963,19 +4980,24 @@ function Invoke-NovaApi {
             }
             Set-NovaTweakState ([string]$body.id) $desired
             Save-Config
-            $msg = "Reverted: $($tw.Name)"
+            $msg = ""
+            $noAutoRestore = $false
+            $ok = $true
             if ($desired) {
-                try { & $tw.Action; $msg = "Applied: $($tw.Name)" }
-                catch { $msg = "Failed: $($_.Exception.Message)" }
+                try { & $tw.Action; $msg = "Applied: $($tw.Name)"; if ($Script:WindowsPreview) { $msg = "Preview only (no system changes on this Mac): $($tw.Name)" } }
+                catch { $ok = $false; $msg = "Failed: $($tw.Name) — $($_.Exception.Message)" }
             } elseif ($tw.Off) {
-                try { & $tw.Off; $msg = "Reverted: $($tw.Name)" }
-                catch { $msg = "Reverted state; restore may be partial: $($_.Exception.Message)" }
+                try { & $tw.Off; $msg = "Turned off: $($tw.Name) (restore applied where supported)." }
+                catch { $msg = "Turned off state saved, but restore may be partial: $($tw.Name) — $($_.Exception.Message)" }
             } elseif ($tw.Svc) {
                 Invoke-ServiceRestore -Name $tw.Svc
-                $msg = "Reverted: $($tw.Name)"
+                $msg = "Turned off: $($tw.Name) (service restore attempted)."
+            } else {
+                $noAutoRestore = $true
+                $msg = "Turned off in Nova Tweaks: $($tw.Name). This tweak has no automatic restore — use Restore/system restore point or revert manually if needed."
             }
-            if ($desired) { Add-NovaAppliedTweak ([string]$tw.Id) }
-            return (ConvertTo-NovaJson @{ success = $true; message = $msg })
+            if ($desired -and $ok) { Add-NovaAppliedTweak ([string]$tw.Id) }
+            return (ConvertTo-NovaJson @{ success = $ok; message = $msg; noAutoRestore = $noAutoRestore; applied = [bool]$desired })
         }
 
         if ($Path -eq "/api/inputdelay") {
