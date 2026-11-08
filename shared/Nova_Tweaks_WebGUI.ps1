@@ -295,7 +295,7 @@ function Get-NovaBadgeDefs {
         @{ id="tinkerer";     name="Tinkerer";        icon="🔧"; desc="Applied 5 different tweaks." },
         @{ id="optimizer";    name="Optimizer";       icon="⚙"; desc="Applied 25 different tweaks." },
         @{ id="maxed-out";    name="Maxed Out";       icon="💯"; desc="Applied 75 different tweaks." },
-        @{ id="network-guru"; name="Network Guru";    icon="📡"; desc="Applied 6 or more network tweaks." },
+        @{ id="network-guru"; name="Network Guru";    icon="📡"; desc="Applied 6 or more Ping Optimizer / network tweaks." },
         @{ id="clean-sweep";  name="Clean Sweep";     icon="🧹"; desc="Used Revert All at least once." },
         @{ id="gift-hunter";  name="Gift Hunter";     icon="🎁"; desc="Redeemed a giveaway code." },
         @{ id="pro-player";   name="Pro Player";      icon="🥇"; desc="Activated a Pro or Ultimate plan." },
@@ -688,6 +688,41 @@ function Get-NovaFortniteExe {
         }
     } catch {}
     return $null
+}
+
+function Invoke-FortniteGpuPreference {
+    param([switch]$Off)
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    $p = "HKCU:\Software\Microsoft\DirectX\UserGpuPreferences"
+    $exe = Get-NovaFortniteExe
+    $candidates = New-Object System.Collections.Generic.List[string]
+    if ($exe) { [void]$candidates.Add($exe) }
+    if ($env:ProgramFiles) { [void]$candidates.Add((Join-Path $env:ProgramFiles "Epic Games\Fortnite\FortniteGame\Binaries\Win64\FortniteClient-Win64-Shipping.exe")) }
+    if (${env:ProgramFiles(x86)}) { [void]$candidates.Add((Join-Path ${env:ProgramFiles(x86)} "Epic Games\Fortnite\FortniteGame\Binaries\Win64\FortniteClient-Win64-Shipping.exe")) }
+    try {
+        if (-not (Test-Path $p)) { New-Item -Path $p -Force | Out-Null }
+        foreach ($c in ($candidates | Select-Object -Unique)) {
+            if (-not $c) { continue }
+            if ($Off) {
+                try { Remove-ItemProperty -Path $p -Name $c -ErrorAction SilentlyContinue } catch {}
+            } else {
+                Set-ItemProperty -Path $p -Name $c -Value "GpuPreference=2;" -Type String -Force
+            }
+        }
+        if ($Off) { Write-Log "Fortnite GPU preference reset." "OK" }
+        else { Write-Log "Fortnite set to high-performance GPU." "OK" }
+    } catch { Write-Log "Fortnite GPU preference failed: $($_.Exception.Message)" "WARN" }
+}
+
+function Invoke-FortnitePriority {
+    param([string]$Priority = "High")
+    if (-not $IsWin) { Write-Log "Windows only." "WARN"; return }
+    $procs = @(Get-Process -Name "FortniteClient-Win64-Shipping" -ErrorAction SilentlyContinue)
+    if ($procs.Count -eq 0) { Write-Log "Fortnite is not running. Start Fortnite, then apply." "WARN"; return }
+    $cls = if ($Priority -eq "Normal") { [System.Diagnostics.ProcessPriorityClass]::Normal } else { [System.Diagnostics.ProcessPriorityClass]::High }
+    foreach ($pr in $procs) {
+        try { $pr.PriorityClass = $cls; Write-Log "Fortnite process priority set to $Priority." "OK" } catch { Write-Log "Could not set Fortnite priority: $($_.Exception.Message)" "WARN" }
+    }
 }
 
 # FPS Booster: real Windows graphics/scheduling changes, plus a smaller macOS pass.
@@ -2334,10 +2369,10 @@ $Script:Tweaks = @(
     @{Id="kbdlag";Name="Keyboard Latency Fix";Desc="Max repeat rate (31), zero delay, no filter/sticky/toggle keys, 32 data queue. ~60% faster response.";Risk="Safe";Free=$false;Win=$true;Mac=$false;Cat="Input";Action={Invoke-KeyboardLatency}},
     @{Id="usb";Name="USB Polling Optimization";Desc="Sets USB data queue to 32 for 1000Hz polling. Reduces USB input delay to 1ms.";Risk="Safe";Free=$false;Win=$true;Mac=$false;Cat="Input";Action={Invoke-USBPolling}},
     # Network
-    @{Id="pingstab";Name="Network Spike Smoother";Desc="Windows: Nagle off, throttling off, adapter offloads tuned, TCP auto-tuning off, DNS flushed. macOS: DNS cache flushed. Smooths ping spikes.";Risk="Safe";Free=$false;Win=$true;Mac=$true;Cat="Network";Action={Invoke-PingStabilizer}},
-    @{Id="nagle";Name="Disable Nagle's algorithm";Desc="TCPNoDelay + TcpAckFrequency. Lowers network latency.";Risk="Safe";Free=$false;Win=$true;Mac=$false;Cat="Network";Action={Invoke-RegistryTweaks}},
-    @{Id="autotune";Name="Disable TCP auto-tuning";Desc="Sets autotuninglevel=disabled. Reduces bufferbloat.";Risk="Safe";Free=$false;Win=$true;Mac=$false;Cat="Network";Action={Invoke-NetworkTweaks}},
-    @{Id="qos";Name="Network QoS priority";Desc="Prioritizes game packets over background traffic.";Risk="Safe";Free=$false;Win=$true;Mac=$false;Cat="Network";Action={Invoke-QoSReserveOff}},
+    @{Id="pingstab";Name="Network Spike Smoother";Desc="Windows: Nagle off, throttling off, adapter offloads tuned, TCP auto-tuning off, DNS flushed. macOS: DNS cache flushed. Smooths ping spikes.";Risk="Safe";Free=$false;Win=$true;Mac=$true;Cat="Ping Optimizer";Action={Invoke-PingStabilizer}},
+    @{Id="nagle";Name="Disable Nagle's algorithm";Desc="TCPNoDelay + TcpAckFrequency. Lowers network latency.";Risk="Safe";Free=$false;Win=$true;Mac=$false;Cat="Ping Optimizer";Action={Invoke-RegistryTweaks}},
+    @{Id="autotune";Name="Disable TCP auto-tuning";Desc="Sets autotuninglevel=disabled. Reduces bufferbloat.";Risk="Safe";Free=$false;Win=$true;Mac=$false;Cat="Ping Optimizer";Action={Invoke-NetworkTweaks}},
+    @{Id="qos";Name="Network QoS priority";Desc="Prioritizes game packets over background traffic.";Risk="Safe";Free=$false;Win=$true;Mac=$false;Cat="Ping Optimizer";Action={Invoke-QoSReserveOff}},
     # Power
     @{Id="power";Name="Ultimate Performance power plan";Desc="Unlocks and applies hidden Ultimate Performance plan. Best single gaming tweak.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Power";Action={Invoke-PowerPlan}},
     @{Id="hags";Name="Hardware-Accelerated GPU Scheduling";Desc="Offloads GPU scheduling to hardware. Reboot required.";Risk="Safe";Free=$false;Win=$true;Mac=$false;Cat="Power";Action={Invoke-HAGS}},
@@ -2450,15 +2485,15 @@ $Script:Tweaks = @(
     @{Id="macspotlight";Name="Disable Spotlight (Mac)";Desc="Stops Spotlight indexing.";Risk="Caution";Free=$false;Cat="General";Win=$false;Mac=$true;Action={Invoke-MacDisableSpotlight}},
 
     # Network additions
-    @{Id="dnscloud";Name="Cloudflare DNS";Desc="Sets 1.1.1.1 and 1.0.0.1 on active adapters, then flushes DNS. Lower lookup latency and cleaner routing.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-DnsCloudflare}},
-    @{Id="netbiosoff";Name="Disable NetBIOS over TCP/IP";Desc="Turns off legacy NetBIOS name broadcasts on every adapter. Less background chatter on the LAN.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-DisableNetbios}},
-    @{Id="rss";Name="Enable Receive Side Scaling";Desc="Spreads network receive processing across CPU cores. Lower ping under load on multi-core systems.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-EnableRss}},
-    @{Id="intmod";Name="Disable interrupt moderation";Desc="Cuts NIC packet batching so packets reach the game sooner. Best on wired Ethernet.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-DisableInterruptModeration}},
-    @{Id="smb1off";Name="Disable SMBv1";Desc="Removes the legacy SMBv1 protocol and blocks insecure guest logons. Less attack surface.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-DisableSmb1}},
-    @{Id="ctcp";Name="Use CTCP congestion control";Desc="Switches TCP to CTCP for smoother throughput on lossy links. Reboot recommended.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-TcpCongestionCtcp}},
-    @{Id="llmnroff";Name="Disable LLMNR";Desc="Turns off Link-Local Multicast Name Resolution. Less broadcast noise and a smaller attack surface.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-DisableLlmnr}},
-    @{Id="ipv6off";Name="Disable IPv6";Desc="Disables the IPv6 stack. Can reduce overhead on IPv4-only networks; some services need IPv6. Reboot required.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-DisableIPv6}},
-    @{Id="resetnet";Name="Reset network stack";Desc="Resets Winsock and TCP/IP, then flushes DNS. Fixes stubborn network issues. Reboot required.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-ResetNetworkStack}},
+    @{Id="dnscloud";Name="Cloudflare DNS";Desc="Sets 1.1.1.1 and 1.0.0.1 on active adapters, then flushes DNS. Lower lookup latency and cleaner routing.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Ping Optimizer";Action={Invoke-DnsCloudflare}},
+    @{Id="netbiosoff";Name="Disable NetBIOS over TCP/IP";Desc="Turns off legacy NetBIOS name broadcasts on every adapter. Less background chatter on the LAN.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Ping Optimizer";Action={Invoke-DisableNetbios}},
+    @{Id="rss";Name="Enable Receive Side Scaling";Desc="Spreads network receive processing across CPU cores. Lower ping under load on multi-core systems.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Ping Optimizer";Action={Invoke-EnableRss}},
+    @{Id="intmod";Name="Disable interrupt moderation";Desc="Cuts NIC packet batching so packets reach the game sooner. Best on wired Ethernet.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Ping Optimizer";Action={Invoke-DisableInterruptModeration}},
+    @{Id="smb1off";Name="Disable SMBv1";Desc="Removes the legacy SMBv1 protocol and blocks insecure guest logons. Less attack surface.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Ping Optimizer";Action={Invoke-DisableSmb1}},
+    @{Id="ctcp";Name="Use CTCP congestion control";Desc="Switches TCP to CTCP for smoother throughput on lossy links. Reboot recommended.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Ping Optimizer";Action={Invoke-TcpCongestionCtcp}},
+    @{Id="llmnroff";Name="Disable LLMNR";Desc="Turns off Link-Local Multicast Name Resolution. Less broadcast noise and a smaller attack surface.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Ping Optimizer";Action={Invoke-DisableLlmnr}},
+    @{Id="ipv6off";Name="Disable IPv6";Desc="Disables the IPv6 stack. Can reduce overhead on IPv4-only networks; some services need IPv6. Reboot required.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Ping Optimizer";Action={Invoke-DisableIPv6}},
+    @{Id="resetnet";Name="Reset network stack";Desc="Resets Winsock and TCP/IP, then flushes DNS. Fixes stubborn network issues. Reboot required.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Ping Optimizer";Action={Invoke-ResetNetworkStack}},
 
     # Power additions
     @{Id="cpumin";Name="Keep CPU at 100% minimum";Desc="Sets processor minimum state to 100% so clocks stay high. More heat and battery drain.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Power";Action={Invoke-CpuMinState100}},
@@ -2565,23 +2600,23 @@ $Script:Tweaks = @(
     @{Id="foregroundboost";Name="Foreground priority boost";Desc="Sets Win32PrioritySeparation to 38 so the active game gets a larger CPU quantum slice.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Input";Action={Invoke-RegSet -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 38}},
 
     # ---------- v5.3 EXPANSION: NETWORK ----------
-    @{Id="dnsgoogle";Name="Google DNS";Desc="Sets 8.8.8.8 and 8.8.4.4 on active adapters, then flushes DNS. Low-latency public resolver.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={if($IsWin){Get-NetAdapter -ErrorAction SilentlyContinue | ForEach-Object { try { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses @("8.8.8.8","8.8.4.4") -ErrorAction SilentlyContinue } catch {} }; ipconfig /flushdns 2>$null | Out-Null; Write-Log "Google DNS applied." "OK"};Off={if($IsWin){Get-NetAdapter -ErrorAction SilentlyContinue | ForEach-Object { try { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ResetServerAddresses -ErrorAction SilentlyContinue } catch {} }; ipconfig /flushdns 2>$null | Out-Null; Write-Log "DNS reset to automatic." "OK"}}}},
-    @{Id="dnsquad9";Name="Quad9 DNS";Desc="Sets 9.9.9.9 and 149.112.112.112 on active adapters with malware blocking. Flushes DNS after.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={if($IsWin){Get-NetAdapter -ErrorAction SilentlyContinue | ForEach-Object { try { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses @("9.9.9.9","149.112.112.112") -ErrorAction SilentlyContinue } catch {} }; ipconfig /flushdns 2>$null | Out-Null; Write-Log "Quad9 DNS applied." "OK"};Off={if($IsWin){Get-NetAdapter -ErrorAction SilentlyContinue | ForEach-Object { try { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ResetServerAddresses -ErrorAction SilentlyContinue } catch {} }; ipconfig /flushdns 2>$null | Out-Null; Write-Log "DNS reset to automatic." "OK"}}}},
-    @{Id="dnsauto";Name="Reset DNS to automatic";Desc="Clears manual DNS servers and returns every adapter to DHCP-provided DNS.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={if($IsWin){Get-NetAdapter -ErrorAction SilentlyContinue | ForEach-Object { try { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ResetServerAddresses -ErrorAction SilentlyContinue } catch {} }; ipconfig /flushdns 2>$null | Out-Null; Write-Log "DNS reset to automatic." "OK"}}},
-    @{Id="teredooff";Name="Disable Teredo tunneling";Desc="Turns off the Teredo IPv6 transition tunnel. Less background tunnel traffic.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-Cmd -Cmd "netsh interface teredo set state disabled";Off={Invoke-Cmd -Cmd "netsh interface teredo set state default"}}},
-    @{Id="isatapoff";Name="Disable ISATAP";Desc="Turns off the ISATAP IPv6 transition adapter. Less background network overhead.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-Cmd -Cmd "netsh interface isatap set state disabled";Off={Invoke-Cmd -Cmd "netsh interface isatap set state default"}}},
-    @{Id="six4off";Name="Disable 6to4";Desc="Turns off the 6to4 IPv6 relay. Fewer virtual adapters and less background traffic.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-Cmd -Cmd "netsh interface 6to4 set state disabled";Off={Invoke-Cmd -Cmd "netsh interface 6to4 set state default"}}},
-    @{Id="rscdisable";Name="Disable Receive Segment Coalescing";Desc="Stops the NIC from batching received packets. Lower latency, slightly more CPU.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-Cmd -Cmd "netsh int tcp set global rsc=disabled";Off={Invoke-Cmd -Cmd "netsh int tcp set global rsc=enabled"}}},
-    @{Id="initialrto";Name="Lower TCP initial retransmit timeout";Desc="Sets the initial TCP retransmission timeout to 2000 ms. Faster recovery from a dropped packet.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-Cmd -Cmd "netsh int tcp set global initialRto=2000"}},
-    @{Id="wifipowersave";Name="Disable Wi-Fi power saving";Desc="Sets adapter power saving to Disabled so the Wi-Fi radio does not sleep between packets.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-AdapterProp -DisplayName "Power Saving Mode" -Value "Disabled";Off={Invoke-AdapterProp -DisplayName "Power Saving Mode" -Value "Enabled"}}},
-    @{Id="eeeoff";Name="Disable Energy Efficient Ethernet";Desc="Turns off EEE on Ethernet adapters. Keeps the link fully awake for steadier latency.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-AdapterProp -DisplayName "Energy Efficient Ethernet" -Value "Disabled";Off={Invoke-AdapterProp -DisplayName "Energy Efficient Ethernet" -Value "Enabled"}}},
-    @{Id="flowcontroloff";Name="Disable Ethernet flow control";Desc="Turns off adapter flow control so pause frames do not delay game packets.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-AdapterProp -DisplayName "Flow Control" -Value "Disabled";Off={Invoke-AdapterProp -DisplayName "Flow Control" -Value "Auto"}}},
-    @{Id="woloff";Name="Disable Wake on Magic Packet";Desc="Stops the NIC from waking the PC for magic packets. Less standby power and background wake events.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-AdapterProp -DisplayName "Wake on Magic Packet" -Value "Disabled";Off={Invoke-AdapterProp -DisplayName "Wake on Magic Packet" -Value "Enabled"}}},
-    @{Id="smbmultichannel";Name="Disable SMB Multichannel";Desc="Stops SMB from opening multiple network connections. Less overhead on small home networks.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-Cmd -Cmd "Set-SmbClientConfiguration -EnableMultiChannel $false -Force -ErrorAction SilentlyContinue"}},
-    @{Id="netdiscoveryoff";Name="Disable Network Discovery";Desc="Blocks the Network Discovery firewall group. Less broadcast chatter and a smaller attack surface.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-Cmd -Cmd "netsh advfirewall firewall set rule group='Network Discovery' new enable=No"}},
-    @{Id="filesharingoff";Name="Disable File and Printer Sharing";Desc="Blocks the File and Printer Sharing firewall group. Less inbound surface and background SMB traffic.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-Cmd -Cmd "netsh advfirewall firewall set rule group='File and Printer Sharing' new enable=No"}},
-    @{Id="flushdnscache";Name="Flush DNS cache";Desc="Clears the Windows resolver cache. Fixes stale DNS entries without resetting the whole stack.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-Cmd -Cmd "ipconfig /flushdns"}},
-    @{Id="flusharp";Name="Flush ARP cache";Desc="Clears the ARP neighbor cache so stale MAC mappings are rebuilt. Helps after router or switch changes.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Network";Action={Invoke-Cmd -Cmd "netsh interface ip delete arpcache"}},
+    @{Id="dnsgoogle";Name="Google DNS";Desc="Sets 8.8.8.8 and 8.8.4.4 on active adapters, then flushes DNS. Low-latency public resolver.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Ping Optimizer";Action={if($IsWin){Get-NetAdapter -ErrorAction SilentlyContinue | ForEach-Object { try { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses @("8.8.8.8","8.8.4.4") -ErrorAction SilentlyContinue } catch {} }; ipconfig /flushdns 2>$null | Out-Null; Write-Log "Google DNS applied." "OK"};Off={if($IsWin){Get-NetAdapter -ErrorAction SilentlyContinue | ForEach-Object { try { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ResetServerAddresses -ErrorAction SilentlyContinue } catch {} }; ipconfig /flushdns 2>$null | Out-Null; Write-Log "DNS reset to automatic." "OK"}}}},
+    @{Id="dnsquad9";Name="Quad9 DNS";Desc="Sets 9.9.9.9 and 149.112.112.112 on active adapters with malware blocking. Flushes DNS after.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Ping Optimizer";Action={if($IsWin){Get-NetAdapter -ErrorAction SilentlyContinue | ForEach-Object { try { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses @("9.9.9.9","149.112.112.112") -ErrorAction SilentlyContinue } catch {} }; ipconfig /flushdns 2>$null | Out-Null; Write-Log "Quad9 DNS applied." "OK"};Off={if($IsWin){Get-NetAdapter -ErrorAction SilentlyContinue | ForEach-Object { try { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ResetServerAddresses -ErrorAction SilentlyContinue } catch {} }; ipconfig /flushdns 2>$null | Out-Null; Write-Log "DNS reset to automatic." "OK"}}}},
+    @{Id="dnsauto";Name="Reset DNS to automatic";Desc="Clears manual DNS servers and returns every adapter to DHCP-provided DNS.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Ping Optimizer";Action={if($IsWin){Get-NetAdapter -ErrorAction SilentlyContinue | ForEach-Object { try { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ResetServerAddresses -ErrorAction SilentlyContinue } catch {} }; ipconfig /flushdns 2>$null | Out-Null; Write-Log "DNS reset to automatic." "OK"}}},
+    @{Id="teredooff";Name="Disable Teredo tunneling";Desc="Turns off the Teredo IPv6 transition tunnel. Less background tunnel traffic.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Ping Optimizer";Action={Invoke-Cmd -Cmd "netsh interface teredo set state disabled";Off={Invoke-Cmd -Cmd "netsh interface teredo set state default"}}},
+    @{Id="isatapoff";Name="Disable ISATAP";Desc="Turns off the ISATAP IPv6 transition adapter. Less background network overhead.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Ping Optimizer";Action={Invoke-Cmd -Cmd "netsh interface isatap set state disabled";Off={Invoke-Cmd -Cmd "netsh interface isatap set state default"}}},
+    @{Id="six4off";Name="Disable 6to4";Desc="Turns off the 6to4 IPv6 relay. Fewer virtual adapters and less background traffic.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Ping Optimizer";Action={Invoke-Cmd -Cmd "netsh interface 6to4 set state disabled";Off={Invoke-Cmd -Cmd "netsh interface 6to4 set state default"}}},
+    @{Id="rscdisable";Name="Disable Receive Segment Coalescing";Desc="Stops the NIC from batching received packets. Lower latency, slightly more CPU.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Ping Optimizer";Action={Invoke-Cmd -Cmd "netsh int tcp set global rsc=disabled";Off={Invoke-Cmd -Cmd "netsh int tcp set global rsc=enabled"}}},
+    @{Id="initialrto";Name="Lower TCP initial retransmit timeout";Desc="Sets the initial TCP retransmission timeout to 2000 ms. Faster recovery from a dropped packet.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Ping Optimizer";Action={Invoke-Cmd -Cmd "netsh int tcp set global initialRto=2000"}},
+    @{Id="wifipowersave";Name="Disable Wi-Fi power saving";Desc="Sets adapter power saving to Disabled so the Wi-Fi radio does not sleep between packets.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Ping Optimizer";Action={Invoke-AdapterProp -DisplayName "Power Saving Mode" -Value "Disabled";Off={Invoke-AdapterProp -DisplayName "Power Saving Mode" -Value "Enabled"}}},
+    @{Id="eeeoff";Name="Disable Energy Efficient Ethernet";Desc="Turns off EEE on Ethernet adapters. Keeps the link fully awake for steadier latency.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Ping Optimizer";Action={Invoke-AdapterProp -DisplayName "Energy Efficient Ethernet" -Value "Disabled";Off={Invoke-AdapterProp -DisplayName "Energy Efficient Ethernet" -Value "Enabled"}}},
+    @{Id="flowcontroloff";Name="Disable Ethernet flow control";Desc="Turns off adapter flow control so pause frames do not delay game packets.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Ping Optimizer";Action={Invoke-AdapterProp -DisplayName "Flow Control" -Value "Disabled";Off={Invoke-AdapterProp -DisplayName "Flow Control" -Value "Auto"}}},
+    @{Id="woloff";Name="Disable Wake on Magic Packet";Desc="Stops the NIC from waking the PC for magic packets. Less standby power and background wake events.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Ping Optimizer";Action={Invoke-AdapterProp -DisplayName "Wake on Magic Packet" -Value "Disabled";Off={Invoke-AdapterProp -DisplayName "Wake on Magic Packet" -Value "Enabled"}}},
+    @{Id="smbmultichannel";Name="Disable SMB Multichannel";Desc="Stops SMB from opening multiple network connections. Less overhead on small home networks.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Ping Optimizer";Action={Invoke-Cmd -Cmd "Set-SmbClientConfiguration -EnableMultiChannel $false -Force -ErrorAction SilentlyContinue"}},
+    @{Id="netdiscoveryoff";Name="Disable Network Discovery";Desc="Blocks the Network Discovery firewall group. Less broadcast chatter and a smaller attack surface.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Ping Optimizer";Action={Invoke-Cmd -Cmd "netsh advfirewall firewall set rule group='Network Discovery' new enable=No"}},
+    @{Id="filesharingoff";Name="Disable File and Printer Sharing";Desc="Blocks the File and Printer Sharing firewall group. Less inbound surface and background SMB traffic.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Ping Optimizer";Action={Invoke-Cmd -Cmd "netsh advfirewall firewall set rule group='File and Printer Sharing' new enable=No"}},
+    @{Id="flushdnscache";Name="Flush DNS cache";Desc="Clears the Windows resolver cache. Fixes stale DNS entries without resetting the whole stack.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Ping Optimizer";Action={Invoke-Cmd -Cmd "ipconfig /flushdns"}},
+    @{Id="flusharp";Name="Flush ARP cache";Desc="Clears the ARP neighbor cache so stale MAC mappings are rebuilt. Helps after router or switch changes.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Ping Optimizer";Action={Invoke-Cmd -Cmd "netsh interface ip delete arpcache"}},
 
     # ---------- v5.3 EXPANSION: POWER ----------
     @{Id="displaysleepoff";Name="Disable display sleep";Desc="Stops the monitor from sleeping or dimming on AC power. Useful for long sessions and benchmarks.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Power";Action={Invoke-Cmd -Cmd "powercfg /change monitor-timeout-ac 0";Off={Invoke-Cmd -Cmd "powercfg /change monitor-timeout-ac 10"}}},
@@ -2614,6 +2649,10 @@ $Script:Tweaks = @(
     @{Id="cleardonotcache";Name="Clear Delivery Optimization cache";Desc="Deletes cached update chunks used for peer-to-peer delivery. Frees disk space.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Storage";Action={Invoke-Cmd -Cmd "Delete-DeliveryOptimizationCache -Force -ErrorAction SilentlyContinue"}},
     @{Id="clearcrashdumps";Name="Clear crash dumps";Desc="Deletes user and system crash dump files. Frees disk space after a crash.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Storage";Action={Invoke-Cleanup -Paths @("$env:LOCALAPPDATA\CrashDumps","C:\Windows\Minidump") -Label "Crash dumps"}},
     @{Id="clearfortnitecache";Name="Clear Fortnite shader cache";Desc="Deletes Fortnite's generated shader cache. The game rebuilds it on next launch.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Storage";Game="Fortnite";Action={Invoke-Cleanup -Paths @("$env:LOCALAPPDATA\FortniteGame\Saved\ShaderCache") -Label "Fortnite shader cache"}},
+    @{Id="fnclearlogs";Name="Clear Fortnite logs";Desc="Deletes Fortnite log files to free space and remove stale diagnostics. Logs are recreated on next launch.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Storage";Game="Fortnite";Action={Invoke-Cleanup -Paths @("$env:LOCALAPPDATA\FortniteGame\Saved\Logs") -Label "Fortnite logs"}},
+    @{Id="fnclearcrashes";Name="Clear Fortnite crash reports";Desc="Deletes Fortnite crash report files. Frees disk space; no gameplay data is affected.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Storage";Game="Fortnite";Action={Invoke-Cleanup -Paths @("$env:LOCALAPPDATA\FortniteGame\Saved\Crashes","$env:LOCALAPPDATA\CrashReportClient\Saved") -Label "Fortnite crash reports"}},
+    @{Id="fngpu";Name="Fortnite high-performance GPU";Desc="Sets Fortnite (FortniteClient-Win64-Shipping.exe) to use the high-performance GPU in Windows graphics settings.";Risk="Safe";Free=$false;Win=$true;Mac=$false;Cat="Game";Game="Fortnite";Action={Invoke-FortniteGpuPreference};Off={Invoke-FortniteGpuPreference -Off}},
+    @{Id="fnpriority";Name="Fortnite high process priority";Desc="Raises the priority of the running Fortnite process to High. Start Fortnite first, then apply.";Risk="Caution";Free=$true;Win=$true;Mac=$false;Cat="Game";Game="Fortnite";Action={Invoke-FortnitePriority -Priority "High"};Off={Invoke-FortnitePriority -Priority "Normal"}},
     @{Id="optimizessd";Name="Retrim system drive";Desc="Runs Optimize-Volume with -ReTrim on C: to refresh SSD free blocks. Frees performance on full drives.";Risk="Safe";Free=$true;Win=$true;Mac=$false;Cat="Storage";Action={Invoke-Cmd -Cmd "Optimize-Volume -DriveLetter C -ReTrim -ErrorAction SilentlyContinue"}},
 
     # ---------- v5.3 EXPANSION: FIRMWARE-ADJACENT ----------
@@ -2768,12 +2807,12 @@ $Script:Tweaks = @(
     @{Id="macrubberband";Name="Disable rubber-band scrolling (Mac)";Desc="Stops the elastic overscroll bounce. Less compositor work while scrolling.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Input";Action={Invoke-MacDefaults -Domain "NSGlobalDomain" -Key "NSScrollViewRubberbanding" -Type bool -Value "false"}},
 
     # ---------- v5.3 EXPANSION: macOS NETWORK ----------
-    @{Id="macdnscloud";Name="Cloudflare DNS (Mac)";Desc="Sets 1.1.1.1 and 1.0.0.1 on every network service and flushes DNS.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Network";Action={Invoke-MacDns -Servers @("1.1.1.1","1.0.0.1")};Off={Invoke-MacDns -Servers @("Empty")}},
-    @{Id="macdnsgoogle";Name="Google DNS (Mac)";Desc="Sets 8.8.8.8 and 8.8.4.4 on every network service and flushes DNS.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Network";Action={Invoke-MacDns -Servers @("8.8.8.8","8.8.4.4")};Off={Invoke-MacDns -Servers @("Empty")}},
-    @{Id="macdnsauto";Name="Reset DNS to automatic (Mac)";Desc="Clears manual DNS servers on every network service and returns to DHCP.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Network";Action={Invoke-MacDns -Servers @("Empty")}},
-    @{Id="macipv6off";Name="Disable IPv6 (Mac)";Desc="Turns off IPv6 on every network service. Less background traffic on IPv4-only networks.";Risk="Caution";Free=$true;Win=$false;Mac=$true;Cat="Network";Action={Invoke-MacIpv6Off};Off={Invoke-MacIpv6Off -On}},
-    @{Id="macairdropoff";Name="Disable AirDrop (Mac)";Desc="Turns off AirDrop advertising and receiving. Less background radio activity.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Network";Action={Invoke-MacDefaults -Domain "com.apple.NetworkBrowser" -Key "DisableAirDrop" -Type bool -Value "true"}},
-    @{Id="macflushdns";Name="Flush DNS cache (Mac)";Desc="Clears the macOS DNS cache and restarts mDNSResponder. Fixes stale lookups.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Network";Action={if($IsMac){& dscacheutil -flushcache 2>$null; & killall -HUP mDNSResponder 2>$null; Write-Log "DNS cache flushed." "OK"}}},
+    @{Id="macdnscloud";Name="Cloudflare DNS (Mac)";Desc="Sets 1.1.1.1 and 1.0.0.1 on every network service and flushes DNS.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Ping Optimizer";Action={Invoke-MacDns -Servers @("1.1.1.1","1.0.0.1")};Off={Invoke-MacDns -Servers @("Empty")}},
+    @{Id="macdnsgoogle";Name="Google DNS (Mac)";Desc="Sets 8.8.8.8 and 8.8.4.4 on every network service and flushes DNS.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Ping Optimizer";Action={Invoke-MacDns -Servers @("8.8.8.8","8.8.4.4")};Off={Invoke-MacDns -Servers @("Empty")}},
+    @{Id="macdnsauto";Name="Reset DNS to automatic (Mac)";Desc="Clears manual DNS servers on every network service and returns to DHCP.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Ping Optimizer";Action={Invoke-MacDns -Servers @("Empty")}},
+    @{Id="macipv6off";Name="Disable IPv6 (Mac)";Desc="Turns off IPv6 on every network service. Less background traffic on IPv4-only networks.";Risk="Caution";Free=$true;Win=$false;Mac=$true;Cat="Ping Optimizer";Action={Invoke-MacIpv6Off};Off={Invoke-MacIpv6Off -On}},
+    @{Id="macairdropoff";Name="Disable AirDrop (Mac)";Desc="Turns off AirDrop advertising and receiving. Less background radio activity.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Ping Optimizer";Action={Invoke-MacDefaults -Domain "com.apple.NetworkBrowser" -Key "DisableAirDrop" -Type bool -Value "true"}},
+    @{Id="macflushdns";Name="Flush DNS cache (Mac)";Desc="Clears the macOS DNS cache and restarts mDNSResponder. Fixes stale lookups.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Ping Optimizer";Action={if($IsMac){& dscacheutil -flushcache 2>$null; & killall -HUP mDNSResponder 2>$null; Write-Log "DNS cache flushed." "OK"}}},
 
     # ---------- v5.3 EXPANSION: macOS POWER ----------
     @{Id="macpowernap";Name="Disable Power Nap (Mac)";Desc="Stops background mail, backup and update work while the Mac sleeps.";Risk="Safe";Free=$true;Win=$false;Mac=$true;Cat="Power";Action={Invoke-MacPmset -Arguments "-a powernap 0";Off={Invoke-MacPmset -Arguments "-a powernap 1"}}},
@@ -2894,7 +2933,7 @@ $HtmlPage = @'
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Nova Tweaks</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -2905,7 +2944,7 @@ $HtmlPage = @'
 --shadow:0 4px 24px rgba(0,0,0,.5);--shadow-lg:0 12px 48px rgba(0,0,0,.7);--shadow-red:0 4px 24px rgba(255,26,46,.3);
 --radius:12px;--radius-sm:8px;--radius-xs:4px
 }
-body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;height:100vh;overflow:hidden;-webkit-font-smoothing:antialiased;letter-spacing:-.01em}
+body{font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;height:100vh;overflow:hidden;-webkit-font-smoothing:antialiased;letter-spacing:-.01em}
 
 /* Animated background */
 body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 80% 50% at 20% 40%,rgba(255,26,46,.06),transparent),radial-gradient(ellipse 60% 40% at 80% 60%,rgba(255,26,46,.04),transparent),radial-gradient(ellipse 50% 30% at 50% 90%,rgba(170,68,255,.03),transparent);pointer-events:none;z-index:0}
@@ -2915,7 +2954,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .login-box{background:linear-gradient(145deg,rgba(17,17,25,.95),rgba(24,24,34,.95));border:1px solid rgba(255,26,46,.3);border-radius:20px;padding:48px;width:440px;max-width:92vw;box-shadow:var(--shadow-lg),0 0 80px rgba(255,26,46,.15);position:relative;overflow:hidden;backdrop-filter:blur(20px)}
 .login-box::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,transparent,var(--red),var(--red3),transparent)}
 .login-box::after{content:'';position:absolute;inset:0;background:radial-gradient(circle at 50% 0%,rgba(255,26,46,.08),transparent 60%);pointer-events:none}
-.login-logo{font-size:48px;font-weight:900;background:linear-gradient(135deg,var(--red),var(--red3),#ff8a95);-webkit-background-clip:text;-webkit-text-fill-color:transparent;text-align:center;margin-bottom:2px;letter-spacing:-2px;position:relative;z-index:1}
+.login-logo{font-family:"Space Grotesk","Plus Jakarta Sans",sans-serif;font-size:48px;font-weight:900;background:linear-gradient(135deg,var(--red),var(--red3),#ff8a95);-webkit-background-clip:text;-webkit-text-fill-color:transparent;text-align:center;margin-bottom:2px;letter-spacing:-2px;position:relative;z-index:1}
 .login-sub{text-align:center;color:var(--textmuted);font-size:11px;text-transform:uppercase;letter-spacing:4px;margin-bottom:32px;position:relative;z-index:1}
 .login-tabs{display:flex;gap:4px;margin-bottom:28px;background:rgba(0,0,0,.3);border-radius:10px;padding:4px;position:relative;z-index:1}
 .login-tab{flex:1;padding:10px;border:none;background:transparent;color:var(--textdim);border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;transition:all .25s}
@@ -2934,7 +2973,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 /* Sidebar */
 .sidebar{width:230px;background:linear-gradient(180deg,var(--sidebar) 0%,#08080e 100%);border-right:1px solid var(--border);padding:20px 12px;display:flex;flex-direction:column;gap:2px;position:relative;overflow:hidden;z-index:1}
 .sidebar::before{content:'';position:absolute;top:0;left:0;right:0;height:240px;background:radial-gradient(circle at 50% 0%,var(--redglow2),transparent 70%);pointer-events:none;opacity:.8}
-.brand{font-size:28px;font-weight:900;background:linear-gradient(135deg,var(--red),var(--red3),#ff8a95);-webkit-background-clip:text;-webkit-text-fill-color:transparent;padding:0 8px;position:relative;z-index:1;letter-spacing:-1px}
+.brand{font-family:"Space Grotesk","Plus Jakarta Sans",sans-serif;font-size:28px;font-weight:900;background:linear-gradient(135deg,var(--red),var(--red3),#ff8a95);-webkit-background-clip:text;-webkit-text-fill-color:transparent;padding:0 8px;position:relative;z-index:1;letter-spacing:-1px}
 .brandsub{font-size:10px;color:var(--textmuted);padding:0 8px;margin-bottom:16px;position:relative;z-index:1;text-transform:uppercase;letter-spacing:3px}
 .planbadge{display:inline-block;padding:5px 14px;border-radius:20px;font-size:10px;font-weight:800;margin:0 8px 20px;background:linear-gradient(135deg,var(--red),var(--red2));color:#fff;box-shadow:0 2px 12px var(--redglow);position:relative;z-index:1;letter-spacing:1px}
 .navbtn{background:transparent;border:none;color:var(--textdim);padding:11px 14px;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;text-align:left;width:100%;transition:all .2s;font-weight:500;position:relative;z-index:1;display:flex;align-items:center;gap:10px}
@@ -2992,7 +3031,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 @keyframes gameRise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
 @keyframes gameLoad{0%{width:0}55%{width:62%}100%{width:100%}}
 @media (max-width:720px){.gameswitch{grid-template-columns:1fr}}
-h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
+h1{font-family:"Space Grotesk","Plus Jakarta Sans",sans-serif;font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
 .sub{color:var(--textdim);font-size:13.5px;margin-bottom:24px;line-height:1.5}
 
 /* Cards */
@@ -3263,7 +3302,7 @@ h1{font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
   <button class="navbtn" data-page="crosshair"><span class="navicon">🎯</span>Crosshair</button>
   <button class="navbtn" data-page="booster"><span class="navicon">⚡</span>Game Booster</button>
   <button class="navbtn" data-page="fps"><span class="navicon">🚀</span>FPS Booster</button>
-  <button class="navbtn" data-page="network"><span class="navicon">📡</span>Network</button>
+  <button class="navbtn" data-page="network"><span class="navicon">📡</span>Ping Optimizer</button>
   <button class="navbtn" data-page="potato"><span class="navicon">🥔</span>Potato Graphics</button>
   <button class="navbtn" data-page="macro"><span class="navicon">🖱</span>Drag Macro</button>
   <button class="navbtn" data-page="bios"><span class="navicon">🧬</span>BIOS / UEFI</button>
@@ -3548,7 +3587,7 @@ spotify.exe</textarea>
 
 <!-- NETWORK -->
 <div class="page" id="page-network">
-  <h1>Network</h1>
+  <h1>Ping Optimizer</h1>
   <div class="sub">Live packet health against a real target. Average ping, jitter and packet loss, sampled every few seconds.</div>
   <div class="cardrow">
     <div class="card" style="flex:1;min-width:220px;text-align:center">
@@ -3690,7 +3729,7 @@ spotify.exe</textarea>
 </div>
 
 <div class="netrail" id="netRail">
-  <div class="netrail-head"><span><span class="live-dot"></span>Network</span><button class="netclose" id="netClose" title="Hide network panel">×</button></div>
+  <div class="netrail-head"><span><span class="live-dot"></span>Ping Optimizer</span><button class="netclose" id="netClose" title="Hide network panel">×</button></div>
   <div class="netmetrics">
     <div class="netmetric"><div class="netmetric-v" id="netAvg">—</div><div class="netmetric-l">Ping ms</div></div>
     <div class="netmetric"><div class="netmetric-v" id="netJitter">—</div><div class="netmetric-l">Jitter ms</div></div>
@@ -3699,7 +3738,7 @@ spotify.exe</textarea>
   <canvas id="netChart" height="92"></canvas>
   <div class="netrail-foot"><span id="netMinMaxSm">min — · max —</span><span id="netTargetSm">1.1.1.1</span></div>
   <div style="margin-top:12px;font-size:10.5px;color:var(--textmuted);line-height:1.7">Live ICMP samples. Jitter is the average change between packets.</div>
-  <button class="btn ghost sm full" style="margin-top:10px" id="netOpenPage">Open Network page</button>
+  <button class="btn ghost sm full" style="margin-top:10px" id="netOpenPage">Open Ping Optimizer</button>
 </div>
 </div>
 <button class="netrail-reopen hidden" id="netReopen" title="Show network panel">📡</button>
@@ -3901,7 +3940,7 @@ async function renderStats(){
   document.getElementById('statsRow').innerHTML=stats.map(s=>`<div class="statcard"><div class="statlabel">${s.label}</div><div class="statval" style="background:linear-gradient(135deg,${s.color},var(--textdim));-webkit-background-clip:text;-webkit-text-fill-color:transparent">${s.value}</div></div>`).join('');
 }
 
-const cats=['General','Input','Network','Power','Visual','Services','Game','Storage','Firmware','Privacy','Windows'];
+const cats=['General','Input','Ping Optimizer','Power','Visual','Services','Game','Storage','Firmware','Privacy','Windows'];
 let currentCat='General';
 function catCount(c){
   const all=Object.values(state.tweaks||{});
