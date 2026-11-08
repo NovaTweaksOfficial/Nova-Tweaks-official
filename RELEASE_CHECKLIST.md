@@ -33,7 +33,16 @@ This checklist covers the current Nova Tweaks project state (shared core, Window
 - [ ] `webkit.messageHandlers.nova` stdio bridge works (`/api/*` calls resolve). Debug: `~/.novatweaks/native-bridge.log`.
 - [ ] Minecraft macOS tweaks (options/JVM/cache paths) work and restores/backups behave correctly.
 - [ ] After shared PS1 changes: resync `macos/Minecraft/Nova Tweaks Minecraft.app/Contents/Resources/Nova_Tweaks_WebGUI.ps1` and rebuild `docs/downloads/Nova-Tweaks-Minecraft-macOS.zip`.
-- [ ] Distribution: bundle `pwsh` or remove dependency, test on clean Mac, **code sign + notarize**.
+- [x] Bundle PowerShell 7 into the `.app` with `macos/Minecraft/Build-MacOS-App.command` (runtime-only copy, no `ref`/XML docs).
+- [ ] Test the bundled app on a clean Mac with no PowerShell/Homebrew installed.
+- [ ] **Code sign + notarize** the macOS app and zip.
+
+## Macro
+- [x] Drag macro (start/end capture, hold, repeat, loop) on Windows and macOS.
+- [x] Auto clicker (button, randomized interval, hold, repeat/loop) on Windows and macOS.
+- [x] macOS loop stop verified end-to-end (start → Running → Stop → Stopped).
+- [ ] Verify Windows drag/clicker behavior and stop on a real Windows machine.
+- [ ] Confirm Accessibility permission flow on a clean Mac.
 
 ## SellAuth / fulfillment
 - [ ] Pro/Ultimate products have Nova key serial stock (`pwsh ./shared/tools/New-NovaKey.ps1 -Type Pro|Ultimate -Count N`) uploaded separately.

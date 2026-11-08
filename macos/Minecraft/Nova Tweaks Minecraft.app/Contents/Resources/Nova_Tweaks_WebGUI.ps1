@@ -1577,8 +1577,10 @@ function Invoke-MacDisableHandoff {
 if (-not $Script:MacroSync) {
     $Script:MacroSync = [hashtable]::Synchronized(@{
         Running = $false; Stop = $false; Status = "Idle"; Iteration = 0
+        Mode = "drag"; Button = "left"
         StartX = 0; StartY = 0; EndX = 0; EndY = 0
         Duration = 300; Hold = 60; Repeat = 3; Loop = $false; Worker = $null
+        IntervalMin = 80; IntervalMax = 120; ClickHold = 0
     })
 }
 
@@ -1598,6 +1600,26 @@ public class NovaMacroNative {
         }
         $sync.Status = "Running"
         $iter = 0
+        if ($sync.Mode -eq "click") {
+            $downFlag = switch ([string]$sync.Button) { "right" { 0x0008 } "middle" { 0x0020 } default { 0x0002 } }
+            $upFlag = switch ([string]$sync.Button) { "right" { 0x0010 } "middle" { 0x0040 } default { 0x0004 } }
+            $rnd = New-Object System.Random
+            $minI = [Math]::Max(1, [int]$sync.IntervalMin)
+            $maxI = [Math]::Max($minI, [int]$sync.IntervalMax)
+            while (-not $sync.Stop) {
+                $iter++
+                $sync.Iteration = $iter
+                [NovaMacroNative]::mouse_event($downFlag, 0, 0, 0, [UIntPtr]::Zero)
+                $pressed = $true
+                if ([int]$sync.ClickHold -gt 0) { Start-Sleep -Milliseconds ([int]$sync.ClickHold) }
+                [NovaMacroNative]::mouse_event($upFlag, 0, 0, 0, [UIntPtr]::Zero)
+                $pressed = $false
+                if (-not [bool]$sync.Loop -and $iter -ge [int]$sync.Repeat) { break }
+                Start-Sleep -Milliseconds ($rnd.Next($minI, $maxI + 1))
+            }
+            $sync.Status = $(if ($sync.Stop) { "Stopped" } else { "Finished" })
+            return
+        }
         while (-not $sync.Stop) {
             $iter++
             $sync.Iteration = $iter
@@ -1656,21 +1678,31 @@ function Get-NovaCursorPos {
 }
 
 function Start-NovaMacro {
-    param([int]$StartX, [int]$StartY, [int]$EndX, [int]$EndY, [int]$Duration = 300, [int]$Hold = 60, [int]$Repeat = 3, [bool]$Loop)
+    param([string]$Mode = "drag", [int]$StartX = 0, [int]$StartY = 0, [int]$EndX = 0, [int]$EndY = 0, [int]$Duration = 300, [int]$Hold = 60, [int]$Repeat = 3, [bool]$Loop, [string]$Button = "left", [int]$IntervalMin = 80, [int]$IntervalMax = 120, [int]$ClickHold = 0)
     $Duration = [Math]::Min(5000, [Math]::Max(30, $Duration))
     $Hold = [Math]::Min(5000, [Math]::Max(0, $Hold))
-    $Repeat = [Math]::Min(1000, [Math]::Max(1, $Repeat))
+    $Repeat = [Math]::Min(100000, [Math]::Max(1, $Repeat))
+    $IntervalMin = [Math]::Min(60000, [Math]::Max(1, $IntervalMin))
+    $IntervalMax = [Math]::Min(60000, [Math]::Max($IntervalMin, $IntervalMax))
+    $ClickHold = [Math]::Min(5000, [Math]::Max(0, $ClickHold))
+    if ($Mode -ne "click") { $Mode = "drag" }
+    if ($Button -notin @("left", "right", "middle")) { $Button = "left" }
 
     if ($IsWin) {
         $sync = $Script:MacroSync
         if ($sync.Running) { return @{ success = $false; message = "A macro is already running." } }
         $sync.Stop = $false; $sync.Status = "Starting"; $sync.Iteration = 0
+        $sync.Mode = $Mode; $sync.Button = $Button
         $sync.StartX = $StartX; $sync.StartY = $StartY; $sync.EndX = $EndX; $sync.EndY = $EndY
         $sync.Duration = $Duration; $sync.Hold = $Hold; $sync.Repeat = $Repeat; $sync.Loop = [bool]$Loop
+        $sync.IntervalMin = $IntervalMin; $sync.IntervalMax = $IntervalMax; $sync.ClickHold = $ClickHold
         $ps = [PowerShell]::Create()
         [void]$ps.AddScript($Script:MacroWorker).AddArgument($sync)
         $sync.Worker = $ps; $sync.Running = $true
         [void]$ps.BeginInvoke()
+        if ($Mode -eq "click") {
+            return @{ success = $true; message = "Auto clicker started: $Button button, $IntervalMin-$IntervalMax ms, $Repeat click(s)." }
+        }
         return @{ success = $true; message = "Drag Macro started: $Repeat pass(es), $Duration ms per swipe." }
     }
 
@@ -1678,7 +1710,7 @@ function Start-NovaMacro {
         Ensure-NovaMacroDir
         # stop existing
         try { if ($Script:MacroPid -and -not $Script:MacroPid.HasExited) { $Script:MacroPid.Kill() } } catch {}
-        $ctl = @{ stop = $false; sx=$StartX; sy=$StartY; ex=$EndX; ey=$EndY; duration=$Duration; hold=$Hold; repeat=$Repeat; loop=[bool]$Loop }
+        $ctl = @{ stop = $false; mode=$Mode; button=$Button; sx=$StartX; sy=$StartY; ex=$EndX; ey=$EndY; duration=$Duration; hold=$Hold; repeat=$Repeat; loop=[bool]$Loop; intervalMin=$IntervalMin; intervalMax=$IntervalMax; clickHold=$ClickHold }
         $ctl | ConvertTo-Json -Compress | Set-Content -Path $Script:MacroCtl -Encoding UTF8
         @{ running=$true; status="Starting"; iteration=0 } | ConvertTo-Json -Compress | Set-Content -Path $Script:MacroStatusFile -Encoding UTF8
         $swift = @'
@@ -1699,35 +1731,57 @@ func mouse(_ type: CGEventType, _ pt: CGPoint, _ button: CGMouseButton = .left) 
   CGEvent(mouseEventSource:nil, mouseType:type, mouseCursorPosition:pt, mouseButton:button)?.post(tap:.cghidEventTap)
 }
 guard let c = readJSON(ctlPath) else { writeStatus(["running":false,"status":"Missing config","iteration":0]); exit(0) }
+let mode = c["mode"] as? String ?? "drag"
+let buttonName = c["button"] as? String ?? "left"
 let sx = c["sx"] as? Int ?? 0, sy = c["sy"] as? Int ?? 0
 let ex = c["ex"] as? Int ?? 0, ey = c["ey"] as? Int ?? 0
 let duration = max(30, c["duration"] as? Int ?? 300)
 let hold = max(0, c["hold"] as? Int ?? 60)
 let rep = max(1, c["repeat"] as? Int ?? 3)
 let loop = c["loop"] as? Bool ?? false
+let minI = max(1, c["intervalMin"] as? Int ?? 80)
+let maxI = max(minI, c["intervalMax"] as? Int ?? 120)
+let clickHold = max(0, c["clickHold"] as? Int ?? 0)
 var iter = 0
 func shouldStop() -> Bool { return (readJSON(ctlPath)?["stop"] as? Bool) ?? false }
 writeStatus(["running":true,"status":"Running","iteration":0])
-while !shouldStop() {
-  iter += 1
-  writeStatus(["running":true,"status":"Running","iteration":iter])
-  let steps = max(4, duration/10)
-  for i in 1...steps {
-    if shouldStop() { break }
-    let t = Double(i)/Double(steps)
-    let x = Double(sx) + (Double(ex)-Double(sx))*t
-    let y = Double(sy) + (Double(ey)-Double(sy))*t
-    let pt = CGPoint(x:x,y:y)
-    mouse(.mouseMoved, pt)
-    usleep(useconds_t(max(1000, (duration/steps)*1000)))
+if mode == "click" {
+  var down: CGEventType = .leftMouseDown, up: CGEventType = .leftMouseUp, btn: CGMouseButton = .left
+  if buttonName == "right" { down = .rightMouseDown; up = .rightMouseUp; btn = .right }
+  else if buttonName == "middle" { down = .otherMouseDown; up = .otherMouseUp; btn = .center }
+  while !shouldStop() {
+    iter += 1
+    writeStatus(["running":true,"status":"Running","iteration":iter])
+    let pt = CGEvent(source:nil)?.location ?? CGPoint(x:0,y:0)
+    mouse(down, pt, btn)
+    if clickHold > 0 { usleep(useconds_t(clickHold*1000)) }
+    mouse(up, pt, btn)
+    if !loop && iter >= rep { break }
+    let delay = Int.random(in: minI...maxI)
+    usleep(useconds_t(delay*1000))
   }
-  if shouldStop() { break }
-  let endPt = CGPoint(x:Double(ex),y:Double(ey))
-  mouse(.leftMouseDown, endPt)
-  usleep(useconds_t(hold*1000))
-  mouse(.leftMouseUp, endPt)
-  if !loop && iter >= rep { break }
-  usleep(40000)
+} else {
+  while !shouldStop() {
+    iter += 1
+    writeStatus(["running":true,"status":"Running","iteration":iter])
+    let steps = max(4, duration/10)
+    for i in 1...steps {
+      if shouldStop() { break }
+      let t = Double(i)/Double(steps)
+      let x = Double(sx) + (Double(ex)-Double(sx))*t
+      let y = Double(sy) + (Double(ey)-Double(sy))*t
+      let pt = CGPoint(x:x,y:y)
+      mouse(.mouseMoved, pt)
+      usleep(useconds_t(max(1000, (duration/steps)*1000)))
+    }
+    if shouldStop() { break }
+    let endPt = CGPoint(x:Double(ex),y:Double(ey))
+    mouse(.leftMouseDown, endPt)
+    usleep(useconds_t(hold*1000))
+    mouse(.leftMouseUp, endPt)
+    if !loop && iter >= rep { break }
+    usleep(40000)
+  }
 }
 writeStatus(["running":false,"status": shouldStop() ? "Stopped" : "Finished","iteration":iter])
 '@
@@ -1739,7 +1793,8 @@ writeStatus(["running":false,"status": shouldStop() ? "Stopped" : "Finished","it
             $psi.UseShellExecute = $false
             $psi.CreateNoWindow = $true
             $Script:MacroPid = [System.Diagnostics.Process]::Start($psi)
-            return @{ success = $true; message = "Macro started on macOS ($Repeat pass(es), $Duration ms). If it doesn't move/click, grant Accessibility permission to Terminal/pwsh/Swift in System Settings > Privacy & Security > Accessibility." }
+            $okMsg = if ($Mode -eq "click") { "Auto clicker started on macOS ($Button button, $IntervalMin-$IntervalMax ms, $Repeat click(s))." } else { "Macro started on macOS ($Repeat pass(es), $Duration ms)." }
+            return @{ success = $true; message = "$okMsg If it doesn't move/click, grant Accessibility permission to the app/pwsh/Swift in System Settings > Privacy & Security > Accessibility." }
         } catch {
             @{ running=$false; status="Failed to start: $($_.Exception.Message)"; iteration=0 } | ConvertTo-Json -Compress | Set-Content -Path $Script:MacroStatusFile -Encoding UTF8
             return @{ success = $false; message = "macOS macro failed to start: $($_.Exception.Message). Swift and Accessibility permission are required." }
@@ -1773,14 +1828,16 @@ function Get-NovaMacroStatus {
     if ($IsWin) {
         $sync = $Script:MacroSync
         if (-not $sync.Running -and $sync.Worker) { try { $sync.Worker.Dispose() } catch {}; $sync.Worker = $null }
-        return @{ success = $true; platform = "Windows"; running = [bool]$sync.Running; status = [string]$sync.Status; iteration = [int]$sync.Iteration }
+        return @{ success = $true; platform = "Windows"; running = [bool]$sync.Running; status = [string]$sync.Status; iteration = [int]$sync.Iteration; mode = [string]$sync.Mode }
     }
     if ($IsMac) {
         $running = $false
         try { if ($Script:MacroPid -and -not $Script:MacroPid.HasExited) { $running = $true } } catch {}
         $st = @{ running=$running; status=$(if($running){"Running"}else{"Idle"}); iteration=0 }
         try { if (Test-Path $Script:MacroStatusFile) { $j = Get-Content $Script:MacroStatusFile -Raw | ConvertFrom-Json; $st.running = [bool]$j.running; $st.status = [string]$j.status; $st.iteration = [int]$j.iteration } } catch {}
-        return @{ success = $true; platform = "macOS"; running = [bool]$st.running; status = [string]$st.status; iteration = [int]$st.iteration }
+        $md = "drag"
+        try { if (Test-Path $Script:MacroCtl) { $cj = Get-Content $Script:MacroCtl -Raw | ConvertFrom-Json; if ($cj.mode -eq "click") { $md = "click" } } } catch {}
+        return @{ success = $true; platform = "macOS"; running = [bool]$st.running; status = [string]$st.status; iteration = [int]$st.iteration; mode = $md }
     }
     return @{ success = $false; platform = "Unknown"; running = $false; status = "Unsupported" }
 }
@@ -3306,6 +3363,16 @@ h1{font-family:"Nova Sans","Plus Jakarta Sans",system-ui,sans-serif;font-size:26
 .bioskey{font-size:9px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1.2px;font-weight:800;margin-bottom:5px}
 .biosval{font-size:12.5px;color:var(--text);line-height:1.55;word-break:break-word}
 .macrow{display:flex;gap:14px;flex-wrap:wrap}
+.macrotabs{display:inline-flex;gap:2px;margin:0 0 16px;background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:3px}
+.macrotab{height:32px;padding:0 16px;border:none;background:transparent;color:var(--textmuted);border-radius:8px;cursor:pointer;font-size:12.5px;font-weight:600;font-family:inherit;transition:background-color .12s ease,color .12s ease}
+.macrotab:hover{color:var(--text)}
+.macrotab.active{background:rgba(239,68,68,.14);color:var(--text)}
+.macrolabel{display:block;font-size:11px;color:var(--textmuted);margin-bottom:6px;font-weight:600;letter-spacing:.6px;text-transform:uppercase}
+.macrorow{display:flex;gap:12px}
+.macropreview{display:flex;align-items:center;gap:12px;background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px}
+.macropreview .dot{width:10px;height:10px;border-radius:50%;background:var(--red);box-shadow:0 0 10px var(--redglow);flex-shrink:0}
+.macropreview .lbl{font-size:9px;text-transform:uppercase;letter-spacing:1.2px;color:var(--textmuted);font-weight:800}
+.macropreview .coords{font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:var(--text)}
 .macrow .card{flex:1;min-width:280px}
 .macropt{display:flex;align-items:center;gap:10px;background:rgba(0,0,0,.32);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px}
 .macropt .dot{width:10px;height:10px;border-radius:50%;background:var(--red);box-shadow:0 0 10px var(--redglow)}
@@ -3752,6 +3819,11 @@ spotify.exe</textarea>
   <div class="sub" id="macroSub">Capture a start and end point, then Nova Tweaks moves the cursor and performs the drag/click at the speed you choose. Windows uses the native cursor API; macOS uses Swift/CoreGraphics and requires Accessibility permission.</div>
   <div class="warnbox" id="macroWarn" style="display:none"></div>
   <div class="warnbox" id="macroMacNote" style="display:none;background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.35);color:var(--warn)">macOS: Macro automation needs <b>Accessibility</b> permission for the app/process running Nova Tweaks (System Settings → Privacy &amp; Security → Accessibility). If movement/clicks don’t work, grant access and try again.</div>
+  <div class="macrotabs">
+    <button class="macrotab active" data-mtab="drag">Drag macro</button>
+    <button class="macrotab" data-mtab="click">Auto clicker</button>
+  </div>
+  <div id="macroDragPanel">
   <div class="macrow">
     <div class="card">
       <h3 style="margin-bottom:12px;font-size:15px">Path</h3>
@@ -3771,6 +3843,41 @@ spotify.exe</textarea>
         <button class="btn danger" id="macroStopBtn">Stop</button>
       </div>
       <div style="font-size:11px;color:var(--textmuted);line-height:1.7;margin-top:10px">Safety: press Stop or close the app to end a loop. Competitive games may treat macros as prohibited — check the game's rules first.</div>
+    </div>
+  </div>
+  </div>
+
+  <div id="macroClickPanel" style="display:none">
+    <div class="macrow">
+      <div class="card">
+        <h3 style="margin-bottom:12px;font-size:15px">Click</h3>
+        <label class="macrolabel">Mouse button</label>
+        <select class="input" id="clickButton" style="margin-bottom:14px">
+          <option value="left">Left click</option>
+          <option value="right">Right click</option>
+          <option value="middle">Middle click</option>
+        </select>
+        <div class="macrorow">
+          <div style="flex:1"><label class="macrolabel">Fastest interval (ms)</label><input class="input" id="clickMin" type="number" min="1" max="60000" value="80"></div>
+          <div style="flex:1"><label class="macrolabel">Slowest interval (ms)</label><input class="input" id="clickMax" type="number" min="1" max="60000" value="120"></div>
+        </div>
+        <div class="macrorow" style="margin-top:12px">
+          <div style="flex:1"><label class="macrolabel">Hold each click (ms)</label><input class="input" id="clickHold" type="number" min="0" max="5000" value="0"></div>
+          <div style="flex:1"><label class="macrolabel">Clicks</label><input class="input" id="clickRepeat" type="number" min="1" max="100000" value="50"></div>
+        </div>
+        <label style="font-size:12px;display:flex;align-items:center;gap:8px;margin-top:12px"><input type="checkbox" id="clickLoop"> Click until I press Stop</label>
+        <div style="font-size:11px;color:var(--textmuted);line-height:1.7;margin-top:8px">Randomized interval keeps the rhythm human-like. Nova clicks wherever the cursor is; it does not move the mouse.</div>
+      </div>
+      <div class="card">
+        <h3 style="margin-bottom:12px;font-size:15px">Run</h3>
+        <div class="macropreview"><span class="dot" id="clickDot"></span><div><div class="lbl">Clicks per second</div><div class="coords" id="clickCps">~8-12 CPS</div></div></div>
+        <div class="macrostatus" id="clickStatus">Idle</div>
+        <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+          <button class="btn" id="clickStartBtn">Start Clicking</button>
+          <button class="btn danger" id="clickStopBtn">Stop</button>
+        </div>
+        <div style="font-size:11px;color:var(--textmuted);line-height:1.7;margin-top:10px">macOS needs Accessibility permission for the app/pwsh. Competitive games may treat auto clickers as prohibited — check the game's rules first.</div>
+      </div>
     </div>
   </div>
 </div>
@@ -4664,15 +4771,15 @@ function updateMacroAvailability(){
   const p=macroPlatform();
   const paid=state.plan==='Pro'||state.plan==='Ultimate';
   const supported=(p==='win'||p==='mac');
-  ['captureStartBtn','captureEndBtn','macroStartBtn','macroStopBtn'].forEach(id=>{const el=document.getElementById(id);if(el)el.disabled=!supported||!paid});
+  ['captureStartBtn','captureEndBtn','macroStartBtn','macroStopBtn','clickStartBtn','clickStopBtn','clickButton','clickMin','clickMax','clickHold','clickRepeat'].forEach(id=>{const el=document.getElementById(id);if(el)el.disabled=!supported||!paid});
   const w=document.getElementById('macroWarn');
   const mn=document.getElementById('macroMacNote');
   const t=document.getElementById('macroTitle');
   const sub=document.getElementById('macroSub');
-  if(t) t.textContent=(p==='mac'?'Macro (macOS)':p==='win'?'Drag Macro (Windows)':'Macro');
+  if(t) t.textContent='Macro';
   if(sub) sub.textContent=(p==='mac'
-    ? 'Capture a start and end point, then Nova Tweaks runs a macOS macro (Swift/CoreGraphics). Grant Accessibility permission if clicks/movement are blocked.'
-    : 'Capture a start and end point, then Nova Tweaks moves the cursor and performs the drag/click (Windows native cursor API).');
+    ? 'Drag macros and an auto clicker, running natively on macOS (Swift/CoreGraphics). Grant Accessibility permission if clicks or movement are blocked.'
+    : 'Drag macros and an auto clicker, running through the Windows cursor API. Clicks land wherever the cursor is.');
   if(mn) mn.style.display=(p==='mac'?'block':'none');
   if(w){
     if(!supported){ w.style.display='block'; w.textContent='Macro is available on Windows and macOS.'; }
@@ -4701,8 +4808,10 @@ async function refreshMacroStatus(){
     const r=await api('/api/macro/status');
     if(r&&r.success!==false){
       macroState.running=!!r.running;
-      const ms=document.getElementById('macroStatus');
-      if(ms) ms.textContent=(r.status||'Idle')+(r.iteration?' · pass '+r.iteration:'');
+      const line=(r.status||'Idle')+(r.iteration?' · '+(r.mode==='click'?'click ':'pass ')+r.iteration:'');
+      const ms=document.getElementById('macroStatus'); if(ms) ms.textContent=line;
+      const cs=document.getElementById('clickStatus'); if(cs) cs.textContent=line;
+      const dot=document.getElementById('clickDot'); if(dot) dot.style.opacity=r.running?'1':'.45';
     }
   }catch{}
 }
@@ -4722,6 +4831,44 @@ document.getElementById('macroDuration').addEventListener('input',updateMacroUI)
 document.getElementById('macroHold').addEventListener('input',updateMacroUI);
 document.getElementById('macroStartBtn').addEventListener('click',startMacro);
 document.getElementById('macroStopBtn').addEventListener('click',stopMacro);
+
+// Macro sub-tabs
+let macroTab='drag';
+document.querySelectorAll('.macrotab').forEach(t=>t.addEventListener('click',()=>{
+  macroTab=t.dataset.mtab;
+  document.querySelectorAll('.macrotab').forEach(x=>x.classList.toggle('active',x===t));
+  const d=document.getElementById('macroDragPanel'), c=document.getElementById('macroClickPanel');
+  if(d) d.style.display=macroTab==='drag'?'block':'none';
+  if(c) c.style.display=macroTab==='click'?'block':'none';
+}));
+function updateClickCps(){
+  const a=+document.getElementById('clickMin').value||80, b=+document.getElementById('clickMax').value||120;
+  const lo=Math.max(1,Math.min(a,b)), hi=Math.max(lo,Math.max(a,b));
+  const el=document.getElementById('clickCps');
+  if(el) el.textContent='~'+(1000/hi).toFixed(1)+'-'+(1000/lo).toFixed(1)+' CPS';
+}
+['clickMin','clickMax'].forEach(id=>{const el=document.getElementById(id);if(el)el.addEventListener('input',updateClickCps);});
+updateClickCps();
+async function startClicker(){
+  const p=macroPlatform();
+  if(p!=='win'&&p!=='mac'){showToast('Auto clicker is not supported on this platform');return;}
+  const body={
+    mode:'click',
+    button:document.getElementById('clickButton').value,
+    intervalMin:+document.getElementById('clickMin').value,
+    intervalMax:+document.getElementById('clickMax').value,
+    clickHold:+document.getElementById('clickHold').value,
+    repeat:+document.getElementById('clickRepeat').value,
+    loop:document.getElementById('clickLoop').checked,
+    start:{x:0,y:0}, end:{x:0,y:0}, duration:300, hold:60
+  };
+  const r=await api('/api/macro/start',body);
+  showToast((r&&r.message)||'Auto clicker started');
+  refreshMacroStatus();
+}
+async function stopClicker(){try{const r=await api('/api/macro/stop');showToast((r&&r.message)||'Stopped');}catch{};refreshMacroStatus();}
+document.getElementById('clickStartBtn').addEventListener('click',startClicker);
+document.getElementById('clickStopBtn').addEventListener('click',stopClicker);
 setInterval(()=>{const p=document.getElementById('page-macro');if(p&&p.classList.contains('active'))refreshMacroStatus()},700);
 updateMacroUI();
 
@@ -5061,11 +5208,16 @@ function Invoke-NovaApi {
 
         if ($Path -eq "/api/macro/start") {
             if ((Get-NovaPlanRank (Get-NovaEffectivePlan)) -lt 1) { return (ConvertTo-NovaJson @{ success = $false; locked = $true; required = "Pro"; message = "Macro needs Pro." }) }
+            $mode = if ($body.mode -eq "click") { "click" } else { "drag" }
             $res = Start-NovaMacro `
+                -Mode $mode `
                 -StartX ([int]$body.start.x) -StartY ([int]$body.start.y) `
                 -EndX ([int]$body.end.x) -EndY ([int]$body.end.y) `
                 -Duration ([int]$body.duration) -Hold ([int]$body.hold) `
-                -Repeat ([int]$body.repeat) -Loop ([bool]$body.loop)
+                -Repeat ([int]$body.repeat) -Loop ([bool]$body.loop) `
+                -Button ([string]$body.button) `
+                -IntervalMin ([int]$body.intervalMin) -IntervalMax ([int]$body.intervalMax) `
+                -ClickHold ([int]$body.clickHold)
             return (ConvertTo-NovaJson $res)
         }
 
