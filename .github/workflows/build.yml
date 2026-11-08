@@ -33,41 +33,74 @@ jobs:
           Install-Module PS2EXE -Scope CurrentUser -Force -AllowClobber
           Write-Host "PS2EXE installed"
 
-      - name: Compile to EXE
+      - name: Compile separate apps
         shell: pwsh
         run: |
-          $scriptPath = "shared/Nova_Tweaks_WebGUI.ps1"
-          $outputPath = "NovaTweaks.exe"
-          if (-not (Test-Path $scriptPath)) {
-            Write-Error "Script not found: $scriptPath"
-            exit 1
-          }
-          Invoke-PS2EXE `
-            -InputFile $scriptPath `
-            -OutputFile $outputPath `
-            -Title "Nova Tweaks" `
-            -Description "Nova Tweaks performance suite - by Kyle Bonebrake" `
-            -Company "Nova Tweaks" `
-            -Product "Nova Tweaks" `
-            -Version "1.0.0.0" `
-            -RequireAdmin `
-            -NoConsole `
-            -STA `
-            -x64
-          if (Test-Path $outputPath) {
-            Write-Host "Build successful: $outputPath"
-            $size = (Get-Item $outputPath).Length
-            Write-Host "File size: $([math]::Round($size/1MB,2)) MB"
-          } else {
-            Write-Error "Build failed - EXE not created"
-            exit 1
+          $shared = Get-Content "shared/Nova_Tweaks_WebGUI.ps1" -Raw
+          if (-not $shared) { Write-Error "Shared engine not found"; exit 1 }
+
+          # Build one self-contained script per product: product env vars + the shared engine.
+          # The shared engine has no $PSScriptRoot dependencies, so it runs from the merged file.
+          $products = @(
+            @{
+              Name  = "NovaTweaks"
+              Title = "Nova Tweaks"
+              Desc  = "Nova Tweaks performance suite - combined build"
+              Game  = ""
+              Var   = "NovaTweaks"
+            },
+            @{
+              Name  = "NovaTweaks-Fortnite-Windows"
+              Title = "Nova Tweaks - Fortnite (Windows)"
+              Desc  = "Nova Tweaks for Fortnite on Windows"
+              Game  = "Fortnite"
+              Var   = "NovaTweaksFortnite"
+            },
+            @{
+              Name  = "NovaTweaks-Minecraft-Windows"
+              Title = "Nova Tweaks - Minecraft (Windows)"
+              Desc  = "Nova Tweaks for Minecraft on Windows"
+              Game  = "Minecraft"
+              Var   = "NovaTweaksMinecraft"
+            }
+          )
+
+          New-Item -ItemType Directory -Force -Path build | Out-Null
+
+          foreach ($p in $products) {
+            $prelude = ""
+            if ($p.Game) { $prelude += "`$env:NOVA_FIXED_GAME = '$($p.Game)'`r`n" }
+            $prelude += "`$env:NOVA_APP_VARIANT = '$($p.Var)'`r`n"
+            $merged = Join-Path "build" "$($p.Name).ps1"
+            Set-Content -Path $merged -Value ($prelude + $shared) -Encoding UTF8
+
+            $out = "$($p.Name).exe"
+            Invoke-PS2EXE `
+              -InputFile $merged `
+              -OutputFile $out `
+              -Title $p.Title `
+              -Description $p.Desc `
+              -Company "Nova Tweaks" `
+              -Product $p.Title `
+              -Version "1.0.0.0" `
+              -RequireAdmin `
+              -NoConsole `
+              -STA `
+              -x64
+
+            if (-not (Test-Path $out)) { Write-Error "Build failed: $out"; exit 1 }
+            $size = [math]::Round((Get-Item $out).Length / 1MB, 2)
+            Write-Host "Built $out ($size MB)"
           }
 
-      - name: Upload EXE artifact
+      - name: Upload EXE artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: NovaTweaks_EXE
-          path: NovaTweaks.exe
+          name: NovaTweaks_Windows_EXEs
+          path: |
+            NovaTweaks.exe
+            NovaTweaks-Fortnite-Windows.exe
+            NovaTweaks-Minecraft-Windows.exe
           retention-days: 30
 
       - name: Create Release (on tag)
@@ -76,5 +109,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          files: NovaTweaks.exe
+          files: |
+            NovaTweaks.exe
+            NovaTweaks-Fortnite-Windows.exe
+            NovaTweaks-Minecraft-Windows.exe
           tag_name: ${{ github.ref_name }}
