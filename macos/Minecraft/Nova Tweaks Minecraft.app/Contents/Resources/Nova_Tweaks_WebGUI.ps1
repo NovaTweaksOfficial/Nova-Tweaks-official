@@ -3071,13 +3071,13 @@ $HtmlPage = @'
 /* Nova font aliases (NovaTweaks uses Nova Display/Sans; we map to bundled-equivalent families) */
 :root{
 /* NovaTweaks palette (matched to running project: #0c0507 base, Nova red ramp) */
---bg:#0c0507;--bg2:#12080a;--sidebar:#150a0b;--card:#150a0b;--card2:#1e0e12;--cardhover:#2a1418;
---red:#ef4444;--red2:#dc2626;--red3:#f87171;--red-deep:#b91c1c;--redglow:rgba(239,68,68,.32);--redglow2:rgba(239,68,68,.14);--redglow3:rgba(239,68,68,.06);
---danger:#ef4444;--warn:#f59e0b;--green:#22c55e;--blue:#38bdf8;--purple:#a855f7;
---text:#fff1f2;--textdim:#c9a6a8;--textmuted:#8f7476;--border:#2a1418;--border2:#3d2026;
---shadow:0 8px 28px rgba(0,0,0,.55);--shadow-lg:0 18px 56px rgba(0,0,0,.72);--shadow-red:0 8px 28px rgba(239,68,68,.18);
---radius:12px;--radius-sm:9px;--radius-xs:6px;
---nova-glass:linear-gradient(180deg,rgba(30,14,18,.72),rgba(21,10,11,.68));
+--bg:#0c0507;--bg2:#12080a;--sidebar:#150a0d;--card:#150a0d;--card2:#1e0e12;--cardhover:#2a1418;
+--red:#ef4444;--red2:#dc2626;--red3:#f87171;--red-deep:#b91c1c;--redglow:rgba(239,68,68,.26);--redglow2:rgba(239,68,68,.14);--redglow3:rgba(239,68,68,.06);
+--danger:#b91c1c;--warn:#dc2626;--green:#ef4444;--blue:#38bdf8;--purple:#a855f7;
+--text:#fbeaea;--textdim:#bfa4a6;--textmuted:#8f7476;--border:rgba(239,68,68,.10);--border2:rgba(239,68,68,.22);--borderlit:rgba(239,68,68,.22);
+--shadow:0 1px 0 rgba(239,68,68,.045) inset,0 10px 28px rgba(0,0,0,.45);--shadow-lg:0 18px 56px rgba(0,0,0,.6);--shadow-red:0 8px 28px rgba(239,68,68,.18);
+--radius:16px;--radius-sm:10px;--radius-xs:6px;
+--nova-glass:#150a0d;
 }
 html,body{background:#0c0507}
 body{font-family:'Plus Jakarta Sans','Nova Sans','Inter',system-ui,sans-serif;background:#0c0507;color:var(--text);display:flex;height:100vh;overflow:hidden;-webkit-font-smoothing:antialiased;letter-spacing:-.01em}
@@ -3086,84 +3086,112 @@ body{font-family:'Plus Jakarta Sans','Nova Sans','Inter',system-ui,sans-serif;ba
 body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 60% 40% at 20% 0%,rgba(239,68,68,.07),transparent),radial-gradient(ellipse 50% 35% at 85% 100%,rgba(185,28,28,.05),transparent);pointer-events:none;z-index:0}
 
 /* Login overlay */
-.login-overlay{position:fixed;inset:0;background:radial-gradient(ellipse at center,rgba(255,26,46,.12),var(--bg));z-index:10000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(8px)}
-.login-box{background:linear-gradient(145deg,rgba(17,17,25,.95),rgba(24,24,34,.95));border:1px solid rgba(255,26,46,.3);border-radius:20px;padding:48px;width:440px;max-width:92vw;box-shadow:var(--shadow-lg),0 0 80px rgba(255,26,46,.15);position:relative;overflow:hidden;backdrop-filter:blur(20px)}
-.login-box::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,transparent,var(--red),var(--red3),transparent)}
-.login-box::after{content:'';position:absolute;inset:0;background:radial-gradient(circle at 50% 0%,rgba(255,26,46,.08),transparent 60%);pointer-events:none}
-.login-logo{font-family:"Space Grotesk","Plus Jakarta Sans",sans-serif;font-size:48px;font-weight:900;background:linear-gradient(135deg,var(--red),var(--red3),#ff8a95);-webkit-background-clip:text;-webkit-text-fill-color:transparent;text-align:center;margin-bottom:2px;letter-spacing:-2px;position:relative;z-index:1}
-.login-sub{text-align:center;color:var(--textmuted);font-size:11px;text-transform:uppercase;letter-spacing:4px;margin-bottom:32px;position:relative;z-index:1}
-.login-tabs{display:flex;gap:4px;margin-bottom:28px;background:rgba(0,0,0,.3);border-radius:10px;padding:4px;position:relative;z-index:1}
-.login-tab{flex:1;padding:10px;border:none;background:transparent;color:var(--textdim);border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;transition:all .25s}
-.login-tab.active{background:linear-gradient(135deg,var(--red),var(--red2));color:#fff;box-shadow:0 4px 16px var(--redglow)}
-.login-field{margin-bottom:18px;position:relative;z-index:1}
-.login-field label{display:block;font-size:11px;font-weight:600;color:var(--textdim);margin-bottom:6px;text-transform:uppercase;letter-spacing:1.5px}
-.login-input{width:100%;background:rgba(0,0,0,.4);border:1px solid var(--border2);color:var(--text);padding:13px 16px;border-radius:10px;font-size:14px;transition:all .25s;font-family:inherit}
-.login-input:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3px var(--redglow2),0 0 20px var(--redglow3)}
-.login-btn{width:100%;background:linear-gradient(135deg,var(--red),var(--red2));color:#fff;border:none;padding:14px;border-radius:10px;font-weight:700;cursor:pointer;font-size:14px;transition:all .25s;box-shadow:0 4px 20px var(--redglow);text-transform:uppercase;letter-spacing:1.5px;position:relative;z-index:1}
-.login-btn:hover{transform:translateY(-2px);box-shadow:0 8px 32px var(--redglow);filter:brightness(1.15)}
-.login-btn:active{transform:translateY(0)}
-.login-error{color:var(--danger);font-size:12px;margin-top:10px;text-align:center;min-height:16px;position:relative;z-index:1}
-.login-footer{text-align:center;margin-top:22px;color:var(--textmuted);font-size:11px;position:relative;z-index:1}
+/* Login (Electron split panel) */
+.login-overlay{position:fixed;inset:0;background:var(--bg);z-index:10000;display:grid;place-items:center;overflow:hidden;color:var(--text);font-family:"Nova Sans","Plus Jakarta Sans",system-ui,sans-serif}
+.login-overlay::before{content:'';position:absolute;inset:0;background:radial-gradient(60% 50% at 20% 30%,rgba(239,68,68,.11),transparent 60%),radial-gradient(40% 40% at 85% 90%,rgba(239,68,68,.06),transparent 60%);pointer-events:none}
+.login-box{position:relative;width:860px;max-width:calc(100% - 40px);display:grid;grid-template-columns:1fr 1fr;background:var(--card);border:1px solid var(--border);border-radius:20px;overflow:hidden;box-shadow:0 40px 100px rgba(0,0,0,.6)}
+.login-left{position:relative;padding:36px 36px 32px;border-right:1px solid var(--border);display:flex;flex-direction:column;background:radial-gradient(90% 70% at 0% 0%,rgba(239,68,68,.18),transparent 60%),var(--card2)}
+.login-right{padding:36px 36px 30px;display:flex;flex-direction:column;justify-content:center;min-width:0}
+.login-brand{display:flex;align-items:center;gap:12px}
+.login-logotile{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;background:linear-gradient(135deg,var(--red),var(--red2));color:#150a0b;font-family:"Nova Display","Space Grotesk",sans-serif;font-size:22px;font-weight:700;line-height:1;flex-shrink:0}
+.login-wordmark{font-family:"Nova Display","Space Grotesk",sans-serif;font-weight:400;font-size:24px;letter-spacing:.8px;line-height:1;text-transform:uppercase;color:var(--text)}
+.login-headline{font-size:26px;font-weight:800;letter-spacing:-.6px;line-height:1.15;margin-top:34px}
+.login-lede{font-size:14px;color:var(--textdim);line-height:1.55;margin-top:10px}
+.login-features{display:flex;flex-direction:column;gap:14px;margin-top:28px;flex:1}
+.login-feature{display:flex;gap:12px;align-items:flex-start}
+.login-ficon{width:32px;height:32px;border-radius:9px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.2);display:grid;place-items:center;flex-shrink:0;font-size:15px;line-height:1}
+.login-ftitle{font-size:14px;font-weight:700;line-height:1.3}
+.login-fdesc{font-size:12px;color:var(--textdim);margin-top:2px;line-height:1.45}
+.login-stats{display:flex;gap:22px;margin-top:28px;padding-top:18px;border-top:1px solid var(--border)}
+.login-statv{font-size:20px;font-weight:800;letter-spacing:-.4px;line-height:1}
+.login-statl{font-size:11px;color:var(--textmuted);margin-top:4px;text-transform:uppercase;letter-spacing:.6px;font-weight:600}
+.login-title{font-size:22px;font-weight:700;letter-spacing:-.3px}
+.login-subtitle{font-size:13px;color:var(--textdim);margin-top:4px;margin-bottom:22px}
+.login-tabs{display:flex;gap:2px;margin-bottom:20px;background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:3px}
+.login-tab{flex:1;height:32px;border:none;background:transparent;color:var(--textmuted);border-radius:8px;cursor:pointer;font-size:12.5px;font-weight:600;font-family:inherit;transition:background-color .12s ease,color .12s ease}
+.login-tab:hover{color:var(--text)}
+.login-tab.active{background:rgba(239,68,68,.14);color:var(--text)}
+.login-field{margin-bottom:14px}
+.login-field label{display:block;font-size:11px;color:var(--textmuted);margin-bottom:6px;font-weight:600;letter-spacing:.6px;text-transform:uppercase}
+.login-input{width:100%;box-sizing:border-box;background:var(--card2);border:1px solid var(--border);border-radius:10px;height:42px;padding:0 13px;color:var(--text);font-size:14px;font-family:inherit;outline:none;transition:border-color .15s ease}
+.login-input:focus{border-color:var(--red)}
+.login-input::placeholder{color:var(--textmuted)}
+.login-btn{width:100%;margin-top:10px;background:var(--red);color:#150a0b;border:none;height:46px;border-radius:12px;font-weight:700;font-size:15px;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;transition:filter .15s ease}
+.login-btn:hover{filter:brightness(1.07)}
+.login-btn:disabled{background:var(--cardhover);color:var(--textmuted);cursor:default;filter:none}
+.login-error{color:var(--red);font-size:13px;margin-top:10px;text-align:left;min-height:16px;line-height:1.5}
+.login-footer{text-align:center;margin-top:18px;color:var(--textmuted);font-size:11px;line-height:1.5}
 .login-footer a{color:var(--red);text-decoration:none;font-weight:600}
+@media (max-width:760px){.login-box{grid-template-columns:1fr}.login-left{display:none}}
 
-/* Sidebar - Nova layout */
-.sidebar{width:242px;background:linear-gradient(180deg,rgba(21,10,11,.98),rgba(12,5,6,.98));border-right:1px solid var(--border);padding:18px 12px 14px;display:flex;flex-direction:column;gap:3px;position:relative;overflow:hidden;z-index:1;backdrop-filter:blur(10px)}
-.sidebar::before{content:'';position:absolute;top:-40px;left:-20px;right:-20px;height:220px;background:radial-gradient(circle at 30% 0%,rgba(220,38,38,.22),transparent 62%);pointer-events:none}
-.brand{font-family:"Space Grotesk","Nova Display","Plus Jakarta Sans",sans-serif;font-size:27px;font-weight:700;background:linear-gradient(135deg,#fff1f2,var(--red3),var(--red));-webkit-background-clip:text;-webkit-text-fill-color:transparent;padding:2px 10px 0;position:relative;z-index:1;letter-spacing:-.8px}
-.brandsub{font-size:10px;color:var(--textmuted);padding:0 10px;margin:2px 0 12px;position:relative;z-index:1;text-transform:uppercase;letter-spacing:2.6px;font-weight:700}
-.planbadge{display:inline-flex;align-items:center;padding:5px 12px;border-radius:999px;font-size:10px;font-weight:800;margin:0 10px 16px;background:linear-gradient(135deg,var(--red),var(--red2));color:#fff;box-shadow:0 6px 18px rgba(220,38,38,.22);position:relative;z-index:1;letter-spacing:.8px;border:1px solid rgba(255,255,255,.08)}
-.navbtn{background:transparent;border:1px solid transparent;color:var(--textdim);padding:10px 12px;border-radius:10px;cursor:pointer;font-size:13px;text-align:left;width:100%;transition:all .18s ease;font-weight:600;position:relative;z-index:1;display:flex;align-items:center;gap:10px}
-.navbtn:hover{background:rgba(255,255,255,.03);border-color:rgba(255,255,255,.04);color:var(--text)}
-.navbtn.active{background:linear-gradient(90deg,rgba(220,38,38,.18),rgba(220,38,38,.04));color:#fff;border-color:rgba(220,38,38,.28);box-shadow:inset 3px 0 0 var(--red)}
-.navicon{font-size:14px;opacity:.9;width:18px;text-align:center}
-.sidebar-bottom{margin-top:auto;padding:12px 8px;border-top:1px solid var(--border);position:relative;z-index:1}
-.account-badge{display:flex;align-items:center;gap:10px;padding:10px;background:linear-gradient(135deg,rgba(255,26,46,.08),rgba(255,26,46,.02));border:1px solid rgba(255,26,46,.2);border-radius:10px;margin-bottom:10px}
-.account-avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--red),var(--red2));display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;font-size:15px;box-shadow:0 2px 10px var(--redglow)}
-.userinfo{font-size:12px;color:var(--text);font-weight:600}
-.ptsinfo{font-size:10px;color:var(--textmuted);margin-top:1px}
-.progress{height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:8px}
-.progress-fill{height:100%;background:linear-gradient(90deg,var(--red),var(--red3),#ff8a95);border-radius:2px;transition:width .6s cubic-bezier(.4,0,.2,1);box-shadow:0 0 8px var(--redglow)}
-.logoutbtn{background:transparent;border:1px solid var(--border);color:var(--textdim);padding:7px 12px;border-radius:8px;cursor:pointer;font-size:11px;margin-top:8px;width:100%;transition:all .2s;font-weight:500}
-.logoutbtn:hover{border-color:var(--red);color:var(--red);background:rgba(255,26,46,.05)}
-
-/* Content */
-.maincol{flex:1;display:flex;flex-direction:column;min-width:0;height:100vh;position:relative;background:linear-gradient(180deg,rgba(12,5,6,.35),rgba(12,5,6,.1))}
-.topbar{display:flex;align-items:center;gap:4px;padding:8px 12px;background:rgba(12,5,6,.94);border-bottom:1px solid #2a1418;position:relative;z-index:3;overflow-x:auto;flex-shrink:0;backdrop-filter:blur(10px)}
-.topbar .navbtn{border-radius:8px;padding:7px 11px;font-size:12px;font-weight:700;color:var(--textdim)}
-.topbar .navbtn.active{background:rgba(220,38,38,.14);color:#fff;border-color:rgba(220,38,38,.24);box-shadow:none}
-.topbar::-webkit-scrollbar{height:5px}
-.topbar-label{font-size:10px;text-transform:uppercase;letter-spacing:1.8px;color:var(--textmuted);margin:0 6px 0 2px;font-weight:800;flex-shrink:0}
-.topbar .navbtn{width:auto;padding:8px 12px;font-size:12.5px;border-radius:999px;white-space:nowrap;flex-shrink:0;gap:7px;background:rgba(255,255,255,.02)}
-.topbar .navbtn:hover{background:rgba(255,255,255,.045);color:var(--text)}
-.topbar .navbtn.active{background:linear-gradient(135deg,rgba(220,38,38,.22),rgba(185,28,28,.12));border-left:none;padding-left:12px;color:#fff;box-shadow:inset 0 0 0 1px rgba(220,38,38,.32)}
-.topbar .navicon{width:16px;font-size:13px}
-.content{flex:1;overflow-y:auto;overflow-x:hidden;padding:18px 22px 28px;background:transparent;position:relative;z-index:1;min-height:0}
+/* ===== NovaTweaks shell: top header + chip rail (no sidebar) ===== */
+.sidebar{display:none!important}
+.maincol{flex:1;display:flex;flex-direction:column;min-width:0;height:100vh;position:relative;background:var(--bg)}
+.tophead{flex-shrink:0;position:relative;z-index:3;background:linear-gradient(180deg,var(--card) 0%,var(--bg) 100%);border-bottom:1px solid var(--border)}
+.headrow{display:flex;align-items:center;gap:20px;padding:10px 26px}
+.brandwrap{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.logotile{width:32px;height:32px;border-radius:10px;display:grid;place-items:center;background:linear-gradient(135deg,var(--red),var(--red2));box-shadow:0 6px 20px var(--redglow);font-family:"Nova Display","Space Grotesk",sans-serif;font-weight:700;font-size:17px;color:#150a0b;line-height:1}
+.brand{font-family:"Nova Display","Space Grotesk",sans-serif;font-size:18px;font-weight:400;letter-spacing:.8px;text-transform:uppercase;line-height:1;color:var(--text);background:none;-webkit-text-fill-color:currentColor;padding:0;position:static}
+.brandsub{font-family:"Nova Sans","Plus Jakarta Sans",sans-serif;font-size:8.5px;font-weight:700;letter-spacing:1.7px;line-height:1;text-transform:uppercase;color:var(--textmuted);padding:0;margin:3px 0 0;position:static}
+.headnav{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow:hidden}
+.navbtn{background:transparent;border:none;color:var(--textdim);height:32px;padding:0 12px;border-radius:9px;cursor:pointer;font-size:13px;font-weight:500;font-family:inherit;text-align:left;width:auto;transition:background-color .12s ease,color .12s ease;display:flex;align-items:center;gap:7px;white-space:nowrap;flex-shrink:0;box-shadow:none}
+.navbtn:hover{background:var(--cardhover);color:var(--text)}
+.navbtn.active{background:rgba(239,68,68,.12);color:var(--text);font-weight:600;box-shadow:none}
+.navicon{font-size:14px;opacity:1;width:auto;text-align:center}
+.headsearch{position:relative;flex-shrink:0;width:200px}
+.headsearch input{width:100%;background:rgba(255,255,255,.04);border:1px solid var(--border2);border-radius:9px;height:31px;padding:0 28px 0 31px;color:var(--text);font-family:inherit;font-size:12.5px;outline:none;box-sizing:border-box}
+.headsearch input::placeholder{color:var(--textmuted)}
+.headsearch .sicon{position:absolute;left:11px;top:8px;color:var(--textmuted);font-size:13px;pointer-events:none;line-height:1}
+.headside{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.iconbtn{width:34px;height:34px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,.03);color:var(--textdim);display:grid;place-items:center;cursor:pointer;font-size:14px;transition:background-color .12s ease,color .12s ease,border-color .12s ease;padding:0;font-family:inherit;line-height:1}
+.iconbtn:hover{background:var(--cardhover);border-color:var(--border2);color:var(--text)}
+.iconbtn.active{background:rgba(239,68,68,.12);border-color:rgba(239,68,68,.4);color:var(--text)}
+.planbadge{display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;font-size:9.5px;font-weight:800;margin:0;background:rgba(239,68,68,.13);color:var(--red3);border:1px solid rgba(239,68,68,.35);letter-spacing:.8px;position:static;box-shadow:none}
+.accountchip{display:flex;align-items:center;gap:9px;height:34px;padding:0 9px 0 6px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,.03);cursor:pointer;font-family:inherit;color:var(--text)}
+.accountchip:hover{background:var(--cardhover);border-color:var(--border2)}
+.account-avatar{width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,var(--red),var(--red2));display:grid;place-items:center;font-weight:700;color:#150a0b;font-size:11px;box-shadow:none;flex-shrink:0}
+.accountchip .userinfo{font-size:12.5px;font-weight:600;line-height:1.25;color:var(--text)}
+.accountchip .ptsinfo{font-size:10px;font-weight:600;color:var(--red3);line-height:1.25;margin-top:0}
+.chiprail{display:flex;align-items:center;gap:5px;padding:0 26px 10px;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+.chiprail::-webkit-scrollbar{height:0;display:none}
+.rail-label{flex-shrink:0;font-size:9.5px;font-weight:700;letter-spacing:1.6px;color:var(--textmuted);text-transform:uppercase;margin-right:2px}
+.chip{display:flex;align-items:center;gap:6px;height:28px;padding:0 9px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,.025);color:var(--textdim);font-family:inherit;font-size:11.5px;font-weight:500;cursor:pointer;white-space:nowrap;flex-shrink:0;transition:background-color .12s ease,color .12s ease}
+.chip:hover{background:var(--cardhover);color:var(--text)}
+.chip.active{background:rgba(239,68,68,.13);border-color:rgba(239,68,68,.4);color:var(--text);font-weight:600}
+.chip .dot{width:5px;height:5px;border-radius:50%;background:var(--red);box-shadow:0 0 8px var(--red)}
+.topbar{display:none!important}
+.content{flex:1;overflow-y:auto;overflow-x:hidden;padding:30px 34px 40px;background:transparent;position:relative;z-index:1;min-height:0}
+.content.tight{overflow-y:hidden;display:flex;flex-direction:column}
+.content.tight #page-tweaks.active{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;box-sizing:border-box}
+.content>*{width:100%;max-width:1460px;margin-left:auto;margin-right:auto}
 .page{display:none;animation:fadeIn .2s ease}.page.active{display:block;min-width:0}
 #page-tweaks.active{display:flex;flex-direction:column;min-height:0}
 #page-tweaks #tweakGrid{flex:0 0 auto;align-content:start}
 @keyframes fadeIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@media (max-width:1180px){.headsearch{width:150px}.headside .iconbtn{width:30px;height:30px}}
+@media (max-width:980px){.headsearch{display:none}.headrow{gap:12px;padding:10px 16px}.chiprail{padding:0 16px 10px}.content{padding:22px 16px 32px}}
 
 /* Game profile switch */
 .gameswitch{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
 .gamebtn{display:flex;align-items:center;gap:12px;text-align:left;padding:14px;border:1px solid var(--border);border-radius:12px;background:rgba(255,255,255,.02);color:var(--text);cursor:pointer;transition:all .22s;font-family:inherit}
-.gamebtn:hover{border-color:rgba(255,26,46,.55);background:rgba(255,26,46,.06);transform:translateY(-1px)}
-.gamebtn.active{border-color:var(--red);background:linear-gradient(135deg,rgba(255,26,46,.16),rgba(255,26,46,.03));box-shadow:0 0 22px rgba(255,26,46,.16)}
-.gamebtn .gameicon{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;background:#0a0a10;border:1px solid var(--border2);flex-shrink:0}
+.gamebtn:hover{border-color:rgba(239,68,68,.55);background:rgba(239,68,68,.06);transform:translateY(-1px)}
+.gamebtn.active{border-color:var(--red);background:linear-gradient(135deg,rgba(239,68,68,.16),rgba(239,68,68,.03));box-shadow:0 0 22px rgba(239,68,68,.16)}
+.gamebtn .gameicon{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;background:var(--card2);border:1px solid var(--border2);flex-shrink:0}
 .gamebtn b{display:block;font-size:13.5px}
 .gamebtn span{display:block;font-size:11px;color:var(--textdim);margin-top:2px}
-.gamebtn.active .gameicon{border-color:rgba(255,26,46,.6);box-shadow:0 0 14px rgba(255,26,46,.25)}
+.gamebtn.active .gameicon{border-color:rgba(239,68,68,.6);box-shadow:0 0 14px rgba(239,68,68,.25)}
 
 /* Game welcome overlay */
-.game-welcome{position:fixed;inset:0;z-index:20000;display:none;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,rgba(255,26,46,.14),rgba(5,5,8,.97) 62%);backdrop-filter:blur(10px);overflow:hidden}
+.game-welcome{position:fixed;inset:0;z-index:20000;display:none;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,rgba(239,68,68,.14),rgba(12,5,7,.97) 62%);backdrop-filter:blur(10px);overflow:hidden}
 .game-welcome.show{display:flex;animation:gameFade .35s ease both}
 .game-welcome.out{animation:gameOut .45s ease both}
-.game-welcome::before{content:'';position:absolute;width:150vmax;height:150vmax;background:conic-gradient(from 0deg,transparent 0 78%,rgba(255,26,46,.16) 84%,transparent 90% 100%);animation:gameSweep 2.4s linear infinite;pointer-events:none}
+.game-welcome::before{content:'';position:absolute;width:150vmax;height:150vmax;background:conic-gradient(from 0deg,transparent 0 78%,rgba(239,68,68,.16) 84%,transparent 90% 100%);animation:gameSweep 2.4s linear infinite;pointer-events:none}
 .game-welcome-inner{position:relative;text-align:center;padding:32px;max-width:92vw}
-.game-welcome-icon{font-size:72px;line-height:1;filter:drop-shadow(0 0 28px rgba(255,26,46,.45));animation:gamePop .7s cubic-bezier(.2,.9,.25,1.2) both}
+.game-welcome-icon{font-size:72px;line-height:1;filter:drop-shadow(0 0 28px rgba(239,68,68,.45));animation:gamePop .7s cubic-bezier(.2,.9,.25,1.2) both}
 .game-welcome-title{font-size:clamp(34px,6vw,66px);font-weight:900;letter-spacing:-2px;margin-top:16px;background:linear-gradient(135deg,#fff,var(--red3),var(--red));-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:gameRise .7s .15s cubic-bezier(.2,.8,.2,1) both}
 .game-welcome-sub{font-size:12px;text-transform:uppercase;letter-spacing:5px;color:var(--textdim);margin-top:12px;animation:gameRise .7s .3s cubic-bezier(.2,.8,.2,1) both}
 .game-welcome-bar{width:min(320px,70vw);height:4px;border-radius:4px;background:rgba(255,255,255,.08);margin:28px auto 0;overflow:hidden}
-.game-welcome-bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--red),var(--red3),#ff8a95);box-shadow:0 0 16px rgba(255,26,46,.6);animation:gameLoad 2.4s .2s cubic-bezier(.3,.1,.2,1) both}
+.game-welcome-bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--red),var(--red3),#fca5a5);box-shadow:0 0 16px rgba(239,68,68,.6);animation:gameLoad 2.4s .2s cubic-bezier(.3,.1,.2,1) both}
 @keyframes gameFade{from{opacity:0}to{opacity:1}}
 @keyframes gameOut{from{opacity:1}to{opacity:0}}
 @keyframes gameSweep{to{transform:rotate(360deg)}}
@@ -3171,59 +3199,76 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 @keyframes gameRise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
 @keyframes gameLoad{0%{width:0}55%{width:62%}100%{width:100%}}
 @media (max-width:720px){.gameswitch{grid-template-columns:1fr}}
-h1{font-family:"Space Grotesk","Plus Jakarta Sans",sans-serif;font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
-.sub{color:var(--textdim);font-size:13.5px;margin-bottom:24px;line-height:1.5}
+h1{font-family:"Nova Sans","Plus Jakarta Sans",system-ui,sans-serif;font-size:26px;font-weight:700;margin-bottom:4px;letter-spacing:-.3px;color:var(--text)}
+.sub{color:var(--textdim);font-size:14px;margin-bottom:20px;line-height:1.5}
 
-/* Cards - Nova glass */
-.card{background:var(--nova-glass);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;margin-bottom:14px;box-shadow:var(--shadow);transition:border-color .2s ease, box-shadow .2s ease;backdrop-filter:blur(12px)}
-.card:hover{box-shadow:var(--shadow-lg);border-color:var(--border2)}
+/* Cards (Electron panel) */
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:22px;margin-bottom:14px;box-shadow:var(--shadow);transition:border-color .2s ease;backdrop-filter:none}
+.card:hover{border-color:var(--border2);box-shadow:var(--shadow)}
 .cardrow{display:flex;gap:14px;flex-wrap:wrap}
-.statcard{flex:1;min-width:130px;background:var(--nova-glass);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;position:relative;overflow:hidden;box-shadow:var(--shadow)}
-.statcard::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--red),transparent)}
-.statlabel{font-size:10px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1.4px;font-weight:700}
-.statval{font-family:"Space Grotesk","Nova Display",sans-serif;font-size:32px;font-weight:700;margin-top:4px;color:var(--text)}
+.statcard{flex:1;min-width:150px;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px 20px;position:relative;overflow:hidden;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:space-between;gap:12px}
+.statcard::before{content:'';position:absolute;inset:0;background:radial-gradient(120% 100% at 0% 0%,rgba(239,68,68,.11),transparent 58%);pointer-events:none}
+.statbody{position:relative;min-width:0}
+.staticon{width:30px;height:30px;border-radius:9px;background:rgba(239,68,68,.12);display:grid;place-items:center;margin-bottom:14px;font-size:15px;line-height:1}
+.statlabel{font-size:12px;color:var(--textdim);margin-top:6px}
+.statval{font-family:"Nova Sans","Plus Jakarta Sans",sans-serif;font-size:30px;font-weight:800;color:var(--text);line-height:1;letter-spacing:-.8px;font-variant-numeric:tabular-nums}
+.statval.small{font-size:17px;letter-spacing:-.2px;line-height:1.15}
+.statring{position:relative;width:54px;height:54px;border-radius:50%;flex-shrink:0;background:conic-gradient(var(--red) calc(var(--p,0)*1%),rgba(239,68,68,.13) 0);display:grid;place-items:center}
+.statring::after{content:'';position:absolute;inset:5px;border-radius:50%;background:var(--card)}
 
-/* Tweak cards - Nova style, expand down (denser grid, no clipping) */
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;align-content:start}
+/* Tweak cards (Electron nt-card) */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(272px,1fr));gap:12px;align-content:start}
 #tweakGrid{min-height:0}
-#page-tweaks .grid{grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
-.tweakcard{background:linear-gradient(180deg,rgba(21,10,11,.92),rgba(16,7,9,.88));border:1px solid #2a1418;border-radius:12px;padding:13px 14px;transition:border-color .16s ease, box-shadow .16s ease;position:relative;overflow:hidden;min-width:0}
-.tweakcard:hover{border-color:rgba(220,38,38,.34);box-shadow:0 10px 26px rgba(0,0,0,.38)}
-.tweakcard::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(220,38,38,.04),transparent 40%);pointer-events:none;opacity:0;transition:opacity .16s}
-.tweakcard:hover::after{opacity:1}
-.tweakcard.on{border-color:rgba(34,197,94,.22);box-shadow:inset 0 0 0 1px rgba(34,197,94,.06)}
-.tweakname{font-size:13.5px;line-height:1.25}
-.tweakdesc{font-size:11.5px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-.tweakhead{display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap}
-.badge{padding:3px 9px;border-radius:5px;font-size:9px;font-weight:800;letter-spacing:.5px;text-transform:uppercase}
-.badge.safe{background:linear-gradient(135deg,var(--green),#00cc6a);color:#000;box-shadow:0 2px 8px rgba(0,255,136,.25)}
-.badge.caution{background:linear-gradient(135deg,var(--warn),#cc8400);color:#000;box-shadow:0 2px 8px rgba(255,170,0,.25)}
-.badge.danger{background:linear-gradient(135deg,var(--danger),#cc2f3a);color:#fff;box-shadow:0 2px 8px rgba(255,71,87,.25)}
-.badge.free{background:rgba(255,26,46,.1);color:var(--red);border:1px solid rgba(255,26,46,.3)}
-.badge.pro{background:rgba(255,170,0,.1);color:var(--warn);border:1px solid rgba(255,170,0,.3)}
-.badge.new{background:linear-gradient(135deg,var(--blue),#0088cc);color:#fff;box-shadow:0 2px 8px rgba(0,170,255,.25)}
-.tweakname{font-size:14.5px;font-weight:700;margin-bottom:4px;letter-spacing:-.2px}
-.tweakdesc{font-size:12px;color:var(--textdim);line-height:1.55}
+#page-tweaks .grid{grid-template-columns:repeat(auto-fill,minmax(272px,1fr));gap:12px}
+.grouphead{display:flex;align-items:center;gap:9px;margin:22px 0 10px}
+.subgroup:first-child .grouphead{margin-top:2px}
+.groupname{font-size:11px;font-weight:600;margin:0;letter-spacing:.6px;text-transform:uppercase;color:var(--textmuted)}
+.subcount{font-size:11px;color:var(--textmuted);opacity:.8}
+.groupline{flex:1;height:1px;background:var(--border)}
+.tweakcard{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:15px 16px 13px;display:flex;flex-direction:column;gap:10px;min-height:150px;box-shadow:var(--shadow);transition:border-color .2s ease,background-color .2s ease;position:relative;overflow:hidden;min-width:0}
+.tweakcard:hover{border-color:var(--border2)}
+.tweakcard.on{border-color:rgba(239,68,68,.34);background:linear-gradient(180deg,rgba(239,68,68,.06),var(--card) 70%)}
+.tweakcard.locked{opacity:.6}
+.tweakhead{display:flex;align-items:center;gap:10px;margin:0;flex-wrap:nowrap}
+.tweakicon{width:30px;height:30px;border-radius:9px;flex-shrink:0;background:var(--card2);border:1px solid var(--border);display:grid;place-items:center;font-size:14px;line-height:1}
+.tweakcard.on .tweakicon{background:rgba(239,68,68,.13);border-color:rgba(239,68,68,.27)}
+.tweakname{font-size:14px;font-weight:600;line-height:1.3;flex:1;min-width:0;color:var(--text)}
+.tweakdesc{font-size:13px;color:var(--textdim);line-height:1.5;flex:1;display:block;-webkit-line-clamp:unset;overflow:visible}
+.tweakfoot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:2px}
+.tweakpills{display:flex;align-items:center;gap:6px;min-width:0;flex-wrap:wrap}
+.badge{padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;letter-spacing:0;text-transform:none;background:rgba(239,68,68,.086);color:var(--red);box-shadow:none;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;line-height:1.35}
+.badge::before{content:'';width:5px;height:5px;border-radius:50%;background:currentColor;flex-shrink:0}
+.badge.safe{background:rgba(239,68,68,.086);color:#ef4444}
+.badge.caution{background:rgba(220,38,38,.086);color:#dc2626}
+.badge.danger{background:rgba(185,28,28,.086);color:#b91c1c}
+.badge.free{background:rgba(239,68,68,.10);color:var(--red3);border:1px solid rgba(239,68,68,.27)}
+.badge.pro{background:rgba(239,68,68,.10);color:var(--red3);border:1px solid rgba(239,68,68,.27)}
+.badge.new{background:rgba(239,68,68,.14);color:#fecaca;border:1px solid rgba(239,68,68,.3)}
+.badge.unavailable,.badge.tier{background:rgba(255,255,255,.04);color:var(--textmuted);border:1px solid var(--border)}
+.badge.unavailable::before,.badge.tier::before{display:none}
+.badge[class*="os-"]{background:rgba(255,255,255,.04);color:var(--textmuted);border:1px solid var(--border)}
+.badge[class*="os-"]::before{display:none}
 
-/* Toggle */
-.toggle{margin-left:auto;position:relative;width:48px;height:26px;cursor:pointer;flex-shrink:0}
+/* Toggle (Electron switch 40x22) */
+.toggle{margin-left:auto;position:relative;width:40px;height:22px;cursor:pointer;flex-shrink:0}
 .toggle input{opacity:0;width:0;height:0;position:absolute}
-.slider{position:absolute;inset:0;background:linear-gradient(180deg,#2a2a38,#1a1a28);border:1px solid var(--border2);border-radius:26px;transition:all .35s cubic-bezier(.4,0,.2,1);box-shadow:inset 0 2px 4px rgba(0,0,0,.4)}
-.slider:before{content:"";position:absolute;width:20px;height:20px;left:2px;top:2px;background:linear-gradient(145deg,#fff,#d8d8e0);border-radius:50%;transition:all .35s cubic-bezier(.4,0,.2,1);box-shadow:0 2px 8px rgba(0,0,0,.5)}
-.toggle input:checked+.slider{background:linear-gradient(135deg,var(--red),var(--red2));border-color:var(--red);box-shadow:0 0 16px var(--redglow),inset 0 1px 2px rgba(255,255,255,.2)}
-.toggle input:checked+.slider:before{transform:translateX(22px);background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.3)}
-.toggle input:disabled+.slider{opacity:.35;cursor:not-allowed}
+.slider{position:absolute;inset:0;background:var(--cardhover);border:1px solid var(--border2);border-radius:16px;transition:background-color .2s ease;box-shadow:none}
+.slider:before{content:"";position:absolute;width:16px;height:16px;left:2px;top:2px;background:#fff;border-radius:50%;transition:left .2s cubic-bezier(.4,1.4,.6,1);box-shadow:0 1px 2px rgba(0,0,0,.4)}
+.toggle input:checked+.slider{background:var(--red);border-color:transparent}
+.toggle input:checked+.slider:before{left:19px;background:#fff}
+.toggle input:disabled+.slider{opacity:.4;cursor:not-allowed}
 
-/* Buttons - Nova */
-.btn{background:linear-gradient(135deg,var(--red),var(--red2));color:#fff;border:1px solid rgba(255,255,255,.06);padding:10px 18px;border-radius:10px;font-weight:700;cursor:pointer;font-size:12.5px;transition:filter .18s ease, box-shadow .18s ease, transform .18s ease;box-shadow:0 8px 20px rgba(185,28,28,.22);letter-spacing:.2px;position:relative;overflow:hidden}
-.btn::before{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,.12),transparent);pointer-events:none}
-.btn:hover{transform:translateY(-1px);filter:brightness(1.06);box-shadow:0 12px 26px rgba(185,28,28,.28)}
-.btn:active{transform:translateY(0)}
-.btn.danger{background:linear-gradient(135deg,#ef4444,#b91c1c);box-shadow:0 8px 20px rgba(239,68,68,.18)}
-.btn.ghost{background:rgba(255,255,255,.03);border:1px solid var(--border2);color:var(--text);box-shadow:none}
-.btn.ghost:hover{border-color:rgba(220,38,38,.35);color:#fff;background:rgba(220,38,38,.08)}
-.btn.sm{padding:8px 18px;font-size:11.5px}
-.btn.xs{padding:5px 12px;font-size:10.5px}
+/* Buttons (Electron: dark text on accent) */
+.btn{background:var(--red);color:#150a0b;border:none;padding:10px 18px;border-radius:10px;font-weight:700;cursor:pointer;font-size:13px;transition:filter .15s ease,background-color .15s ease;box-shadow:none;letter-spacing:0;position:static;overflow:visible;font-family:inherit;height:auto}
+.btn::before{display:none}
+.btn:hover{filter:brightness(1.07);transform:none;box-shadow:none}
+.btn:active{filter:brightness(.96)}
+.btn.danger{background:rgba(239,68,68,.10);border:1px solid rgba(239,68,68,.47);color:var(--text);box-shadow:none}
+.btn.danger:hover{background:rgba(239,68,68,.16);filter:none}
+.btn.ghost{background:var(--card2);border:1px solid var(--border2);color:var(--text);box-shadow:none}
+.btn.ghost:hover{border-color:rgba(239,68,68,.4);color:var(--text);background:var(--cardhover);filter:none}
+.btn.sm{padding:8px 13px;font-size:12px}
+.btn.xs{padding:6px 11px;font-size:11.5px;border-radius:9px}
 .btn.full{width:100%}
 
 /* Inputs */
@@ -3232,26 +3277,27 @@ h1{font-family:"Space Grotesk","Plus Jakarta Sans",sans-serif;font-size:30px;fon
 .textarea{background:rgba(0,0,0,.4);border:1px solid var(--border);color:var(--text);padding:11px 15px;border-radius:var(--radius-sm);font-size:12px;font-family:'JetBrains Mono',monospace;width:100%;min-height:120px;resize:vertical;transition:all .25s;line-height:1.6}
 .textarea:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3px var(--redglow2)}
 
-/* Category bar - Nova chips */
-.catbar{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
-.catbtn{background:rgba(255,255,255,.02);border:1px solid var(--border);color:var(--textdim);padding:8px 14px;border-radius:999px;cursor:pointer;font-size:12px;font-weight:700;transition:all .18s;backdrop-filter:blur(6px)}
-.catbtn:hover{color:var(--text);border-color:var(--border2);background:rgba(255,255,255,.04)}
-.catbtn.active{background:linear-gradient(135deg,rgba(220,38,38,.24),rgba(185,28,28,.14));color:#fff;border-color:rgba(220,38,38,.38);box-shadow:0 6px 18px rgba(220,38,38,.12)}
+/* Category chips (Electron chip rail) */
+.catbar{display:flex;gap:5px;margin:0;flex-wrap:nowrap;align-items:center;flex-shrink:0}
+.catbtn{display:flex;align-items:center;gap:6px;height:28px;padding:0 9px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,.025);color:var(--textdim);font-family:inherit;font-size:11.5px;font-weight:500;cursor:pointer;white-space:nowrap;transition:background-color .12s ease,color .12s ease;box-shadow:none}
+.catbtn:hover{background:var(--cardhover);color:var(--text)}
+.catbtn.active{background:rgba(239,68,68,.13);border-color:rgba(239,68,68,.4);color:var(--text);font-weight:600;box-shadow:none}
+.catbtn .catcount{opacity:.6;font-size:10px;font-variant-numeric:tabular-nums}
 
 /* Log */
-.logbox{background:#030306;border:1px solid var(--border);border-radius:var(--radius);padding:16px;font-family:'JetBrains Mono',monospace;font-size:12px;color:#ff6b7a;height:440px;overflow-y:auto;white-space:pre-wrap;box-shadow:inset 0 2px 12px rgba(0,0,0,.6);line-height:1.7}
+.logbox{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--red3);height:440px;overflow-y:auto;white-space:pre-wrap;box-shadow:none;line-height:1.7}
 
 /* Toast */
-.toast{position:fixed;bottom:28px;right:28px;background:linear-gradient(135deg,rgba(17,17,25,.95),rgba(24,24,34,.95));border:1px solid var(--red);padding:16px 24px;border-radius:var(--radius);font-size:13px;opacity:0;transform:translateY(24px) scale(.95);transition:all .35s cubic-bezier(.4,0,.2,1);pointer-events:none;box-shadow:0 12px 40px rgba(0,0,0,.6),0 0 20px var(--redglow2);z-index:1000;font-weight:600;backdrop-filter:blur(10px)}
+.toast{position:fixed;bottom:28px;right:28px;background:var(--card);border:1px solid var(--borderlit);padding:14px 20px;border-radius:12px;font-size:13px;color:var(--text);opacity:0;transform:translateY(24px) scale(.98);transition:opacity .18s ease,transform .18s ease;pointer-events:none;box-shadow:0 18px 50px rgba(0,0,0,.6);z-index:1000;font-weight:600;backdrop-filter:none}
 .toast.show{opacity:1;transform:translateY(0) scale(1)}
 
 /* Warn box */
-.warnbox{background:linear-gradient(135deg,rgba(255,170,0,.08),rgba(255,170,0,.02));border:1px solid rgba(255,170,0,.35);border-radius:var(--radius);padding:14px 18px;font-size:12.5px;color:var(--warn);margin-bottom:16px;box-shadow:0 2px 12px rgba(255,170,0,.08)}
+.warnbox{background:linear-gradient(135deg,rgba(239,68,68,.08),rgba(239,68,68,.02));border:1px solid rgba(239,68,68,.35);border-radius:var(--radius);padding:14px 18px;font-size:12.5px;color:var(--warn);margin-bottom:16px;box-shadow:0 2px 12px rgba(239,68,68,.08)}
 
 /* Profile cards */
-.profilecard{background:linear-gradient(145deg,rgba(17,17,25,.7),rgba(24,24,34,.7));border:1px solid var(--border);border-radius:var(--radius);padding:18px;display:flex;align-items:center;gap:16px;margin-bottom:10px;transition:all .3s cubic-bezier(.4,0,.2,1);backdrop-filter:blur(8px)}
-.profilecard:hover{border-color:rgba(255,26,46,.3);transform:translateX(6px);box-shadow:0 8px 30px rgba(0,0,0,.5)}
-.profileicon{width:48px;height:48px;border-radius:10px;background:linear-gradient(135deg,var(--red),var(--red2));display:flex;align-items:center;justify-content:center;font-weight:900;color:#fff;font-size:15px;box-shadow:0 4px 14px var(--redglow);flex-shrink:0}
+.profilecard{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px 18px;display:flex;align-items:center;gap:16px;margin-bottom:10px;transition:border-color .15s ease;backdrop-filter:none}
+.profilecard:hover{border-color:var(--borderlit);transform:none;box-shadow:none}
+.profileicon{width:48px;height:48px;border-radius:10px;background:linear-gradient(135deg,var(--red),var(--red2));display:flex;align-items:center;justify-content:center;font-weight:800;color:#150a0b;font-size:15px;box-shadow:none;flex-shrink:0}
 
 /* BIOS / UEFI + Drag Macro */
 .biosgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
@@ -3277,15 +3323,15 @@ h1{font-family:"Space Grotesk","Plus Jakarta Sans",sans-serif;font-size:30px;fon
 ::-webkit-scrollbar-thumb:hover{background:var(--textmuted)}
 
 /* Live tool cards */
-.livetool{background:linear-gradient(145deg,rgba(17,17,25,.8),rgba(24,24,34,.8));border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:14px;position:relative;overflow:hidden}
-.livetool::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--red),var(--purple),var(--blue))}
+.livetool{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:14px;position:relative;overflow:hidden}
+.livetool::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--red),var(--red2),transparent)}
 .livetool-header{display:flex;align-items:center;gap:12px;margin-bottom:14px}
 .livetool-icon{width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,var(--red),var(--red2));display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 4px 12px var(--redglow)}
 .livetool-title{font-size:16px;font-weight:700}
 .livetool-desc{font-size:12px;color:var(--textdim);margin-bottom:14px;line-height:1.5}
 .livetool-stats{display:flex;gap:16px;margin-bottom:14px}
 .livetool-stat{background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:8px;padding:10px 14px;flex:1;text-align:center}
-.livetool-stat-val{font-size:20px;font-weight:800;background:linear-gradient(135deg,var(--red),var(--red3));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.livetool-stat-val{font-size:20px;font-weight:800;color:var(--red)}
 .livetool-stat-label{font-size:9px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px;margin-top:2px;font-weight:600}
 
 /* Pulse */
@@ -3297,26 +3343,26 @@ h1{font-family:"Space Grotesk","Plus Jakarta Sans",sans-serif;font-size:30px;fon
 .section-title::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,var(--border),transparent)}
 
 /* OS badges */
-.badge.os-windows{background:linear-gradient(135deg,var(--blue),#0088cc);color:#fff;box-shadow:0 2px 8px rgba(0,170,255,.25)}
-.badge.os-mac{background:linear-gradient(135deg,var(--purple),#8833cc);color:#fff;box-shadow:0 2px 8px rgba(170,68,255,.25)}
-.badge.os-both{background:linear-gradient(135deg,var(--green),#00cc6a);color:#000;box-shadow:0 2px 8px rgba(0,255,136,.25)}
+.badge.os-windows{background:rgba(255,255,255,.04);color:var(--textmuted);border:1px solid var(--border);box-shadow:none}
+.badge.os-mac{background:rgba(255,255,255,.04);color:var(--textmuted);border:1px solid var(--border);box-shadow:none}
+.badge.os-both{background:rgba(255,255,255,.04);color:var(--textmuted);border:1px solid var(--border);box-shadow:none}
 .badge.unavailable{background:rgba(255,255,255,.06);color:var(--textmuted);border:1px solid rgba(255,255,255,.14)}
-.planbadge.free{background:linear-gradient(135deg,#2b2b3a,#3d3d52);box-shadow:0 2px 12px rgba(0,0,0,.4)}
-.planbadge.pro{background:linear-gradient(135deg,var(--red),var(--red2));box-shadow:0 2px 12px var(--redglow)}
-.planbadge.ultimate{background:linear-gradient(135deg,#ffc233,#ff7a00);color:#1c1300;box-shadow:0 2px 14px rgba(255,160,0,.35)}
+.planbadge.free{background:rgba(255,255,255,.04);color:var(--textmuted);border:1px solid var(--border);box-shadow:none}
+.planbadge.pro{background:rgba(239,68,68,.13);color:var(--red3);border:1px solid rgba(239,68,68,.35);box-shadow:none}
+.planbadge.ultimate{background:rgba(239,68,68,.13);color:var(--red3);border:1px solid rgba(239,68,68,.35);box-shadow:none}
 .badge.tier{background:rgba(255,255,255,.05);color:var(--textdim);border:1px solid rgba(255,255,255,.12)}
-.badge.tier-free{background:rgba(120,140,180,.12);color:#9fb3d6;border:1px solid rgba(120,140,180,.3)}
-.badge.tier-pro{background:rgba(255,26,46,.1);color:var(--red3);border:1px solid rgba(255,26,46,.32)}
-.badge.tier-ult{background:rgba(255,170,0,.11);color:var(--warn);border:1px solid rgba(255,170,0,.32)}
+.badge.tier-free{background:rgba(239,68,68,.086);color:var(--red3);border:1px solid rgba(239,68,68,.27)}
+.badge.tier-pro{background:rgba(239,68,68,.086);color:var(--red3);border:1px solid rgba(239,68,68,.27)}
+.badge.tier-ult{background:rgba(239,68,68,.086);color:var(--red3);border:1px solid rgba(239,68,68,.27)}
 .tweakcard.locked{opacity:.66;border-style:dashed}
 .tweakcard.locked:hover{transform:none;box-shadow:0 8px 30px rgba(0,0,0,.45)}
 .tweakcard.locked .toggle{pointer-events:none;opacity:.5}
 .acctgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
-.acctcard{background:linear-gradient(145deg,rgba(17,17,25,.85),rgba(24,24,34,.85));border:1px solid var(--border);border-radius:var(--radius);padding:18px}
+.acctcard{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px}
 .acctlabel{font-size:10px;text-transform:uppercase;letter-spacing:1.4px;color:var(--textmuted);font-weight:800;margin-bottom:8px}
 .acctvalue{font-size:28px;font-weight:900;letter-spacing:-.04em;line-height:1.1}
 .acctsub{font-size:11.5px;color:var(--textdim);margin-top:5px;line-height:1.6}
-.acctinput{width:100%;background:#0a0a10;border:1px solid var(--border);border-radius:9px;color:var(--text);padding:11px 12px;font-size:12.5px;font-family:inherit;margin-bottom:8px}
+.acctinput{width:100%;background:var(--card2);border:1px solid var(--border);border-radius:9px;color:var(--text);padding:11px 12px;font-size:12.5px;font-family:inherit;margin-bottom:8px}
 .acctinput::placeholder{color:var(--textmuted)}
 .acctactions{display:flex;gap:8px;flex-wrap:wrap}
 .tierlist{display:grid;gap:10px;margin-top:4px}
@@ -3325,11 +3371,11 @@ h1{font-family:"Space Grotesk","Plus Jakarta Sans",sans-serif;font-size:30px;fon
 
 /* Vibrant red outline */
 .rotating-outline{position:relative;overflow:visible}
-.rotating-outline::before{content:'';position:absolute;inset:-2px;border-radius:inherit;padding:2px;background:conic-gradient(from var(--rot,0deg),#ff1a2e 0deg,#ff4d5e 55deg,#ff8a95 105deg,#cc0018 170deg,#ff1a2e 225deg,#ff5a68 290deg,#ff1a2e 360deg);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:spinOutline 3.4s linear infinite;pointer-events:none;z-index:0;filter:drop-shadow(0 0 5px rgba(255,26,46,.55)) drop-shadow(0 0 14px rgba(255,26,46,.22))}
+.rotating-outline::before{content:'';position:absolute;inset:-2px;border-radius:inherit;padding:2px;background:conic-gradient(from var(--rot,0deg),#ef4444 0deg,#f87171 55deg,#fca5a5 105deg,#b91c1c 170deg,#ef4444 225deg,#dc2626 290deg,#ef4444 360deg);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:spinOutline 3.4s linear infinite;pointer-events:none;z-index:0;filter:drop-shadow(0 0 5px rgba(239,68,68,.55)) drop-shadow(0 0 14px rgba(239,68,68,.22))}
 @keyframes spinOutline{to{--rot:360deg}}
 @property --rot{syntax:'<angle>';initial-value:0deg;inherits:false}
-.tweakcard.rotating-outline{box-shadow:0 0 0 1px rgba(255,26,46,.12),0 8px 30px rgba(0,0,0,.45),0 0 22px rgba(255,26,46,.08)}
-.tweakcard.rotating-outline:hover{box-shadow:0 12px 40px rgba(0,0,0,.6),0 0 28px rgba(255,26,46,.16)}
+.tweakcard.rotating-outline{box-shadow:0 0 0 1px rgba(239,68,68,.12),0 8px 30px rgba(0,0,0,.45),0 0 22px rgba(239,68,68,.08)}
+.tweakcard.rotating-outline:hover{box-shadow:0 12px 40px rgba(0,0,0,.6),0 0 28px rgba(239,68,68,.16)}
 .tweakcard.rotating-outline::before{border-radius:var(--radius)}
 
 /* Snow canvas */
@@ -3338,7 +3384,7 @@ h1{font-family:"Space Grotesk","Plus Jakarta Sans",sans-serif;font-size:30px;fon
 /* Workspace + live network rail */
 .workspace{flex:1;display:flex;min-height:0;min-width:0}
 .workspace .content{flex:1;min-width:0}
-.netrail{width:252px;flex-shrink:0;border-left:1px solid var(--border);background:linear-gradient(180deg,rgba(13,13,20,.98),rgba(8,8,12,.98));padding:14px 14px 18px;overflow-y:auto;position:relative;z-index:2}
+.netrail{width:252px;flex-shrink:0;border-left:1px solid var(--border);background:var(--card);padding:14px 14px 18px;overflow-y:auto;position:relative;z-index:2}
 .netrail.hidden{display:none}
 .netrail-head{display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:800;letter-spacing:.3px;margin-bottom:12px}
 .netrail-head .live-dot{margin-right:6px}
@@ -3351,7 +3397,7 @@ h1{font-family:"Space Grotesk","Plus Jakarta Sans",sans-serif;font-size:30px;fon
 .netmetric.wide{grid-column:span 2}
 #netChart,#netChartBig{width:100%;display:block;border:1px solid var(--border);border-radius:9px;background:rgba(0,0,0,.3)}
 .netrail-foot{display:flex;justify-content:space-between;gap:8px;font-size:9.5px;color:var(--textmuted);margin-top:7px;font-family:'JetBrains Mono',monospace}
-.netrail-reopen{display:block!important;position:absolute;right:0;top:58px;z-index:4;background:linear-gradient(135deg,var(--red),var(--red2));border:none;color:#fff;border-radius:8px 0 0 8px;padding:10px 8px;cursor:pointer;box-shadow:0 4px 16px var(--redglow)}
+.netrail-reopen{display:block!important;position:absolute;right:0;top:58px;z-index:4;background:var(--red);border:none;color:#150a0b;border-radius:8px 0 0 8px;padding:10px 8px;cursor:pointer;box-shadow:none;font-weight:700}
 .netrail-reopen.hidden{display:none!important}
 @media (max-width:1180px){.netrail{display:none;position:absolute;right:0;top:0;bottom:0;z-index:20;box-shadow:-18px 0 40px rgba(0,0,0,.55)}.netrail.open{display:block}.netrail-reopen{display:block!important}}
 
@@ -3360,7 +3406,7 @@ h1{font-family:"Space Grotesk","Plus Jakarta Sans",sans-serif;font-size:30px;fon
 .achievement{display:flex;align-items:center;gap:9px;padding:9px 10px;border:1px solid var(--border);border-radius:9px;background:rgba(0,0,0,.26);transition:all .2s}
 .achievement:hover{border-color:var(--border2);transform:translateY(-1px)}
 .achievement.locked{opacity:.4;filter:grayscale(1)}
-.achievement.earned{border-color:rgba(255,26,46,.28);background:linear-gradient(135deg,rgba(255,26,46,.09),rgba(0,0,0,.22))}
+.achievement.earned{border-color:rgba(239,68,68,.28);background:linear-gradient(135deg,rgba(239,68,68,.09),rgba(0,0,0,.22))}
 .achicon{font-size:20px;line-height:1}
 .achname{font-size:11.5px;font-weight:700;line-height:1.2}
 .achdesc{font-size:9.5px;color:var(--textmuted);margin-top:2px;line-height:1.3}
@@ -3376,42 +3422,58 @@ h1{font-family:"Space Grotesk","Plus Jakarta Sans",sans-serif;font-size:30px;fon
 </style>
 </head>
 <body>
-<canvas id="snowCanvas"></canvas>
+<canvas id="snowCanvas" style="display:none"></canvas>
 
 <!-- LOGIN OVERLAY -->
 <div class="login-overlay" id="loginOverlay">
-  <div class="login-box" style="width:520px;padding:0;overflow:hidden">
-    <div style="padding:40px 44px 28px;background:linear-gradient(180deg,rgba(255,26,46,.12),transparent);position:relative">
-      <div class="login-logo" style="font-size:56px">Nova Tweaks</div>
-      <div class="login-sub" style="letter-spacing:6px">Performance Suite</div>
-      <div style="display:flex;gap:18px;justify-content:center;margin-top:14px;flex-wrap:wrap">
-        <div style="text-align:center"><div id="onlineCount" style="font-size:22px;font-weight:900;color:var(--text)">1</div><div style="font-size:9px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px">Local Sessions</div></div>
-        <div style="text-align:center"><div id="tweakStat" style="font-size:22px;font-weight:900;color:var(--text)">@@TWEAK_COUNT@@</div><div style="font-size:9px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px">Tweaks</div></div>
-        <div style="text-align:center"><div id="catStat" style="font-size:22px;font-weight:900;color:var(--text)">@@CAT_COUNT@@</div><div style="font-size:9px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px">Categories</div></div>
+  <div class="login-box">
+    <div class="login-left">
+      <div class="login-brand">
+        <div class="login-logotile">N</div>
+        <div class="login-wordmark">Nova Tweaks</div>
+      </div>
+      <div class="login-headline">Your PC, set up for the game instead of for Windows.</div>
+      <div class="login-lede">Tweaks, a game booster, lower input delay and a steadier connection, all in one place that remembers what it changed.</div>
+      <div class="login-features">
+        <div class="login-feature">
+          <div class="login-ficon">✦</div>
+          <div><div class="login-ftitle">@@TWEAK_COUNT@@ tweaks, one switch each</div><div class="login-fdesc">Every change read back from the system, and reversible.</div></div>
+        </div>
+        <div class="login-feature">
+          <div class="login-ficon">⚡</div>
+          <div><div class="login-ftitle">Tweaks that run while you play</div><div class="login-fdesc">Game Boost, Ping Optimizer, Latency Control.</div></div>
+        </div>
+        <div class="login-feature">
+          <div class="login-ficon">↺</div>
+          <div><div class="login-ftitle">A restore point before anything</div><div class="login-fdesc">So the undo button is always the system itself.</div></div>
+        </div>
+      </div>
+      <div class="login-stats">
+        <div><div class="login-statv" id="tweakStat">@@TWEAK_COUNT@@</div><div class="login-statl">Tweaks</div></div>
+        <div><div class="login-statv" id="catStat">@@CAT_COUNT@@</div><div class="login-statl">Categories</div></div>
+        <div><div class="login-statv" id="onlineCount">1</div><div class="login-statl">Local sessions</div></div>
       </div>
     </div>
-    <div style="padding:28px 44px 40px">
+    <div class="login-right">
+      <div class="login-title" id="loginTitle">Sign in</div>
+      <div class="login-subtitle" id="loginSubtitle">Sign in to pick up where you left off.</div>
       <div class="login-tabs">
         <button class="login-tab active" data-tab="login">Sign In</button>
         <button class="login-tab" data-tab="register">Create Account</button>
       </div>
       <div id="loginForm">
-        <div class="login-field"><label>Email</label><input class="login-input" id="loginEmail" type="email" placeholder="you@example.com"></div>
+        <div class="login-field"><label>Email</label><input class="login-input" id="loginEmail" type="email" placeholder="you@email.com"></div>
         <div class="login-field"><label>Password</label><input class="login-input" id="loginPass" type="password" placeholder="••••••••"></div>
-        <button class="login-btn" id="loginBtn">Sign In</button>
+        <button class="login-btn" id="loginBtn">Sign in →</button>
         <div class="login-error" id="loginError"></div>
-        <div id="loginStatus" style="font-size:10px;color:var(--textmuted);text-align:center;margin-top:6px"></div>
+        <div id="loginStatus" style="font-size:11px;color:var(--textmuted);text-align:center;margin-top:8px"></div>
       </div>
       <div id="registerForm" style="display:none">
-        <div class="login-field"><label>Name</label><input class="login-input" id="regName" placeholder="Your name"></div>
-        <div class="login-field"><label>Email</label><input class="login-input" id="regEmail" type="email" placeholder="you@example.com"></div>
+        <div class="login-field"><label>Display name</label><input class="login-input" id="regName" placeholder="austvns"></div>
+        <div class="login-field"><label>Email</label><input class="login-input" id="regEmail" type="email" placeholder="you@email.com"></div>
         <div class="login-field"><label>Password</label><input class="login-input" id="regPass" type="password" placeholder="••••••••"></div>
-        <button class="login-btn" id="registerBtn">Create Account</button>
+        <button class="login-btn" id="registerBtn">Create account →</button>
         <div class="login-error" id="registerError"></div>
-      </div>
-      <div style="margin-top:16px;padding:12px;background:linear-gradient(135deg,rgba(255,26,46,.08),rgba(255,26,46,.02));border:1px solid rgba(255,26,46,.25);border-radius:10px;font-size:11px;color:var(--textdim);line-height:1.7;text-align:center">
-        <div style="color:var(--red);font-weight:700;margin-bottom:4px">🔥 Upgrade to Pro or Ultimate</div>
-        Exclusive tweaks · Crosshair Overlay · Priority Support · Early Access
       </div>
       <div class="login-footer">Auto-login enabled · Session saved locally · Free plan included</div>
     </div>
@@ -3420,54 +3482,71 @@ h1{font-family:"Space Grotesk","Plus Jakarta Sans",sans-serif;font-size:30px;fon
 
 <!-- MAIN APP -->
 <div id="appContainer" style="display:none;width:100%;height:100vh;position:relative;z-index:1;">
-<div class="sidebar">
-  <div class="brand" id="brandName">Nova Tweaks</div>
-  <div class="brandsub" id="brandSub">Performance Suite</div>
-  <div class="planbadge free" id="planBadge">FREE</div>
-  <div style="padding:10px 10px 6px;font-size:10px;text-transform:uppercase;letter-spacing:1.8px;color:var(--textmuted);font-weight:800">System</div>
-  <button class="navbtn" data-page="settings"><span class="navicon">✦</span>Settings</button>
-  <button class="navbtn" data-page="restore"><span class="navicon">↺</span>Restore</button>
-  <button class="navbtn" data-page="bench"><span class="navicon">📊</span>Benchmark</button>
-  <button class="navbtn" data-page="log"><span class="navicon">☰</span>Log</button>
-  <div class="sidebar-bottom">
-    <div class="account-badge" id="accountBadge" style="display:none">
-      <div class="account-avatar" id="accountAvatar">G</div>
-      <div><div class="userinfo" id="userInfo">Guest</div><div class="ptsinfo" id="ptsInfo">0 tweaks</div></div>
-    </div>
-    <div class="progress"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
-    <button class="logoutbtn" id="logoutBtn">Sign Out</button>
-  </div>
-</div>
-
 <div class="maincol">
-<div class="topbar">
-  <button class="navbtn active" data-page="home"><span class="navicon">◆</span>Dashboard</button>
-  <button class="navbtn" data-page="tweaks"><span class="navicon">⚙</span>Tweaks</button>
-  <button class="navbtn" data-page="network"><span class="navicon">📡</span>Ping Optimizer</button>
-  <button class="navbtn" data-page="potato"><span class="navicon">🥔</span>Potato Graphics</button>
-  <button class="navbtn" data-page="crosshair"><span class="navicon">🎯</span>Crosshair</button>
-  <button class="navbtn" data-page="booster"><span class="navicon">⚡</span>Game Booster</button>
-  <button class="navbtn" data-page="fps"><span class="navicon">🚀</span>FPS Booster</button>
-  <button class="navbtn" data-page="macro"><span class="navicon">🖱</span>Macro</button>
-  <button class="navbtn" data-page="bios"><span class="navicon">🧬</span>BIOS</button>
-</div>
+<header class="tophead">
+  <div class="headrow">
+    <div class="brandwrap">
+      <div class="logotile">N</div>
+      <div>
+        <div class="brand" id="brandName">Nova Tweaks</div>
+        <div class="brandsub" id="brandSub">BY FL3SH</div>
+      </div>
+    </div>
+    <nav class="headnav">
+      <button class="navbtn active" data-page="home"><span class="navicon">◆</span>Home</button>
+      <button class="navbtn" data-page="tweaks"><span class="navicon">⚙</span>Tweaks</button>
+    </nav>
+    <div class="headsearch">
+      <span class="sicon">⌕</span>
+      <input id="tweakSearch" placeholder="Search tweaks" autocomplete="off">
+    </div>
+    <div class="headside">
+      <span class="planbadge free" id="planBadge">FREE</span>
+      <button class="iconbtn" data-page="settings" title="Settings">⚙</button>
+      <button class="iconbtn" data-page="restore" title="Restore">↺</button>
+      <button class="iconbtn" data-page="bench" title="Benchmark">▤</button>
+      <button class="iconbtn" data-page="log" title="Log">☰</button>
+      <div class="accountchip" id="accountBadge" style="display:none">
+        <div class="account-avatar" id="accountAvatar">G</div>
+        <div><div class="userinfo" id="userInfo">Guest</div><div class="ptsinfo" id="ptsInfo">0 tweaks</div></div>
+      </div>
+      <button class="iconbtn" id="logoutBtn" title="Sign out">⏻</button>
+    </div>
+  </div>
+  <div class="chiprail">
+    <span class="rail-label">Tweaks</span>
+    <div class="catbar" id="catBar"></div>
+    <button class="chip" data-page="network">📡 Ping Optimizer</button>
+    <button class="chip" data-page="potato">🥔 Potato Graphics</button>
+    <button class="chip" data-page="crosshair">🎯 Crosshair</button>
+    <button class="chip" data-page="booster">⚡ Game Booster</button>
+    <button class="chip" data-page="fps">🚀 FPS Booster</button>
+    <button class="chip" data-page="macro">🖱 Macro</button>
+    <button class="chip" data-page="bios">🧬 BIOS</button>
+  </div>
+</header>
 
 <div class="workspace">
 <div class="content">
 <!-- HOME -->
 <div class="page active" id="page-home">
   <div class="card" style="margin-top:0;margin-bottom:14px">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">
-      <h3 style="font-size:16px;margin:0">PC Specs</h3>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div class="tweakicon">🖥</div>
+        <div>
+          <div style="font-size:15px;font-weight:700">PC Specs</div>
+          <div style="font-size:12px;color:var(--textdim);margin-top:1px">OS, CPU, RAM and GPU where available.</div>
+        </div>
+      </div>
       <button class="btn ghost xs" id="homeSysRefreshBtn">Refresh</button>
     </div>
-    <div style="color:var(--textmuted);font-size:11px;margin-bottom:10px">Your system info (OS, CPU, RAM, GPU where available). Use this to pick safe tweaks for your hardware.</div>
-    <pre id="homeSysInfo" style="margin:0;color:var(--textdim);font-size:12px;font-family:'JetBrains Mono',monospace;line-height:1.6;white-space:pre-wrap">Loading system info...</pre>
+    <pre id="homeSysInfo" style="margin:14px 0 0;color:var(--textdim);font-size:12.5px;font-family:'JetBrains Mono',monospace;line-height:1.65;white-space:pre-wrap">Loading system info...</pre>
   </div>
-  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:6px">
+  <div style="display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:16px;margin-bottom:6px">
     <div>
-      <h1 id="greeting" style="font-size:34px">Good evening</h1>
-      <div class="sub" id="homeSub" style="margin-bottom:0">0 tweaks on · Free plan</div>
+      <h1 id="greeting" style="font-size:26px;margin:0">Good evening</h1>
+      <div class="sub" id="homeSub" style="margin:6px 0 0">0 tweaks on · Free plan</div>
     </div>
     <div style="display:flex;gap:8px">
       <button class="btn" id="applyAllBtn">⚡ Apply All</button>
@@ -3477,11 +3556,10 @@ h1{font-family:"Space Grotesk","Plus Jakarta Sans",sans-serif;font-size:30px;fon
   <div class="cardrow" id="statsRow" style="margin-top:16px"></div>
   <div class="cardrow" style="margin-top:16px">
     <div class="card" style="flex:2;min-width:300px;position:relative;overflow:hidden">
-      <div style="position:absolute;inset:0;background:radial-gradient(circle at 80% 20%,rgba(255,26,46,.15),transparent 60%);pointer-events:none"></div>
-      <h3 style="margin-bottom:6px;font-size:16px">Optimization Progress</h3>
+      <h3 style="margin-bottom:6px;font-size:15px;font-weight:700">Optimization Progress</h3>
       <div id="sugText" style="color:var(--textdim);font-size:13px;margin-bottom:12px">0% optimized</div>
-      <div style="height:10px;background:var(--border);border-radius:5px;overflow:hidden">
-        <div id="homeProgress" style="height:100%;width:0%;background:linear-gradient(90deg,var(--red),var(--red3),#ff8a95);border-radius:5px;transition:width .6s"></div>
+      <div style="height:8px;background:var(--card2);border:1px solid var(--border);border-radius:999px;overflow:hidden">
+        <div id="homeProgress" style="height:100%;width:0%;background:var(--red);border-radius:999px;transition:width .6s"></div>
       </div>
       <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn ghost sm" onclick="document.querySelector('[data-page=tweaks]').click()">Browse tweaks</button>
@@ -3502,20 +3580,20 @@ h1{font-family:"Space Grotesk","Plus Jakarta Sans",sans-serif;font-size:30px;fon
   </div>
   <div class="cardrow" style="margin-top:16px">
     <div class="card" style="flex:1;min-width:200px;text-align:center">
-      <div style="font-size:32px;font-weight:900;background:linear-gradient(135deg,var(--red),var(--red3));-webkit-background-clip:text;-webkit-text-fill-color:transparent" id="statTweaks">0</div>
-      <div style="font-size:11px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px;margin-top:4px">Tweaks Available</div>
+      <div style="font-size:30px;font-weight:800;color:var(--text)" id="statTweaks">0</div>
+      <div style="font-size:12px;color:var(--textdim);margin-top:6px">Tweaks Available</div>
     </div>
     <div class="card" style="flex:1;min-width:200px;text-align:center">
-      <div style="font-size:32px;font-weight:900;background:linear-gradient(135deg,var(--green),#00cc6a);-webkit-background-clip:text;-webkit-text-fill-color:transparent" id="statApplied">0</div>
-      <div style="font-size:11px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px;margin-top:4px">Applied</div>
+      <div style="font-size:30px;font-weight:800;color:var(--text)" id="statApplied">0</div>
+      <div style="font-size:12px;color:var(--textdim);margin-top:6px">Applied</div>
     </div>
     <div class="card" style="flex:1;min-width:200px;text-align:center">
-      <div style="font-size:32px;font-weight:900;background:linear-gradient(135deg,var(--blue),#0088cc);-webkit-background-clip:text;-webkit-text-fill-color:transparent" id="statCats">@@CAT_COUNT@@</div>
-      <div style="font-size:11px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px;margin-top:4px">Categories</div>
+      <div style="font-size:30px;font-weight:800;color:var(--text)" id="statCats">@@CAT_COUNT@@</div>
+      <div style="font-size:12px;color:var(--textdim);margin-top:6px">Categories</div>
     </div>
     <div class="card" style="flex:1;min-width:200px;text-align:center">
-      <div style="font-size:32px;font-weight:900;background:linear-gradient(135deg,var(--purple),#8833cc);-webkit-background-clip:text;-webkit-text-fill-color:transparent" id="statPlan">FREE</div>
-      <div style="font-size:11px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1px;margin-top:4px">Your Plan</div>
+      <div style="font-size:30px;font-weight:800;color:var(--text)" id="statPlan">FREE</div>
+      <div style="font-size:12px;color:var(--textdim);margin-top:6px">Your Plan</div>
     </div>
   </div>
   <div class="card" style="margin-top:16px">
@@ -3536,7 +3614,7 @@ h1{font-family:"Space Grotesk","Plus Jakarta Sans",sans-serif;font-size:30px;fon
 </div>
 
 <!-- ALL TWEAKS -->
-<div class="page" id="page-tweaks" style="height:100%;flex-direction:column;min-height:0">
+<div class="page" id="page-tweaks">
   <div style="flex:0 0 auto">
     <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px">
       <div>
@@ -3673,7 +3751,7 @@ spotify.exe</textarea>
   <h1 id="macroTitle">Macro</h1>
   <div class="sub" id="macroSub">Capture a start and end point, then Nova Tweaks moves the cursor and performs the drag/click at the speed you choose. Windows uses the native cursor API; macOS uses Swift/CoreGraphics and requires Accessibility permission.</div>
   <div class="warnbox" id="macroWarn" style="display:none"></div>
-  <div class="warnbox" id="macroMacNote" style="display:none;background:rgba(255,170,0,.08);border-color:rgba(255,170,0,.35);color:var(--warn)">macOS: Macro automation needs <b>Accessibility</b> permission for the app/process running Nova Tweaks (System Settings → Privacy &amp; Security → Accessibility). If movement/clicks don’t work, grant access and try again.</div>
+  <div class="warnbox" id="macroMacNote" style="display:none;background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.35);color:var(--warn)">macOS: Macro automation needs <b>Accessibility</b> permission for the app/process running Nova Tweaks (System Settings → Privacy &amp; Security → Accessibility). If movement/clicks don’t work, grant access and try again.</div>
   <div class="macrow">
     <div class="card">
       <h3 style="margin-bottom:12px;font-size:15px">Path</h3>
@@ -3746,7 +3824,7 @@ spotify.exe</textarea>
 <div class="page" id="page-network">
   <h1>Ping Optimizer</h1>
   <div class="sub">Live latency monitor (ping, jitter, packet loss). This page <b>measures</b> your connection — it does not change your internet by itself. To apply network optimizations, turn on tweaks in <b>Tweaks → Networking</b>, then test again. Results vary by PC, router, ISP, and game server.</div>
-  <div class="card" style="margin-bottom:14px;border-color:rgba(245,158,11,.28);background:rgba(245,158,11,.06)">
+  <div class="card" style="margin-bottom:14px;border-color:rgba(239,68,68,.28);background:rgba(239,68,68,.06)">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
       <div style="font-size:12.5px;color:var(--textdim);line-height:1.6"><b style="color:var(--text)">Apply optimizations:</b> use the Networking tweaks (toggles show <b>ON</b> and give a notification). Some tweaks need admin, a reboot, or have no automatic restore — Nova will warn you.</div>
       <button class="btn sm" onclick="currentCat='Ping Optimizer';document.querySelector('[data-page=tweaks]').click();renderCatBar();renderTweaks();">Open Networking Tweaks</button>
@@ -3839,7 +3917,7 @@ spotify.exe</textarea>
     <div style="font-size:12px;color:var(--textdim);margin-bottom:12px">30 days per purchase. Balance is deducted immediately; no card is stored.</div>
     <div class="tierlist">
       <div class="tierrow"><div><b>Pro</b><div style="color:var(--textdim);font-size:11.5px">$5.99 · most tweaks, all crosshairs, macro</div></div><button class="btn sm" id="buyProBtn">Use balance</button></div>
-      <div class="tierrow"><div><b>Ultimate</b><div style="color:var(--textdim);font-size:11.5px">$12.99 · all 383 tweaks, Minecraft JVM, Potato Graphics</div></div><button class="btn sm" id="buyUltimateBtn">Use balance</button></div>
+      <div class="tierrow"><div><b>Ultimate</b><div style="color:var(--textdim);font-size:11.5px">$12.99 · all 387 tweaks, Minecraft JVM, Potato Graphics</div></div><button class="btn sm" id="buyUltimateBtn">Use balance</button></div>
     </div>
     <div style="margin-top:12px;font-size:11.5px;color:var(--textmuted);line-height:1.7">
       Card, PayPal and Cash App checkout is on the website. A paid upgrade arrives as a license key — paste it below.
@@ -3854,7 +3932,7 @@ spotify.exe</textarea>
     <div style="margin-top:12px;color:var(--textdim);font-size:11.5px;line-height:1.8">
       <b style="color:var(--text)">Free</b> — 30 core tweaks, restore point, Classic crosshair.<br>
       <b style="color:var(--text)">Pro</b> — most tweaks, every crosshair style, drag macro, ping and input work.<br>
-      <b style="color:var(--text)">Ultimate</b> — all 383 tweaks, Minecraft JVM tuning, advanced services, firmware controls, Potato Graphics.
+      <b style="color:var(--text)">Ultimate</b> — all 387 tweaks, Minecraft JVM tuning, advanced services, firmware controls, Potato Graphics.
     </div>
     <div id="acctMsg" style="display:none;margin-top:12px;font-size:12px;line-height:1.6"></div>
   </div>
@@ -3881,12 +3959,12 @@ spotify.exe</textarea>
     <textarea class="textarea" id="syncCode" style="min-height:60px" placeholder="Sync code appears here..."></textarea>
     <h3 style="margin:18px 0 8px;font-size:14px">Appearance</h3>
     <label style="font-size:12px;display:block;margin-bottom:4px">Accent color</label>
-    <input type="color" id="accentColor" value="#ff1a2e" style="width:60px;height:32px;border:none;background:none">
-    <label style="font-size:12px;display:block;margin:10px 0 4px">Sidebar color</label>
-    <input type="color" id="sidebarColor" value="#0d0d14" style="width:60px;height:32px;border:none;background:none">
+    <input type="color" id="accentColor" value="#ef4444" style="width:60px;height:32px;border:none;background:none">
+    <label style="font-size:12px;display:block;margin:10px 0 4px">Window tint</label>
+    <input type="color" id="sidebarColor" value="#0c0507" style="width:60px;height:32px;border:none;background:none">
     <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
       <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="toggleOutline" checked> Vibrant red outline</label>
-      <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="toggleSnow" checked> Snowfall</label>
+      <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="toggleSnow"> Snowfall</label>
     </div>
   </div>
 </div>
@@ -3940,7 +4018,7 @@ window.onerror=(m,u,l)=>{const e=document.getElementById('loginError');if(e)e.te
   let dragging=false,sx=0,sy=0,ox=0,oy=0;
   function onDown(e){
     if(e.target.closest('button,input,textarea,select,a,.toggle'))return;
-    const sb=e.target.closest('.sidebar');if(!sb)return;
+    const sb=e.target.closest('.tophead');if(!sb)return;
     dragging=true;sx=e.clientX;sy=e.clientY;
     const r=app.getBoundingClientRect();ox=r.left;oy=r.top;
     app.style.position='fixed';app.style.left=ox+'px';app.style.top=oy+'px';app.style.width=r.width+'px';app.style.height=r.height+'px';
@@ -4005,8 +4083,12 @@ async function api(path,body={}){
 document.querySelectorAll('.login-tab').forEach(t=>t.addEventListener('click',()=>{
   document.querySelectorAll('.login-tab').forEach(x=>x.classList.remove('active'));
   t.classList.add('active');
-  document.getElementById('loginForm').style.display=t.dataset.tab==='login'?'block':'none';
-  document.getElementById('registerForm').style.display=t.dataset.tab==='register'?'block':'none';
+  const isLogin=t.dataset.tab==='login';
+  document.getElementById('loginForm').style.display=isLogin?'block':'none';
+  document.getElementById('registerForm').style.display=isLogin?'none':'block';
+  const tt=document.getElementById('loginTitle'), ss=document.getElementById('loginSubtitle');
+  if(tt) tt.textContent=isLogin?'Sign in':'Create your account';
+  if(ss) ss.textContent=isLogin?'Sign in to pick up where you left off.':'Free to start. Your tweaks and plan follow the account.';
 }));
 
 document.getElementById('loginBtn').addEventListener('click',async()=>{
@@ -4063,18 +4145,30 @@ function onLogin(acc){
 
 (async function(){const r=await api('/api/autologin');if(r.success){onLogin(r.account)}})();
 
-document.querySelectorAll('.navbtn').forEach(b=>b.addEventListener('click',()=>{
-  document.querySelectorAll('.navbtn').forEach(x=>x.classList.remove('active'));
-  b.classList.add('active');
+function showPage(page){
+  document.querySelectorAll('.navbtn,.chip[data-page],.iconbtn[data-page]').forEach(x=>x.classList.toggle('active',x.dataset.page===page));
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  document.getElementById('page-'+b.dataset.page).classList.add('active');
-  if(b.dataset.page==='log')refreshLog();
-  if(b.dataset.page==='home')loadSysInfoText('homeSysInfo');
-  if(b.dataset.page==='bios')loadBios();
-  if(b.dataset.page==='macro')refreshMacroStatus();
-  if(b.dataset.page==='settings')renderBadges();
-  if(b.dataset.page==='network'){ if(!netAutoTimer) startNetAuto(); }
-}));
+  const target=document.getElementById('page-'+page);
+  if(target) target.classList.add('active');
+  if(page==='log')refreshLog();
+  if(page==='home')loadSysInfoText('homeSysInfo');
+  if(page==='bios')loadBios();
+  if(page==='macro')refreshMacroStatus();
+  if(page==='settings')renderBadges();
+  if(page==='network'){ if(!netAutoTimer) startNetAuto(); }
+  const c=document.querySelector('.content'); if(c){c.scrollTop=0;c.classList.toggle('tight',page==='tweaks');}
+}
+document.querySelectorAll('.navbtn,.chip[data-page],.iconbtn[data-page]').forEach(b=>b.addEventListener('click',()=>showPage(b.dataset.page)));
+
+const _searchEl=document.getElementById('tweakSearch');
+if(_searchEl){
+  let _st=null;
+  _searchEl.addEventListener('input',()=>{
+    tweakQuery=_searchEl.value.trim();
+    if(tweakQuery && !document.querySelector('.navbtn[data-page="tweaks"]').classList.contains('active')) showPage('tweaks');
+    clearTimeout(_st);_st=setTimeout(()=>{renderCatBar();renderTweaks();},90);
+  });
+}
 
 document.getElementById('logoutBtn').addEventListener('click',async()=>{
   try{await api('/api/logout')}catch(e){}
@@ -4096,13 +4190,14 @@ async function renderStats(){
   let r={};
   try{ r=await api('/api/sysstats',{}); }catch{}
   const pct=v=>(v===null||v===undefined||isNaN(v))?'—':v+'%';
+  const num=v=>(v===null||v===undefined||isNaN(v))?null:Number(v);
   const stats=[
-    {label:'CPU LOAD',value:pct(r.cpu),color:'var(--red)'},
-    {label:'MEMORY USED',value:pct(r.ram),color:'var(--warn)'},
-    {label:'DISK FREE',value:(r.diskFree==null?'—':r.diskFree+' GB'),color:'var(--green)'},
-    {label:'PLATFORM',value:(r.os||'—'),color:'var(--blue)'}
+    {label:'CPU usage',value:pct(r.cpu),pct:num(r.cpu),icon:'⚙'},
+    {label:'Memory used',value:pct(r.ram),pct:num(r.ram),icon:'▤'},
+    {label:'Disk free',value:(r.diskFree==null?'—':r.diskFree+' GB'),pct:(r.diskFree==null?null:Math.max(0,Math.min(100,100-Number(r.diskFree)))),icon:'▣'},
+    {label:'Platform',value:(r.os||'—'),pct:null,icon:'◈'}
   ];
-  document.getElementById('statsRow').innerHTML=stats.map(s=>`<div class="statcard"><div class="statlabel">${s.label}</div><div class="statval" style="background:linear-gradient(135deg,${s.color},var(--textdim));-webkit-background-clip:text;-webkit-text-fill-color:transparent">${s.value}</div></div>`).join('');
+  document.getElementById('statsRow').innerHTML=stats.map(s=>{const long=String(s.value).length>9;return `<div class="statcard"><div class="statbody"><div class="staticon">${s.icon}</div><div class="statval${long?' small':''}">${s.value}</div><div class="statlabel">${s.label}</div></div>${s.pct===null?'':'<div class="statring" style="--p:'+Math.round(s.pct)+'"></div>'}</div>`;}).join('');
 }
 
 const cats=['General','Input','Ping Optimizer','Power','Visual','Services','Game','Storage','Firmware','Privacy','Windows'];
@@ -4115,8 +4210,12 @@ function catCount(c){
   return all.filter(t=>t.available&&t.cat===c).length;
 }
 function renderCatBar(){
-  document.getElementById('catBar').innerHTML=cats.map(c=>`<button class="catbtn ${c===currentCat?'active':''}" data-cat="${c}" title="${c}">${catLabel(c)}<span style="opacity:.55;margin-left:6px;font-size:10px">${catCount(c)}</span></button>`).join('');
-  document.querySelectorAll('.catbtn').forEach(b=>b.addEventListener('click',()=>{currentCat=b.dataset.cat;renderCatBar();renderTweaks()}));
+  document.getElementById('catBar').innerHTML=cats.map(c=>`<button class="catbtn ${c===currentCat&&!tweakQuery?'active':''}" data-cat="${c}" title="${c}">${catLabel(c)}<span class="catcount">${catCount(c)}</span></button>`).join('');
+  document.querySelectorAll('.catbtn').forEach(b=>b.addEventListener('click',()=>{
+    currentCat=b.dataset.cat;tweakQuery='';const si=document.getElementById('tweakSearch');if(si)si.value='';
+    renderCatBar();renderTweaks();
+    const nav=document.querySelector('.navbtn[data-page="tweaks"]');if(nav&&!nav.classList.contains('active'))nav.click();
+  }));
 }
 
 function ensurePreviewBanner(on){
@@ -4125,7 +4224,7 @@ function ensurePreviewBanner(on){
   if(!b){
     b=document.createElement('div');
     b.id='previewBanner';
-    b.style.cssText='position:sticky;top:0;z-index:50;margin:-4px 0 14px;padding:10px 14px;border:1px solid rgba(255,170,0,.45);background:linear-gradient(135deg,rgba(255,170,0,.14),rgba(255,26,46,.06));border-radius:10px;color:#ffdca8;font-size:12px;line-height:1.5';
+    b.style.cssText='position:sticky;top:0;z-index:50;margin:-4px 0 14px;padding:10px 14px;border:1px solid rgba(239,68,68,.45);background:linear-gradient(135deg,rgba(239,68,68,.14),rgba(239,68,68,.06));border-radius:10px;color:#fecaca;font-size:12px;line-height:1.5';
     b.innerHTML='<b style="color:#fff">Windows Preview (macOS dev mode)</b> — You’re seeing the Windows UI and tweak availability as Windows users see it. Toggling tweaks is simulated only; no Windows system changes are made on this Mac.';
     const c=document.querySelector('.content'); if(c) c.insertBefore(b,c.firstChild);
   }
@@ -4151,33 +4250,58 @@ async function loadTweaks(){
   if(tsub) tsub.textContent=Object.keys(state.tweaks).length+' working tweaks in the '+state.game+' profile. Every change is reversible.';
   renderCatBar();renderTweaks();updateCounts();updateMacroAvailability();renderBadges();
 }
+let tweakQuery='';
 function tweaksFor(cat){
-  const all=Object.values(state.tweaks);
+  let all=Object.values(state.tweaks);
+  if(tweakQuery){
+    const q=tweakQuery.toLowerCase();
+    return all.filter(t=>t.available && ((t.name||'')+' '+(t.desc||'')+' '+(t.sub||'')+' '+(t.cat||'')).toLowerCase().includes(q));
+  }
   if(cat==='Windows') return all.filter(t=>t.os==='Windows'||t.os==='Both');
   return all.filter(t=>t.available&&t.cat===cat);
+}
+function tweakIcon(t){
+  const c=t.cat||'';
+  if(c==='Ping Optimizer') return '📡';
+  if(c==='Input') return '🖱';
+  if(c==='Power') return '⚡';
+  if(c==='Visual') return '🖼';
+  if(c==='Services') return '🧹';
+  if(c==='Game') return '🎮';
+  if(c==='Storage') return '🗄';
+  if(c==='Firmware') return '🧬';
+  if(c==='Privacy') return '🛡';
+  if(c==='Windows') return '🪟';
+  return '✦';
 }
 function tweakCard(t){
   const locked = !!t.locked && !t.state;
   const checked=t.state?'checked':'';
   const disabled=(!t.available||locked)?'disabled':'';
   const riskCls=t.risk.toLowerCase();
+  const riskLabel=t.risk==='Danger'?'Advanced':t.risk;
   const tier=t.required||'Free';
   const tierCls=tier==='Ultimate'?'ult':tier.toLowerCase();
-  const planBadge=`<span class="badge tier tier-${tierCls}">${tier.toUpperCase()}</span>`;
+  const freeBadge=(tier==='Free'&&!locked)?'<span class="badge free">FREE</span>':'';
+  const planBadge=(tier!=='Free')?`<span class="badge tier tier-${tierCls}">${tier}</span>`:'';
   const availBadge=t.available?'':'<span class="badge unavailable">Not on this PC</span>';
-  const lockBadge=locked?'<span class="badge unavailable">🔒 Locked</span>':'';
-  const onBadge=(t.state&&!locked)?'<span class="badge" style="background:rgba(34,197,94,.14);color:#86efac;border:1px solid rgba(34,197,94,.28)">ON</span>':'';
-  const noRestoreBadge=(t.state&&t.hasOff===false)?'<span class="badge" style="background:rgba(245,158,11,.12);color:#fcd34d;border:1px solid rgba(245,158,11,.28)" title="No automatic restore handler. Use Restore or a system restore point if needed.">No auto-restore</span>':'';
-  const newBadge=t.id==='inputdelay'||t.id==='pingstab'||t.id==='bcdedit'?'<span class="badge new">NEW</span>':'';
-  const osCls='os-'+(t.os||'').toLowerCase();
-  const osBadge='<span class="badge '+osCls+'">'+(t.os||'')+'</span>';
-  return `<div class="tweakcard rotating-outline${locked?' locked':''}${t.state?' on':''}" data-tweak="${t.id}">
+  const lockBadge=locked?'<span class="badge unavailable">Locked</span>':'';
+  const onBadge=(t.state&&!locked)?'<span class="badge" style="background:rgba(239,68,68,.16);color:#fecaca">ON</span>':'';
+  const noRestoreBadge=(t.state&&t.hasOff===false)?'<span class="badge" style="background:rgba(239,68,68,.08);color:var(--textdim)" title="No automatic restore handler. Use Restore or a system restore point if needed.">No auto-restore</span>':'';
+  const newBadge=(t.id==='inputdelay'||t.id==='pingstab'||t.id==='bcdedit')?'<span class="badge new">NEW</span>':'';
+  return `<div class="tweakcard${locked?' locked':''}${t.state?' on':''}" data-tweak="${t.id}">
       <div class="tweakhead">
-        <span class="badge ${riskCls}">${t.risk}</span>${osBadge}${availBadge}${planBadge}${lockBadge}${onBadge}${noRestoreBadge}${newBadge}
+        <div class="tweakicon">${tweakIcon(t)}</div>
+        <div class="tweakname">${t.name}</div>
+        ${freeBadge}
+      </div>
+      <div class="tweakdesc">${t.desc}</div>
+      <div class="tweakfoot">
+        <div class="tweakpills">
+          <span class="badge ${riskCls}">${riskLabel}</span>${onBadge}${planBadge}${lockBadge}${noRestoreBadge}${availBadge}${newBadge}
+        </div>
         <label class="toggle" title="${t.state?'Turn off':'Turn on'}"><input type="checkbox" data-id="${t.id}" ${checked} ${disabled}><span class="slider"></span></label>
       </div>
-      <div class="tweakname">${t.name}</div>
-      <div class="tweakdesc">${t.desc}</div>
     </div>`;
 }
 function renderTweaks(){
@@ -4191,10 +4315,10 @@ function renderTweaks(){
     bySub[sub].push(t);
   }
   grid.innerHTML=groups.map(sub=>`<div class="subgroup">
-      <div style="display:flex;align-items:center;gap:8px;margin:18px 0 2px">
-        <h3 style="font-size:13px;margin:0;letter-spacing:.2px">${sub}</h3>
+      <div class="grouphead">
+        <h3 class="groupname">${sub}</h3>
         <span class="subcount">${bySub[sub].length} tweak${bySub[sub].length===1?'':'s'}</span>
-        <div style="flex:1;height:1px;background:var(--border)"></div>
+        <div class="groupline"></div>
       </div>
       <div class="grid">${bySub[sub].map(tweakCard).join('')}</div>
     </div>`).join('');
@@ -4233,7 +4357,7 @@ function updateCounts(){
   document.getElementById('ptsInfo').textContent=applied+' tweaks applied';
   document.getElementById('homeSub').textContent=applied+' of '+unlocked+' unlocked tweaks on · '+state.plan+' plan'+(locked?' · '+locked+' locked':'');
   document.getElementById('sugText').textContent=pct+'% optimized · '+applied+' of '+available+' available on this PC.';
-  document.getElementById('progressFill').style.width=pct+'%';
+  const pf=document.getElementById('progressFill'); if(pf) pf.style.width=pct+'%';
   const hp=document.getElementById('homeProgress'); if(hp) hp.style.width=pct+'%';
   const sa=document.getElementById('statApplied'); if(sa) sa.textContent=applied;
   const st=document.getElementById('statTweaks'); if(st) st.textContent=total;
@@ -4328,11 +4452,11 @@ function drawNetChart(id,values){
     if(!started){ctx.moveTo(x,y);started=true;}else ctx.lineTo(x,y);
   });
   const grad=ctx.createLinearGradient(0,0,w,0);
-  grad.addColorStop(0,'#ff1a2e');grad.addColorStop(1,'#ff8a95');
+  grad.addColorStop(0,'#ef4444');grad.addColorStop(1,'#fca5a5');
   ctx.strokeStyle=grad;ctx.lineWidth=2;ctx.lineJoin='round';ctx.stroke();
   const last=pts[pts.length-1];
   const lx=(values.length-1)*step,ly=h-8-(last/max)*(h-16);
-  ctx.beginPath();ctx.arc(lx,ly,2.5,0,Math.PI*2);ctx.fillStyle='#ff8a95';ctx.fill();
+  ctx.beginPath();ctx.arc(lx,ly,2.5,0,Math.PI*2);ctx.fillStyle='#fca5a5';ctx.fill();
 }
 function applyNetStats(r){
   if(!r||r.success===false){
@@ -4620,7 +4744,7 @@ document.getElementById('biosRebootBtn').addEventListener('click',async()=>{
 });
 
 document.getElementById('accentColor').addEventListener('input',e=>{document.documentElement.style.setProperty('--red',e.target.value);});
-document.getElementById('sidebarColor').addEventListener('input',e=>{document.querySelector('.sidebar').style.background=e.target.value;});
+const _sbColor=document.getElementById('sidebarColor'); if(_sbColor) _sbColor.addEventListener('input',e=>{const mc=document.querySelector('.maincol'); if(mc) mc.style.background=e.target.value;});
 document.getElementById('toggleOutline').addEventListener('change',e=>{document.querySelectorAll('.tweakcard').forEach(c=>{if(e.target.checked)c.classList.add('rotating-outline');else c.classList.remove('rotating-outline');});});
 document.getElementById('toggleSnow').addEventListener('change',e=>{document.getElementById('snowCanvas').style.display=e.target.checked?'block':'none';});
 
