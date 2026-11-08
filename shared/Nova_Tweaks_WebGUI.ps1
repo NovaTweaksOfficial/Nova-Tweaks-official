@@ -3060,23 +3060,30 @@ $HtmlPage = @'
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Nova Tweaks</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* NovaTweaks font-family aliases */
+@font-face{font-family:"Nova Display";src:local("Space Grotesk");font-display:swap}
+@font-face{font-family:"Nova Sans";src:local("Plus Jakarta Sans");font-display:swap}
+</style>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
+/* Nova font aliases (NovaTweaks uses Nova Display/Sans; we map to bundled-equivalent families) */
 :root{
-/* Nova UI palette (inspired by NovaTweaks Electron) */
---bg:#0c0506;--bg2:#100709;--sidebar:#150a0b;--card:#150a0c;--card2:#1e0e12;--cardhover:#2a1418;
---red:#dc2626;--red2:#b91c1c;--red3:#ef4444;--redglow:rgba(220,38,38,.38);--redglow2:rgba(220,38,38,.14);--redglow3:rgba(220,38,38,.06);
+/* NovaTweaks palette (matched to running project: #0c0507 base, Nova red ramp) */
+--bg:#0c0507;--bg2:#12080a;--sidebar:#150a0b;--card:#150a0b;--card2:#1e0e12;--cardhover:#2a1418;
+--red:#ef4444;--red2:#dc2626;--red3:#f87171;--red-deep:#b91c1c;--redglow:rgba(239,68,68,.32);--redglow2:rgba(239,68,68,.14);--redglow3:rgba(239,68,68,.06);
 --danger:#ef4444;--warn:#f59e0b;--green:#22c55e;--blue:#38bdf8;--purple:#a855f7;
---text:#fbeaea;--textdim:#c9a6a8;--textmuted:#8f7476;--border:#2a1418;--border2:#3a1d22;
---shadow:0 8px 28px rgba(0,0,0,.55);--shadow-lg:0 18px 56px rgba(0,0,0,.72);--shadow-red:0 8px 28px rgba(220,38,38,.22);
---radius:14px;--radius-sm:10px;--radius-xs:6px;
---nova-glass:linear-gradient(180deg,rgba(30,14,18,.78),rgba(21,10,12,.72));
+--text:#fff1f2;--textdim:#c9a6a8;--textmuted:#8f7476;--border:#2a1418;--border2:#3d2026;
+--shadow:0 8px 28px rgba(0,0,0,.55);--shadow-lg:0 18px 56px rgba(0,0,0,.72);--shadow-red:0 8px 28px rgba(239,68,68,.18);
+--radius:12px;--radius-sm:9px;--radius-xs:6px;
+--nova-glass:linear-gradient(180deg,rgba(30,14,18,.72),rgba(21,10,11,.68));
 }
-body{font-family:'Plus Jakarta Sans','Nova Sans',system-ui,sans-serif;background:radial-gradient(1200px 600px at 15% -10%,rgba(185,28,28,.18),transparent 55%),radial-gradient(900px 500px at 100% 0%,rgba(220,38,38,.10),transparent 45%),linear-gradient(180deg,var(--bg2),var(--bg));color:var(--text);display:flex;height:100vh;overflow:hidden;-webkit-font-smoothing:antialiased;letter-spacing:-.01em}
+html,body{background:#0c0507}
+body{font-family:'Plus Jakarta Sans','Nova Sans','Inter',system-ui,sans-serif;background:#0c0507;color:var(--text);display:flex;height:100vh;overflow:hidden;-webkit-font-smoothing:antialiased;letter-spacing:-.01em}
 
-/* Subtle Nova ambient */
-body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 70% 45% at 18% 30%,rgba(220,38,38,.09),transparent),radial-gradient(ellipse 55% 35% at 82% 70%,rgba(185,28,28,.06),transparent);pointer-events:none;z-index:0}
+/* Nova ambient (subtle, matches dark Nova shell) */
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 60% 40% at 20% 0%,rgba(239,68,68,.07),transparent),radial-gradient(ellipse 50% 35% at 85% 100%,rgba(185,28,28,.05),transparent);pointer-events:none;z-index:0}
 
 /* Login overlay */
 .login-overlay{position:fixed;inset:0;background:radial-gradient(ellipse at center,rgba(255,26,46,.12),var(--bg));z-index:10000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(8px)}
@@ -4099,7 +4106,7 @@ async function renderStats(){
 }
 
 const cats=['General','Input','Ping Optimizer','Power','Visual','Services','Game','Storage','Firmware','Privacy','Windows'];
-const catLabels={'General':'General','Input':'Input & Latency','Ping Optimizer':'Networking','Power':'Power','Visual':'Visuals','Services':'Decrapifying & Services','Game':'Game Profiles','Storage':'Storage & Cleanup','Firmware':'BIOS / Firmware','Privacy':'Privacy','Windows':'Windows'};
+const catLabels={'General':'General','Input':'Input & Latency','Ping Optimizer':'Networking','Power':'Power','Visual':'Visuals','Services':'Debloating & Services','Game':'Game Profiles','Storage':'App Removal & Cleanup','Firmware':'BIOS / Firmware','Privacy':'Debloating / Privacy','Windows':'Windows'};
 function catLabel(c){return catLabels[c]||c;}
 let currentCat='General';
 function catCount(c){
