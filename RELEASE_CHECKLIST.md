@@ -42,8 +42,9 @@ This checklist covers the current Nova Tweaks project state (shared core, Window
 - [ ] Confirm key format/secrets match the app build.
 
 ## CI / distribution
-- [ ] Build separate Windows executables from `windows/Fortnite/Nova_Tweaks_Fortnite_Windows.ps1` and `windows/Minecraft/Nova_Tweaks_Minecraft_Windows.ps1` (e.g. `-RequireAdmin -NoConsole -STA -x64` as appropriate).
-- [ ] Publish release assets and update `docs/config.js` download URLs.
+- [x] Build separate Windows executables in CI (`NovaTweaks-Fortnite-Windows.exe`, `NovaTweaks-Minecraft-Windows.exe`, plus combined `NovaTweaks.exe`).
+- [x] Point `docs/config.js` Windows download URLs at the per-product release assets.
+- [ ] Push a `v*` tag and confirm all three assets attach to the GitHub release.
 - [ ] Verify GitHub Pages deploy from `main`/`docs`.
 
 ## Safety notes
