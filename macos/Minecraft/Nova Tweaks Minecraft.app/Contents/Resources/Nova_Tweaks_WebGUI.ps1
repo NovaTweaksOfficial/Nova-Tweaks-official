@@ -3416,7 +3416,11 @@ h1{font-family:"Space Grotesk","Plus Jakarta Sans",sans-serif;font-size:30px;fon
   <div class="brand" id="brandName">Nova Tweaks</div>
   <div class="brandsub" id="brandSub">Performance Suite</div>
   <div class="planbadge free" id="planBadge">FREE</div>
-  <div style="padding:8px 10px 4px;font-size:10px;color:var(--textmuted);line-height:1.55">All tabs are at the top. Use <b style="color:var(--text)">Tweaks</b> for categories and settings.</div>
+  <div style="padding:10px 10px 6px;font-size:10px;text-transform:uppercase;letter-spacing:1.8px;color:var(--textmuted);font-weight:800">System</div>
+  <button class="navbtn" data-page="settings"><span class="navicon">✦</span>Settings</button>
+  <button class="navbtn" data-page="restore"><span class="navicon">↺</span>Restore</button>
+  <button class="navbtn" data-page="bench"><span class="navicon">📊</span>Benchmark</button>
+  <button class="navbtn" data-page="log"><span class="navicon">☰</span>Log</button>
   <div class="sidebar-bottom">
     <div class="account-badge" id="accountBadge" style="display:none">
       <div class="account-avatar" id="accountAvatar">G</div>
@@ -3438,16 +3442,20 @@ h1{font-family:"Space Grotesk","Plus Jakarta Sans",sans-serif;font-size:30px;fon
   <button class="navbtn" data-page="fps"><span class="navicon">🚀</span>FPS Booster</button>
   <button class="navbtn" data-page="macro"><span class="navicon">🖱</span>Macro</button>
   <button class="navbtn" data-page="bios"><span class="navicon">🧬</span>BIOS</button>
-  <button class="navbtn" data-page="restore"><span class="navicon">↺</span>Restore</button>
-  <button class="navbtn" data-page="bench"><span class="navicon">📊</span>Benchmark</button>
-  <button class="navbtn" data-page="settings"><span class="navicon">✦</span>Settings</button>
-  <button class="navbtn" data-page="log"><span class="navicon">☰</span>Log</button>
 </div>
 
 <div class="workspace">
 <div class="content">
 <!-- HOME -->
 <div class="page active" id="page-home">
+  <div class="card" style="margin-top:0;margin-bottom:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+      <h3 style="font-size:16px;margin:0">PC Specs</h3>
+      <button class="btn ghost xs" id="homeSysRefreshBtn">Refresh</button>
+    </div>
+    <div style="color:var(--textmuted);font-size:11px;margin-bottom:10px">Your system info (OS, CPU, RAM, GPU where available). Use this to pick safe tweaks for your hardware.</div>
+    <pre id="homeSysInfo" style="margin:0;color:var(--textdim);font-size:12px;font-family:'JetBrains Mono',monospace;line-height:1.6;white-space:pre-wrap">Loading system info...</pre>
+  </div>
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:6px">
     <div>
       <h1 id="greeting" style="font-size:34px">Good evening</h1>
@@ -3514,30 +3522,30 @@ h1{font-family:"Space Grotesk","Plus Jakarta Sans",sans-serif;font-size:30px;fon
     <div class="badgegrid" id="homeBadges"></div>
   </div>
   <div class="card" style="margin-top:16px">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">
-      <h3 style="font-size:16px;margin:0">PC Specs</h3>
-      <button class="btn ghost xs" id="homeSysRefreshBtn">Refresh</button>
-    </div>
-    <div style="color:var(--textmuted);font-size:11px;margin-bottom:10px">Your system info (OS, CPU, RAM, GPU where available). Use this to pick safe tweaks for your hardware.</div>
-    <pre id="homeSysInfo" style="margin:0;color:var(--textdim);font-size:12px;font-family:'JetBrains Mono',monospace;line-height:1.6;white-space:pre-wrap">Loading system info...</pre>
-  </div>
-  <div class="card" style="margin-top:16px">
     <h3 style="margin-bottom:10px;font-size:16px">What's inside Nova Tweaks</h3>
     <div style="color:var(--textdim);font-size:13px;line-height:1.7">@@INSIDE_LEAD@@ Ping Optimizer, input/latency tweaks, Crosshair, Game Booster, FPS Booster, Potato Graphics (safe/reversible config where supported), decrapifying/cleanup options, and system optimizations. Results vary by hardware, OS, and game — test and use Restore/Revert.</div>
   </div>
 </div>
 
 <!-- ALL TWEAKS -->
-<div class="page" id="page-tweaks">
-  <h1>All Tweaks</h1>
-  <div class="sub" id="tweakSub">@@TWEAK_SUB@@ Each one is a card with a risk label, profile badge and a switch.</div>
-  <div class="catbar" id="catBar"></div>
-  <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
-    <button class="btn danger sm" id="removeAllBtn">Remove All Tweaks</button>
-    <button class="btn danger sm" id="removeCatBtn">Remove All in Category</button>
-    <button class="btn ghost sm" id="revertAllBtn2">Revert All Changes</button>
+<div class="page" id="page-tweaks" style="height:100%;flex-direction:column;min-height:0">
+  <div style="flex:0 0 auto">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+      <div>
+        <h1 style="margin:0;font-size:26px">Tweaks</h1>
+        <div class="sub" id="tweakSub" style="margin:4px 0 0;font-size:12.5px">@@TWEAK_SUB@@ Use categories below. Toggle tweaks on/off; risky changes show labels.</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn danger xs" id="removeAllBtn">Remove All</button>
+        <button class="btn danger xs" id="removeCatBtn">Remove Category</button>
+        <button class="btn ghost xs" id="revertAllBtn2">Revert All</button>
+      </div>
+    </div>
+    <div class="catbar" id="catBar" style="margin-bottom:10px"></div>
   </div>
-  <div class="grid" id="tweakGrid"></div>
+  <div id="tweakScroll" style="flex:1 1 auto;min-height:0;overflow:auto;padding-right:4px">
+    <div class="grid" id="tweakGrid"></div>
+  </div>
 </div>
 
 <!-- CROSSHAIR -->
