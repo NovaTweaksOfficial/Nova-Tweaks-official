@@ -3209,8 +3209,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .account-avatar{width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,var(--red),var(--red2));display:grid;place-items:center;font-weight:700;color:#150a0b;font-size:11px;box-shadow:none;flex-shrink:0}
 .accountchip .userinfo{font-size:12.5px;font-weight:600;line-height:1.25;color:var(--text)}
 .accountchip .ptsinfo{font-size:10px;font-weight:600;color:var(--red3);line-height:1.25;margin-top:0}
-.chiprail{display:flex;align-items:center;gap:5px;padding:0 26px 10px;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
-.chiprail::-webkit-scrollbar{height:0;display:none}
+.chiprail{display:flex;align-items:center;gap:5px;padding:0 26px 10px;flex-wrap:wrap;overflow:visible}
 .rail-label{flex-shrink:0;font-size:9.5px;font-weight:700;letter-spacing:1.6px;color:var(--textmuted);text-transform:uppercase;margin-right:2px}
 .chip{display:flex;align-items:center;gap:6px;height:28px;padding:0 9px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,.025);color:var(--textdim);font-family:inherit;font-size:11.5px;font-weight:500;cursor:pointer;white-space:nowrap;flex-shrink:0;transition:background-color .12s ease,color .12s ease}
 .chip:hover{background:var(--cardhover);color:var(--text)}
@@ -3335,7 +3334,7 @@ h1{font-family:"Nova Sans","Plus Jakarta Sans",system-ui,sans-serif;font-size:26
 .textarea:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3px var(--redglow2)}
 
 /* Category chips (Electron chip rail) */
-.catbar{display:flex;gap:5px;margin:0;flex-wrap:nowrap;align-items:center;flex-shrink:0}
+.catbar{display:flex;gap:5px;margin:0;flex-wrap:wrap;align-items:center}
 .catbtn{display:flex;align-items:center;gap:6px;height:28px;padding:0 9px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,.025);color:var(--textdim);font-family:inherit;font-size:11.5px;font-weight:500;cursor:pointer;white-space:nowrap;transition:background-color .12s ease,color .12s ease;box-shadow:none}
 .catbtn:hover{background:var(--cardhover);color:var(--text)}
 .catbtn.active{background:rgba(239,68,68,.13);border-color:rgba(239,68,68,.4);color:var(--text);font-weight:600;box-shadow:none}
