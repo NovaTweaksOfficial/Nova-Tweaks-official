@@ -76,10 +76,13 @@ $builtinVerbs = @(
 $total = 0
 $bad = New-Object System.Collections.Generic.List[string]
 $ids = New-Object System.Collections.Generic.HashSet[string]
+$missingOff = New-Object System.Collections.Generic.List[string]
 
 foreach ($table in $tweakTables) {
     $id = $null
     $action = $null
+    $hasOff = $false
+    $name = $null
     $risk = $null
     $win = $null
     $mac = $null
@@ -89,11 +92,13 @@ foreach ($table in $tweakTables) {
         $key = Get-ConstantValue $pair.Item1
         switch ($key) {
             "Id"     { $id = Get-ConstantValue $pair.Item2 }
+            "Name"   { $name = Get-ConstantValue $pair.Item2 }
             "Risk"   { $risk = Get-ConstantValue $pair.Item2 }
             "Win"    { $win = $pair.Item2.Extent.Text.Trim() }
             "Mac"    { $mac = $pair.Item2.Extent.Text.Trim() }
             "Cat"    { $cat = Get-ConstantValue $pair.Item2 }
             "Action" { $action = Get-ActionBody $pair.Item2 }
+            "Off"    { $hasOff = -not [string]::IsNullOrWhiteSpace((Get-ActionBody $pair.Item2)) }
         }
     }
 
@@ -119,11 +124,17 @@ foreach ($table in $tweakTables) {
     # Catch typo'd helper calls such as Invoke-NonexistentTweak.
     $invokeCalls = [regex]::Matches($action, '\bInvoke-[A-Za-z0-9_]+')
     foreach ($invokeCall in $invokeCalls) {
-        $name = $invokeCall.Value
-        if ($builtinVerbs -contains $name) { continue }
-        if (-not $definedFunctions.Contains($name)) {
-            $bad.Add("$id (calls undefined function $name)")
+        $fn = $invokeCall.Value
+        if ($builtinVerbs -contains $fn) { continue }
+        if (-not $definedFunctions.Contains($fn)) {
+            $bad.Add("$id (calls undefined function $fn)")
         }
+    }
+
+    # Informational: missing Off handler (non-fatal). Cleanups/one-way deletes are often intentional.
+    $cleanupLike = ($id -match 'clear|cache|temp|crash|dump|log' -or ($name -and $name -match 'Clear|Cleanup|Delete|Remove cache|Purge'))
+    if (-not $hasOff -and -not $cleanupLike) {
+        $missingOff.Add("$id ($(if($name){$name}else{'unnamed'}))")
     }
 }
 
@@ -136,6 +147,11 @@ if ($bad.Count -gt 0) {
 }
 
 Write-Host "Tweak check passed: $total tweaks, every action is implemented." -ForegroundColor Green
+if ($missingOff.Count -gt 0) {
+    Write-Host "Info: $($missingOff.Count) non-cleanup tweaks have no Off handler (restore-point/global revert still applies where implemented):" -ForegroundColor Yellow
+    $missingOff | Select-Object -First 15 | ForEach-Object { Write-Host "  - $_" -ForegroundColor DarkYellow }
+    if ($missingOff.Count -gt 15) { Write-Host "  ... and $($missingOff.Count - 15) more" -ForegroundColor DarkYellow }
+}
 
 $printable = New-Object System.Collections.Generic.List[string]
 foreach ($table in $tweakTables) {

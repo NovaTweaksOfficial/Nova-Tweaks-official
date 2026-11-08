@@ -2958,17 +2958,19 @@ $HtmlPage = @'
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
---bg:#050508;--bg2:#0a0a0f;--sidebar:#0d0d14;--card:#111119;--card2:#181822;--cardhover:#1f1f2e;
---red:#ff1a2e;--red2:#cc0018;--red3:#ff4d5e;--redglow:rgba(255,26,46,.4);--redglow2:rgba(255,26,46,.15);--redglow3:rgba(255,26,46,.05);
---danger:#ff4757;--warn:#ffaa00;--green:#00ff88;--blue:#00aaff;--purple:#aa44ff;
---text:#f5f5fa;--textdim:#8888a0;--textmuted:#55556a;--border:#1e1e2e;--border2:#2e2e42;
---shadow:0 4px 24px rgba(0,0,0,.5);--shadow-lg:0 12px 48px rgba(0,0,0,.7);--shadow-red:0 4px 24px rgba(255,26,46,.3);
---radius:12px;--radius-sm:8px;--radius-xs:4px
+/* Nova UI palette (inspired by NovaTweaks Electron) */
+--bg:#0c0506;--bg2:#100709;--sidebar:#150a0b;--card:#150a0c;--card2:#1e0e12;--cardhover:#2a1418;
+--red:#dc2626;--red2:#b91c1c;--red3:#ef4444;--redglow:rgba(220,38,38,.38);--redglow2:rgba(220,38,38,.14);--redglow3:rgba(220,38,38,.06);
+--danger:#ef4444;--warn:#f59e0b;--green:#22c55e;--blue:#38bdf8;--purple:#a855f7;
+--text:#fbeaea;--textdim:#c9a6a8;--textmuted:#8f7476;--border:#2a1418;--border2:#3a1d22;
+--shadow:0 8px 28px rgba(0,0,0,.55);--shadow-lg:0 18px 56px rgba(0,0,0,.72);--shadow-red:0 8px 28px rgba(220,38,38,.22);
+--radius:14px;--radius-sm:10px;--radius-xs:6px;
+--nova-glass:linear-gradient(180deg,rgba(30,14,18,.78),rgba(21,10,12,.72));
 }
-body{font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;height:100vh;overflow:hidden;-webkit-font-smoothing:antialiased;letter-spacing:-.01em}
+body{font-family:'Plus Jakarta Sans','Nova Sans',system-ui,sans-serif;background:radial-gradient(1200px 600px at 15% -10%,rgba(185,28,28,.18),transparent 55%),radial-gradient(900px 500px at 100% 0%,rgba(220,38,38,.10),transparent 45%),linear-gradient(180deg,var(--bg2),var(--bg));color:var(--text);display:flex;height:100vh;overflow:hidden;-webkit-font-smoothing:antialiased;letter-spacing:-.01em}
 
-/* Animated background */
-body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 80% 50% at 20% 40%,rgba(255,26,46,.06),transparent),radial-gradient(ellipse 60% 40% at 80% 60%,rgba(255,26,46,.04),transparent),radial-gradient(ellipse 50% 30% at 50% 90%,rgba(170,68,255,.03),transparent);pointer-events:none;z-index:0}
+/* Subtle Nova ambient */
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 70% 45% at 18% 30%,rgba(220,38,38,.09),transparent),radial-gradient(ellipse 55% 35% at 82% 70%,rgba(185,28,28,.06),transparent);pointer-events:none;z-index:0}
 
 /* Login overlay */
 .login-overlay{position:fixed;inset:0;background:radial-gradient(ellipse at center,rgba(255,26,46,.12),var(--bg));z-index:10000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(8px)}
@@ -2991,16 +2993,16 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .login-footer{text-align:center;margin-top:22px;color:var(--textmuted);font-size:11px;position:relative;z-index:1}
 .login-footer a{color:var(--red);text-decoration:none;font-weight:600}
 
-/* Sidebar */
-.sidebar{width:230px;background:linear-gradient(180deg,var(--sidebar) 0%,#08080e 100%);border-right:1px solid var(--border);padding:20px 12px;display:flex;flex-direction:column;gap:2px;position:relative;overflow:hidden;z-index:1}
-.sidebar::before{content:'';position:absolute;top:0;left:0;right:0;height:240px;background:radial-gradient(circle at 50% 0%,var(--redglow2),transparent 70%);pointer-events:none;opacity:.8}
-.brand{font-family:"Space Grotesk","Plus Jakarta Sans",sans-serif;font-size:28px;font-weight:900;background:linear-gradient(135deg,var(--red),var(--red3),#ff8a95);-webkit-background-clip:text;-webkit-text-fill-color:transparent;padding:0 8px;position:relative;z-index:1;letter-spacing:-1px}
-.brandsub{font-size:10px;color:var(--textmuted);padding:0 8px;margin-bottom:16px;position:relative;z-index:1;text-transform:uppercase;letter-spacing:3px}
-.planbadge{display:inline-block;padding:5px 14px;border-radius:20px;font-size:10px;font-weight:800;margin:0 8px 20px;background:linear-gradient(135deg,var(--red),var(--red2));color:#fff;box-shadow:0 2px 12px var(--redglow);position:relative;z-index:1;letter-spacing:1px}
-.navbtn{background:transparent;border:none;color:var(--textdim);padding:11px 14px;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;text-align:left;width:100%;transition:all .2s;font-weight:500;position:relative;z-index:1;display:flex;align-items:center;gap:10px}
-.navbtn:hover{background:rgba(255,255,255,.04);color:var(--text);transform:translateX(3px)}
-.navbtn.active{background:linear-gradient(90deg,rgba(255,26,46,.15),transparent);color:var(--red);border-left:3px solid var(--red);padding-left:11px;font-weight:600}
-.navicon{font-size:14px;opacity:.8;width:20px;text-align:center}
+/* Sidebar - Nova layout */
+.sidebar{width:242px;background:linear-gradient(180deg,rgba(21,10,11,.98),rgba(12,5,6,.98));border-right:1px solid var(--border);padding:18px 12px 14px;display:flex;flex-direction:column;gap:3px;position:relative;overflow:hidden;z-index:1;backdrop-filter:blur(10px)}
+.sidebar::before{content:'';position:absolute;top:-40px;left:-20px;right:-20px;height:220px;background:radial-gradient(circle at 30% 0%,rgba(220,38,38,.22),transparent 62%);pointer-events:none}
+.brand{font-family:"Space Grotesk","Nova Display","Plus Jakarta Sans",sans-serif;font-size:27px;font-weight:700;background:linear-gradient(135deg,#fff1f2,var(--red3),var(--red));-webkit-background-clip:text;-webkit-text-fill-color:transparent;padding:2px 10px 0;position:relative;z-index:1;letter-spacing:-.8px}
+.brandsub{font-size:10px;color:var(--textmuted);padding:0 10px;margin:2px 0 12px;position:relative;z-index:1;text-transform:uppercase;letter-spacing:2.6px;font-weight:700}
+.planbadge{display:inline-flex;align-items:center;padding:5px 12px;border-radius:999px;font-size:10px;font-weight:800;margin:0 10px 16px;background:linear-gradient(135deg,var(--red),var(--red2));color:#fff;box-shadow:0 6px 18px rgba(220,38,38,.22);position:relative;z-index:1;letter-spacing:.8px;border:1px solid rgba(255,255,255,.08)}
+.navbtn{background:transparent;border:1px solid transparent;color:var(--textdim);padding:10px 12px;border-radius:10px;cursor:pointer;font-size:13px;text-align:left;width:100%;transition:all .18s ease;font-weight:600;position:relative;z-index:1;display:flex;align-items:center;gap:10px}
+.navbtn:hover{background:rgba(255,255,255,.03);border-color:rgba(255,255,255,.04);color:var(--text)}
+.navbtn.active{background:linear-gradient(90deg,rgba(220,38,38,.18),rgba(220,38,38,.04));color:#fff;border-color:rgba(220,38,38,.28);box-shadow:inset 3px 0 0 var(--red)}
+.navicon{font-size:14px;opacity:.9;width:18px;text-align:center}
 .sidebar-bottom{margin-top:auto;padding:12px 8px;border-top:1px solid var(--border);position:relative;z-index:1}
 .account-badge{display:flex;align-items:center;gap:10px;padding:10px;background:linear-gradient(135deg,rgba(255,26,46,.08),rgba(255,26,46,.02));border:1px solid rgba(255,26,46,.2);border-radius:10px;margin-bottom:10px}
 .account-avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--red),var(--red2));display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;font-size:15px;box-shadow:0 2px 10px var(--redglow)}
@@ -3013,14 +3015,14 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 
 /* Content */
 .maincol{flex:1;display:flex;flex-direction:column;min-width:0;height:100vh;position:relative}
-.topbar{display:flex;align-items:center;gap:4px;padding:9px 16px;background:linear-gradient(180deg,rgba(13,13,20,.98),rgba(9,9,14,.94));border-bottom:1px solid var(--border);position:relative;z-index:3;overflow-x:auto;flex-shrink:0;box-shadow:0 4px 22px rgba(0,0,0,.38)}
-.topbar::-webkit-scrollbar{height:4px}
-.topbar-label{font-size:9px;text-transform:uppercase;letter-spacing:1.6px;color:var(--textmuted);margin:0 8px 0 4px;font-weight:800;flex-shrink:0}
-.topbar .navbtn{width:auto;padding:8px 12px;font-size:12px;border-radius:8px;white-space:nowrap;flex-shrink:0;gap:7px}
-.topbar .navbtn:hover{transform:translateY(-1px);background:rgba(255,255,255,.045)}
-.topbar .navbtn.active{background:linear-gradient(135deg,rgba(255,26,46,.2),rgba(255,26,46,.06));border-left:none;padding-left:12px;color:var(--red);box-shadow:inset 0 0 0 1px rgba(255,26,46,.35),0 2px 10px rgba(255,26,46,.12)}
+.topbar{display:flex;align-items:center;gap:6px;padding:10px 14px;background:linear-gradient(180deg,rgba(21,10,12,.92),rgba(16,7,9,.88));border-bottom:1px solid var(--border);position:relative;z-index:3;overflow-x:auto;flex-shrink:0;backdrop-filter:blur(12px)}
+.topbar::-webkit-scrollbar{height:5px}
+.topbar-label{font-size:10px;text-transform:uppercase;letter-spacing:1.8px;color:var(--textmuted);margin:0 6px 0 2px;font-weight:800;flex-shrink:0}
+.topbar .navbtn{width:auto;padding:8px 12px;font-size:12.5px;border-radius:999px;white-space:nowrap;flex-shrink:0;gap:7px;background:rgba(255,255,255,.02)}
+.topbar .navbtn:hover{background:rgba(255,255,255,.045);color:var(--text)}
+.topbar .navbtn.active{background:linear-gradient(135deg,rgba(220,38,38,.22),rgba(185,28,28,.12));border-left:none;padding-left:12px;color:#fff;box-shadow:inset 0 0 0 1px rgba(220,38,38,.32)}
 .topbar .navicon{width:16px;font-size:13px}
-.content{flex:1;overflow-y:auto;padding:28px 32px;background:radial-gradient(ellipse at top right,rgba(255,26,46,.05),transparent 50%);position:relative;z-index:1;min-height:0}
+.content{flex:1;overflow-y:auto;padding:24px 28px 34px;background:radial-gradient(ellipse at top right,rgba(220,38,38,.07),transparent 45%);position:relative;z-index:1;min-height:0}
 .page{display:none;animation:fadeIn .35s cubic-bezier(.4,0,.2,1)}.page.active{display:block}
 @keyframes fadeIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 
@@ -3055,21 +3057,20 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 h1{font-family:"Space Grotesk","Plus Jakarta Sans",sans-serif;font-size:30px;font-weight:800;margin-bottom:4px;letter-spacing:-.8px}
 .sub{color:var(--textdim);font-size:13.5px;margin-bottom:24px;line-height:1.5}
 
-/* Cards */
-.card{background:linear-gradient(145deg,rgba(17,17,25,.8),rgba(24,24,34,.8));border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:14px;box-shadow:var(--shadow);transition:all .3s cubic-bezier(.4,0,.2,1);backdrop-filter:blur(10px)}
-.card:hover{transform:translateY(-3px);box-shadow:var(--shadow-lg);border-color:var(--border2)}
+/* Cards - Nova glass */
+.card{background:var(--nova-glass);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;margin-bottom:14px;box-shadow:var(--shadow);transition:border-color .2s ease, box-shadow .2s ease;backdrop-filter:blur(12px)}
+.card:hover{box-shadow:var(--shadow-lg);border-color:var(--border2)}
 .cardrow{display:flex;gap:14px;flex-wrap:wrap}
-.statcard{flex:1;min-width:130px;background:linear-gradient(145deg,rgba(17,17,25,.8),rgba(24,24,34,.8));border:1px solid var(--border);border-radius:var(--radius);padding:18px;position:relative;overflow:hidden;box-shadow:var(--shadow);transition:all .3s}
+.statcard{flex:1;min-width:130px;background:var(--nova-glass);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;position:relative;overflow:hidden;box-shadow:var(--shadow)}
 .statcard::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--red),transparent)}
-.statcard:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg)}
-.statlabel{font-size:10px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1.5px;font-weight:700}
-.statval{font-size:34px;font-weight:900;margin-top:6px;background:linear-gradient(135deg,var(--text),var(--textdim));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.statlabel{font-size:10px;color:var(--textmuted);text-transform:uppercase;letter-spacing:1.4px;font-weight:700}
+.statval{font-family:"Space Grotesk","Nova Display",sans-serif;font-size:32px;font-weight:700;margin-top:4px;color:var(--text)}
 
 /* Tweak cards */
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(350px,1fr));gap:12px}
-.tweakcard{background:linear-gradient(145deg,rgba(17,17,25,.7),rgba(24,24,34,.7));border:1px solid var(--border);border-radius:var(--radius);padding:16px;transition:all .3s cubic-bezier(.4,0,.2,1);position:relative;overflow:hidden;backdrop-filter:blur(8px)}
-.tweakcard:hover{border-color:rgba(255,26,46,.3);transform:translateY(-4px);box-shadow:0 12px 40px rgba(0,0,0,.6),0 0 20px rgba(255,26,46,.08)}
-.tweakcard::after{content:'';position:absolute;inset:0;background:radial-gradient(circle at 0% 0%,rgba(255,26,46,.06),transparent 50%);pointer-events:none;opacity:0;transition:opacity .3s}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px}
+.tweakcard{background:linear-gradient(180deg,rgba(30,14,18,.62),rgba(21,10,12,.58));border:1px solid var(--border);border-radius:var(--radius);padding:15px 16px;transition:border-color .18s ease, transform .18s ease, box-shadow .18s ease;position:relative;overflow:hidden;backdrop-filter:blur(8px)}
+.tweakcard:hover{border-color:rgba(220,38,38,.3);transform:translateY(-2px);box-shadow:0 14px 34px rgba(0,0,0,.45)}
+.tweakcard::after{content:'';position:absolute;inset:0;background:radial-gradient(circle at 0% 0%,rgba(220,38,38,.07),transparent 48%);pointer-events:none;opacity:0;transition:opacity .2s}
 .tweakcard:hover::after{opacity:1}
 .tweakhead{display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap}
 .badge{padding:3px 9px;border-radius:5px;font-size:9px;font-weight:800;letter-spacing:.5px;text-transform:uppercase}
@@ -3091,16 +3092,14 @@ h1{font-family:"Space Grotesk","Plus Jakarta Sans",sans-serif;font-size:30px;fon
 .toggle input:checked+.slider:before{transform:translateX(22px);background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.3)}
 .toggle input:disabled+.slider{opacity:.35;cursor:not-allowed}
 
-/* Buttons */
-.btn{background:linear-gradient(135deg,var(--red),var(--red2));color:#fff;border:none;padding:12px 24px;border-radius:var(--radius-sm);font-weight:700;cursor:pointer;font-size:13px;transition:all .25s cubic-bezier(.4,0,.2,1);box-shadow:0 4px 16px var(--redglow),inset 0 1px 0 rgba(255,255,255,.2);text-transform:uppercase;letter-spacing:.8px;position:relative;overflow:hidden}
-.btn::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.15),transparent);opacity:0;transition:opacity .25s}
-.btn:hover{transform:translateY(-3px);box-shadow:0 8px 32px var(--redglow),inset 0 1px 0 rgba(255,255,255,.3);filter:brightness(1.1)}
-.btn:hover::before{opacity:1}
-.btn:active{transform:translateY(-1px)}
-.btn.danger{background:linear-gradient(135deg,var(--danger),#cc2f3a);box-shadow:0 4px 16px rgba(255,71,87,.3)}
-.btn.danger:hover{box-shadow:0 8px 32px rgba(255,71,87,.4)}
-.btn.ghost{background:linear-gradient(145deg,rgba(17,17,25,.6),rgba(24,24,34,.6));border:1px solid var(--border2);color:var(--text);box-shadow:var(--shadow)}
-.btn.ghost:hover{border-color:var(--red);color:var(--red);box-shadow:0 4px 16px rgba(0,0,0,.3)}
+/* Buttons - Nova */
+.btn{background:linear-gradient(135deg,var(--red),var(--red2));color:#fff;border:1px solid rgba(255,255,255,.06);padding:10px 18px;border-radius:10px;font-weight:700;cursor:pointer;font-size:12.5px;transition:filter .18s ease, box-shadow .18s ease, transform .18s ease;box-shadow:0 8px 20px rgba(185,28,28,.22);letter-spacing:.2px;position:relative;overflow:hidden}
+.btn::before{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,.12),transparent);pointer-events:none}
+.btn:hover{transform:translateY(-1px);filter:brightness(1.06);box-shadow:0 12px 26px rgba(185,28,28,.28)}
+.btn:active{transform:translateY(0)}
+.btn.danger{background:linear-gradient(135deg,#ef4444,#b91c1c);box-shadow:0 8px 20px rgba(239,68,68,.18)}
+.btn.ghost{background:rgba(255,255,255,.03);border:1px solid var(--border2);color:var(--text);box-shadow:none}
+.btn.ghost:hover{border-color:rgba(220,38,38,.35);color:#fff;background:rgba(220,38,38,.08)}
 .btn.sm{padding:8px 18px;font-size:11.5px}
 .btn.xs{padding:5px 12px;font-size:10.5px}
 .btn.full{width:100%}
@@ -3111,11 +3110,11 @@ h1{font-family:"Space Grotesk","Plus Jakarta Sans",sans-serif;font-size:30px;fon
 .textarea{background:rgba(0,0,0,.4);border:1px solid var(--border);color:var(--text);padding:11px 15px;border-radius:var(--radius-sm);font-size:12px;font-family:'JetBrains Mono',monospace;width:100%;min-height:120px;resize:vertical;transition:all .25s;line-height:1.6}
 .textarea:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3px var(--redglow2)}
 
-/* Category bar */
-.catbar{display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap}
-.catbtn{background:linear-gradient(145deg,rgba(17,17,25,.6),rgba(24,24,34,.6));border:1px solid var(--border);color:var(--textdim);padding:9px 20px;border-radius:24px;cursor:pointer;font-size:12px;font-weight:600;transition:all .25s}
-.catbtn:hover{color:var(--text);border-color:var(--border2);transform:translateY(-2px)}
-.catbtn.active{background:linear-gradient(135deg,var(--red),var(--red2));color:#fff;border-color:var(--red);font-weight:700;box-shadow:0 4px 16px var(--redglow)}
+/* Category bar - Nova chips */
+.catbar{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.catbtn{background:rgba(255,255,255,.02);border:1px solid var(--border);color:var(--textdim);padding:8px 14px;border-radius:999px;cursor:pointer;font-size:12px;font-weight:700;transition:all .18s;backdrop-filter:blur(6px)}
+.catbtn:hover{color:var(--text);border-color:var(--border2);background:rgba(255,255,255,.04)}
+.catbtn.active{background:linear-gradient(135deg,rgba(220,38,38,.24),rgba(185,28,28,.14));color:#fff;border-color:rgba(220,38,38,.38);box-shadow:0 6px 18px rgba(220,38,38,.12)}
 
 /* Log */
 .logbox{background:#030306;border:1px solid var(--border);border-radius:var(--radius);padding:16px;font-family:'JetBrains Mono',monospace;font-size:12px;color:#ff6b7a;height:440px;overflow-y:auto;white-space:pre-wrap;box-shadow:inset 0 2px 12px rgba(0,0,0,.6);line-height:1.7}
@@ -3303,10 +3302,18 @@ h1{font-family:"Space Grotesk","Plus Jakarta Sans",sans-serif;font-size:30px;fon
   <div class="brand" id="brandName">Nova Tweaks</div>
   <div class="brandsub" id="brandSub">Performance Suite</div>
   <div class="planbadge free" id="planBadge">FREE</div>
-  <button class="navbtn active" data-page="home"><span class="navicon">◆</span>Home</button>
+  <button class="navbtn active" data-page="home"><span class="navicon">◆</span>Dashboard</button>
   <button class="navbtn" data-page="tweaks"><span class="navicon">⚙</span>All Tweaks</button>
-  <div style="padding:14px 12px 6px;font-size:9px;text-transform:uppercase;letter-spacing:1.6px;color:var(--textmuted);font-weight:800">Tools</div>
-  <div style="padding:0 12px;font-size:11px;color:var(--textmuted);line-height:1.6">Crosshair, Booster, Macro, BIOS and the rest live in the top bar.</div>
+  <div style="padding:14px 10px 6px;font-size:10px;text-transform:uppercase;letter-spacing:1.8px;color:var(--textmuted);font-weight:800">Nova Tools</div>
+  <button class="navbtn" data-page="network"><span class="navicon">📡</span>Ping Optimizer</button>
+  <button class="navbtn" data-page="potato"><span class="navicon">🥔</span>Potato Graphics</button>
+  <button class="navbtn" data-page="crosshair"><span class="navicon">🎯</span>Crosshair</button>
+  <button class="navbtn" data-page="booster"><span class="navicon">⚡</span>Game Booster</button>
+  <button class="navbtn" data-page="fps"><span class="navicon">🚀</span>FPS Booster</button>
+  <div style="padding:10px 10px 6px;font-size:10px;text-transform:uppercase;letter-spacing:1.8px;color:var(--textmuted);font-weight:800">System</div>
+  <button class="navbtn" data-page="macro"><span class="navicon">🖱</span>Drag Macro</button>
+  <button class="navbtn" data-page="restore"><span class="navicon">↺</span>Restore</button>
+  <button class="navbtn" data-page="settings"><span class="navicon">✦</span>Settings</button>
   <div class="sidebar-bottom">
     <div class="account-badge" id="accountBadge" style="display:none">
       <div class="account-avatar" id="accountAvatar">G</div>
@@ -3458,7 +3465,7 @@ h1{font-family:"Space Grotesk","Plus Jakarta Sans",sans-serif;font-size:30px;fon
 <!-- GAME BOOSTER -->
 <div class="page" id="page-booster">
   <h1>Game Booster</h1>
-  <div class="sub">Closes what you are not using before you queue. Whitelist what stays.</div>
+  <div class="sub">Close non-essential apps before you play and give your game more room. Whitelist what should stay open.</div>
   <div class="livetool">
     <div class="livetool-header">
       <div class="livetool-icon">⚡</div>
@@ -3488,8 +3495,8 @@ spotify.exe</textarea>
 <!-- POTATO GRAPHICS -->
 <div class="page" id="page-potato">
   <h1>Potato Graphics</h1>
-  <div class="sub">One-click low-graphics profiles. Max FPS, max visibility, revert any time.</div>
-  <div class="warnbox">⚠ WARNING: This is the only tweak that changes how the game LOOKS. Revert anytime.</div>
+  <div class="sub">One-click low-graphics profiles for max FPS and visibility. Nova Tweaks uses safe, reversible config changes where possible (Fortnite Engine.ini is backed up and can be restored). Always verify changes on your system.</div>
+  <div class="warnbox">⚠ Changes how the game looks. Fortnite config changes are backed up for restore; use Off/restore if you want to revert.</div>
   <div id="profileList"></div>
 </div>
 
@@ -3582,13 +3589,13 @@ spotify.exe</textarea>
 <!-- FPS BOOSTER -->
 <div class="page" id="page-fps">
   <h1>FPS Booster</h1>
-  <div class="sub">A real one-click performance pass: game mode, capture off, scheduling priority, GPU preference, power plan and memory cleanup. Pro and above.</div>
+  <div class="sub">A one-click performance pass with real system changes: Game Mode, capture off, scheduling/GPU preference where supported, power plan and memory cleanup. Test on your PC and game.</div>
   <div class="livetool">
     <div class="livetool-header">
       <div class="livetool-icon">🚀</div>
-      <div><div class="livetool-title">FPS Booster</div><div style="font-size:11px;color:var(--textmuted)">Real Windows system changes</div></div>
+      <div><div class="livetool-title">FPS Booster</div><div style="font-size:11px;color:var(--textmuted)">Real system changes (platform/game dependent)</div></div>
     </div>
-    <div class="livetool-desc" id="fpsDesc">Applies real OS-level changes that reduce background overhead and give Fortnite priority. Nothing is faked or log-only.</div>
+    <div class="livetool-desc" id="fpsDesc">Applies supported OS-level optimizations to reduce overhead and prioritize gameplay. Behavior depends on Windows/macOS and your game; nothing is log-only.</div>
     <div class="card">
       <div class="fpslist" id="fpsSteps">
         <div>▸ <b>Windows Game Mode</b> — on</div>
