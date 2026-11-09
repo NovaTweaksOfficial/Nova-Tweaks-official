@@ -41,7 +41,7 @@ in Fortnite mode.
 Paid plans are 30-day periods. Accounts, balance and plans live locally in `accounts.json`; there is no
 backend. Users can redeem signed giveaway codes for balance and spend that balance on Pro or Ultimate in
 **Settings → Account**. A website purchase produces a license key that the user pastes into the app; keys are
-validated offline with HMAC. Storefront: <https://NovaTweaksOfficial.github.io/fl3sh-optimizer/>.
+validated offline with HMAC. Storefront: <https://NovaTweaksOfficial.github.io/Nova-Tweaks-official/>.
 
 Issue codes with:
 

@@ -10,11 +10,11 @@ window.NOVA_CONFIG = {
   version: "v1",
 
   // Legacy/fallback Windows download (combined build). Prefer per-product URLs when separate builds are published.
-  windowsDownload: "https://github.com/NovaTweaksOfficial/fl3sh-optimizer/releases/latest/download/NovaTweaks.exe",
-  windowsFortniteDownload: "https://github.com/NovaTweaksOfficial/fl3sh-optimizer/releases/latest/download/NovaTweaks-Fortnite-Windows.exe",
-  windowsMinecraftDownload: "https://github.com/NovaTweaksOfficial/fl3sh-optimizer/releases/latest/download/NovaTweaks-Minecraft-Windows.exe",
-  macMinecraftDownload: "https://github.com/NovaTweaksOfficial/fl3sh-optimizer/releases/latest/download/Nova-Tweaks-Minecraft-macOS.zip",
-  github: "https://github.com/NovaTweaksOfficial/fl3sh-optimizer",
+  windowsDownload: "https://github.com/NovaTweaksOfficial/Nova-Tweaks-official/releases/latest/download/NovaTweaks.exe",
+  windowsFortniteDownload: "https://github.com/NovaTweaksOfficial/Nova-Tweaks-official/releases/latest/download/NovaTweaks-Fortnite-Windows.exe",
+  windowsMinecraftDownload: "https://github.com/NovaTweaksOfficial/Nova-Tweaks-official/releases/latest/download/NovaTweaks-Minecraft-Windows.exe",
+  macMinecraftDownload: "https://github.com/NovaTweaksOfficial/Nova-Tweaks-official/releases/latest/download/Nova-Tweaks-Minecraft-macOS.zip",
+  github: "https://github.com/NovaTweaksOfficial/Nova-Tweaks-official",
 
   // Optional trust links
   virusTotal: "",

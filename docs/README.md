@@ -27,7 +27,7 @@ Windows download URLs are configured in `config.js` (`windowsFortniteDownload`, 
 1. Push this folder to `main`.
 2. Repo → **Settings → Pages**.
 3. Source: **Deploy from a branch** → Branch `main`, folder `/docs` → Save.
-4. Wait ~1 minute. URL: `https://NovaTweaksOfficial.github.io/fl3sh-optimizer/`
+4. Wait ~1 minute. URL: `https://NovaTweaksOfficial.github.io/Nova-Tweaks-official/`
 
 Or via API (needs a token with `repo` scope):
 
@@ -35,7 +35,7 @@ Or via API (needs a token with `repo` scope):
 curl -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "Accept: application/vnd.github+json" \
-  https://api.github.com/repos/NovaTweaksOfficial/fl3sh-optimizer/pages \
+  https://api.github.com/repos/NovaTweaksOfficial/Nova-Tweaks-official/pages \
   -d '{"source":{"branch":"main","path":"/docs"}}'
 ```
 
