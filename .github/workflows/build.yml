@@ -114,3 +114,53 @@ jobs:
             NovaTweaks-Fortnite-Windows.exe
             NovaTweaks-Minecraft-Windows.exe
           tag_name: ${{ github.ref_name }}
+
+  build-macos:
+    needs: build
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Bundle PowerShell 7
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="macos/Minecraft/Nova Tweaks Minecraft.app"
+          RES="$APP/Contents/Resources"
+          cp shared/Nova_Tweaks_WebGUI.ps1 "$RES/Nova_Tweaks_WebGUI.ps1"
+          PWSH_VERSION="7.4.6"
+          curl -fL -o /tmp/pwsh.tar.gz "https://github.com/PowerShell/PowerShell/releases/download/v${PWSH_VERSION}/powershell-${PWSH_VERSION}-osx-x64.tar.gz"
+          rm -rf "$RES/pwsh"
+          mkdir -p "$RES/pwsh"
+          tar -xzf /tmp/pwsh.tar.gz -C "$RES/pwsh"
+          chmod +x "$RES/pwsh/pwsh"
+          rm -rf "$RES/pwsh/ref"
+          rm -f "$RES/pwsh"/*.xml
+          test -x "$RES/pwsh/pwsh"
+          du -sh "$RES/pwsh"
+
+      - name: Build macOS zip
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cd macos/Minecraft
+          ditto -c -k --sequesterRsrc --keepParent "Nova Tweaks Minecraft.app" "../../dist/Nova-Tweaks-Minecraft-macOS.zip"
+          ls -lh ../../dist/Nova-Tweaks-Minecraft-macOS.zip
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NovaTweaks_macOS_App
+          path: dist/Nova-Tweaks-Minecraft-macOS.zip
+          retention-days: 30
+
+      - name: Attach macOS asset to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          files: dist/Nova-Tweaks-Minecraft-macOS.zip
+          tag_name: ${{ github.ref_name }}
