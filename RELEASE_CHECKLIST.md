@@ -45,8 +45,8 @@ This checklist covers the current Nova Tweaks project state (shared core, Window
 - [ ] Confirm Accessibility permission flow on a clean Mac.
 
 ## SellAuth / fulfillment
-- [ ] Pro/Ultimate products have Nova key serial stock (`pwsh ./shared/tools/New-NovaKey.ps1 -Type Pro|Ultimate -Count N`) uploaded separately.
-- [ ] Automatic delivery enabled; payment gateway connected and verified (test card/real flow as appropriate).
+- [x] Pro/Ultimate products, key serial stock, and automatic delivery configured.
+- [ ] Add payment cards / payment methods to the SellAuth account.
 - [ ] End-to-end test: purchase → receive key → redeem in app → plan activates.
 - [ ] Confirm key format/secrets match the app build.
 
