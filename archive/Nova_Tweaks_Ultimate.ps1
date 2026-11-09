@@ -1719,7 +1719,7 @@ function updateCounts(){
   document.getElementById('progressFill').style.width=Math.round(applied/total*100)+'%';
 }
 
-const profiles=[{name:'Fortnite',desc:'DX11 and Performance mode',plan:'Pro',icon:'FN'},{name:'Fortnite Competitive',desc:'Fixed floor (lowest settings)',plan:'Pro',icon:'FC'},{name:'Marvel Rivals',desc:'Low-graphics competitive profile',plan:'Pro',icon:'MR'},{name:'AMD/Intel Potato',desc:'Works on any GPU. Removes texture packs.',plan:'Pro',icon:'AI'}];
+const profiles=[{name:'Fortnite',desc:'DX11 and Performance mode',plan:'Pro',icon:'FN'},{name:'Fortnite Competitive',desc:'Fixed floor (lowest settings)',plan:'Pro',icon:'FC'},{name:'AMD/Intel Potato',desc:'Works on any GPU. Removes texture packs.',plan:'Pro',icon:'AI'}];
 document.getElementById('profileList').innerHTML=profiles.map(p=>`<div class="profilecard"><div class="profileicon">${p.icon}</div><div style="flex:1"><div style="font-weight:700;font-size:14px">${p.name}</div><div style="font-size:12px;color:var(--textdim);margin-top:2px">${p.desc}</div></div><span class="badge pro">${p.plan}</span><button class="btn sm" data-profile="${p.name}">Apply</button></div>`).join('');
 document.querySelectorAll('[data-profile]').forEach(b=>b.addEventListener('click',async()=>{
   if(!confirm('This will change Fortnite graphics (Engine.ini).\nRevert anytime. Continue?'))return;

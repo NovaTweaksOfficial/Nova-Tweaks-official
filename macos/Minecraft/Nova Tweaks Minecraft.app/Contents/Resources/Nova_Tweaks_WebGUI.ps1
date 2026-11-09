@@ -153,7 +153,7 @@ function Get-NovaDevConfig {
             $fallback = ""
             if ($Script:CurrentUser -and $Script:CurrentUser.Email) { $fallback = [string]$Script:CurrentUser.Email }
             elseif ($Script:Config.CurrentUser) { $fallback = [string]$Script:Config.CurrentUser }
-            return [pscustomobject]@{ owner = $fallback; devs = @() }
+            return [pscustomobject]@{ owner = $fallback; devs = @(); mods = @() }
         }
     }
     if (-not $cfg) {
@@ -166,46 +166,91 @@ function Get-NovaDevConfig {
             if (-not $pick) { $pick = $accs | Select-Object -First 1 }
             if ($pick) { $seed = [string]$pick.Email }
         }
-        $cfg = [pscustomobject]@{ owner = $seed; devs = @() }
+        $cfg = [pscustomobject]@{ owner = $seed; devs = @(); mods = @() }
         Save-NovaDevConfig $cfg | Out-Null
     }
     $owner = ""
     $devs = @()
+    $mods = @()
     if ($cfg.PSObject.Properties.Name -contains "owner" -and $cfg.owner) { $owner = [string]$cfg.owner }
     if ($cfg.PSObject.Properties.Name -contains "devs" -and $cfg.devs) {
         $devs = @($cfg.devs | Where-Object { $_ } | ForEach-Object { [string]$_ })
     }
-    return [pscustomobject]@{ owner = $owner; devs = $devs }
+    if ($cfg.PSObject.Properties.Name -contains "mods" -and $cfg.mods) {
+        $mods = @($cfg.mods | Where-Object { $_ } | ForEach-Object { [string]$_ })
+    }
+    return [pscustomobject]@{ owner = $owner; devs = $devs; mods = $mods }
 }
 function Save-NovaDevConfig { param($Config)
     $owner = ""
     $devs = @()
+    $mods = @()
     if ($Config) {
         if ($Config.PSObject.Properties.Name -contains "owner" -and $Config.owner) { $owner = [string]$Config.owner }
         if ($Config.PSObject.Properties.Name -contains "devs" -and $Config.devs) {
             $devs = @($Config.devs | Where-Object { $_ } | ForEach-Object { [string]$_ })
         }
+        if ($Config.PSObject.Properties.Name -contains "mods" -and $Config.mods) {
+            $mods = @($Config.mods | Where-Object { $_ } | ForEach-Object { [string]$_ })
+        }
     }
-    $out = [ordered]@{ owner = $owner; devs = @($devs) }
+    $out = [ordered]@{ owner = $owner; devs = @($devs); mods = @($mods) }
     $out | ConvertTo-Json -Depth 5 | Set-Content -Path $Script:DevsPath -Encoding UTF8
     return [pscustomobject]$out
 }
+function Get-NovaRole { param([string]$Email)
+    if (-not $Email) { return "" }
+    $cfg = Get-NovaDevConfig
+    if ($cfg.owner -and ($cfg.owner -ieq $Email)) { return "owner" }
+    foreach ($d in @($cfg.devs)) { if ($d -and ($d -ieq $Email)) { return "dev" } }
+    foreach ($m in @($cfg.mods)) { if ($m -and ($m -ieq $Email)) { return "mod" } }
+    return "user"
+}
+# Role entitlements are automatic: owner/dev = Ultimate, mod = Pro.
+function Get-NovaRolePlan { param([string]$Role)
+    switch ($Role) {
+        "owner" { "Ultimate" }
+        "dev"   { "Ultimate" }
+        "mod"   { "Pro" }
+        default { $null }
+    }
+}
 function Test-NovaDevAccess { param([string]$Email)
     if (-not $Email) { return $false }
-    $cfg = Get-NovaDevConfig
-    if ($cfg.owner -and ($cfg.owner -ieq $Email)) { return $true }
-    foreach ($d in @($cfg.devs)) { if ($d -and ($d -ieq $Email)) { return $true } }
-    return $false
+    $role = Get-NovaRole $Email
+    return ($role -in @("owner", "dev"))
+}
+function Test-NovaStaffAccess { param([string]$Email)
+    if (-not $Email) { return $false }
+    $role = Get-NovaRole $Email
+    return ($role -in @("owner", "dev", "mod"))
 }
 function ConvertTo-NovaPublicAccount { param($Account)
     $acc = Normalize-NovaAccount $Account
     if (-not $acc) { return $null }
     $out = [ordered]@{}
-    foreach ($p in $acc.PSObject.Properties) {
-        if ($p.Name -eq "PasswordHash") { continue }
-        $out[$p.Name] = $p.Value
+    # Hashtables enumerate their adapter properties (Keys/Values/SyncRoot) instead of
+    # their entries, so walk the keys directly and never copy PasswordHash.
+    $isDict = $acc -is [System.Collections.IDictionary]
+    $names = if ($isDict) { @($acc.Keys) } else { @($acc.PSObject.Properties.Name) }
+    foreach ($name in $names) {
+        $key = [string]$name
+        if ($key -eq "PasswordHash") { continue }
+        if ($isDict) { $out[$key] = $acc[$name] }
+        else { $out[$key] = $acc.PSObject.Properties[$key].Value }
     }
-    $out["isDev"] = [bool](Test-NovaDevAccess ([string]$acc.Email))
+    $role = Get-NovaRole ([string]$acc.Email)
+    $rolePlan = Get-NovaRolePlan $role
+    $out["role"] = $role
+    $out["isOwner"] = [bool]($role -eq "owner")
+    $out["isDev"] = [bool]($role -in @("owner", "dev"))
+    $out["isMod"] = [bool]($role -eq "mod")
+    $out["isStaff"] = [bool]($role -in @("owner", "dev", "mod"))
+    if ($rolePlan) {
+        $out["Plan"] = $rolePlan
+        $out["PlanUntil"] = $null
+        $out["rolePlan"] = $true
+    }
     $out["softbanActive"] = [bool](Test-NovaSoftbanActive $acc)
     return [pscustomobject]$out
 }
@@ -380,6 +425,12 @@ function Get-NovaEffectivePlan {
             $Script:Config.Plan = "Free"
             return "Free"
         }
+        # Staff roles carry an automatic entitlement: owner/dev = Ultimate, mod = Pro.
+        $rolePlan = Get-NovaRolePlan (Get-NovaRole ([string]$acc.Email))
+        if ($rolePlan) {
+            $Script:Config.Plan = $rolePlan
+            return $rolePlan
+        }
         $Script:Config.Plan = $acc.Plan
         return [string]$acc.Plan
     }
@@ -496,8 +547,11 @@ function Update-NovaBadges {
     if ($networkApplied -ge 6) { [void]$want.Add("network-guru") }
     if ([int]$acc.CleanSweeps -ge 1) { [void]$want.Add("clean-sweep") }
     if (@($acc.Redeemed | Where-Object { $_ }).Count -ge 1) { [void]$want.Add("gift-hunter") }
-    if ((Get-NovaPlanRank $acc.Plan) -ge 1) { [void]$want.Add("pro-player") }
-    if ($acc.Plan -eq "Ultimate") { [void]$want.Add("ultimate") }
+    $badgePlan = [string]$acc.Plan
+    $badgeRolePlan = Get-NovaRolePlan (Get-NovaRole ([string]$acc.Email))
+    if ($badgeRolePlan) { $badgePlan = $badgeRolePlan }
+    if ((Get-NovaPlanRank $badgePlan) -ge 1) { [void]$want.Add("pro-player") }
+    if ($badgePlan -eq "Ultimate") { [void]$want.Add("ultimate") }
 
     $changed = $false
     foreach ($id in $want) {
@@ -3684,7 +3738,7 @@ h1{font-family:"Nova Sans","Plus Jakarta Sans",system-ui,sans-serif;font-size:26
 /* Draggable hint */
 .draggable{cursor:move}
 
-/* Developer console */
+/* Staff console */
 .devhero{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:14px}
 .devstatgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:10px;margin-bottom:14px}
 .devstat{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:13px 14px}
@@ -3702,6 +3756,8 @@ h1{font-family:"Nova Sans","Plus Jakarta Sans",system-ui,sans-serif;font-size:26
 .devrow{display:flex;gap:12px;align-items:flex-start;padding:13px 14px;border:1px solid var(--border);border-radius:13px;background:var(--card);transition:border-color .15s ease,background-color .15s ease}
 .devrow:hover{border-color:rgba(239,68,68,.26);background:var(--card2)}
 .devrow.banned-row{border-color:rgba(239,68,68,.42);background:linear-gradient(180deg,rgba(239,68,68,.07),var(--card) 70%)}
+.devrow.redacted{border-style:dashed;opacity:.72;background:var(--card)}
+.devrow.redacted .devavatar{background:rgba(255,255,255,.06);color:var(--textdim);font-size:14px}
 .devavatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--red),var(--red2));display:grid;place-items:center;font-weight:800;color:#150a0b;font-size:13px;flex-shrink:0}
 .devmain{flex:1;min-width:0}
 .devtop{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
@@ -3713,6 +3769,7 @@ h1{font-family:"Nova Sans","Plus Jakarta Sans",system-ui,sans-serif;font-size:26
 .devbadge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:999px;font-size:9px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;border:1px solid transparent}
 .devbadge.owner{background:rgba(239,68,68,.16);color:#fecaca;border-color:rgba(239,68,68,.38)}
 .devbadge.dev{background:rgba(96,165,250,.12);color:#bfdbfe;border-color:rgba(96,165,250,.3)}
+.devbadge.mod{background:rgba(45,212,191,.12);color:#99f6e4;border-color:rgba(45,212,191,.3)}
 .devbadge.active{background:rgba(34,197,94,.1);color:#bbf7d0;border-color:rgba(34,197,94,.28)}
 .devbadge.banned{background:rgba(239,68,68,.18);color:#fecaca;border-color:rgba(239,68,68,.45)}
 .devbadge.timeout{background:rgba(245,158,11,.12);color:#fde68a;border-color:rgba(245,158,11,.32)}
@@ -3815,7 +3872,7 @@ h1{font-family:"Nova Sans","Plus Jakarta Sans",system-ui,sans-serif;font-size:26
     <div class="headside">
       <span class="planbadge free" id="planBadge">FREE</span>
       <button class="iconbtn" id="soundQuickBtn" title="Test sound">🔊</button>
-      <button class="iconbtn" id="devNavBtn" data-page="dev" title="Developer console" style="display:none">🛠</button>
+      <button class="iconbtn" id="devNavBtn" data-page="dev" title="Staff console" style="display:none">🛠</button>
       <button class="iconbtn" data-page="settings" title="Settings">⚙</button>
       <button class="iconbtn" data-page="restore" title="Restore">↺</button>
       <button class="iconbtn" data-page="bench" title="Benchmark">▤</button>
@@ -4345,12 +4402,12 @@ spotify.exe</textarea>
   </div>
 </div>
 
-<!-- DEVELOPER CONSOLE (owner only) -->
+<!-- STAFF CONSOLE (owner / dev / mod) -->
 <div class="page" id="page-dev">
   <div class="devhero">
     <div>
-      <h1 style="margin:0;font-size:26px">Developer Console</h1>
-      <div class="sub" style="margin:5px 0 0">Owner-only account tools. Developer access is controlled by <code style="color:var(--text)">devs.json</code>.</div>
+      <h1 style="margin:0;font-size:26px">Staff Console</h1>
+      <div class="sub" style="margin:5px 0 0">Owner, dev and mod account tools. Only the owner can edit <code style="color:var(--text)">devs.json</code>, grant roles, change plans, reset passwords or ban accounts.</div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn ghost sm" id="devRefreshBtn">↻ Refresh</button>
@@ -4359,15 +4416,15 @@ spotify.exe</textarea>
 
   <div class="devstatgrid" id="devStats"></div>
 
-  <div class="card" style="margin-bottom:14px">
+  <div class="card" id="devJsonCard" style="margin-bottom:14px">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">
       <div>
-        <h3 style="margin:0;font-size:14px">Developer access</h3>
-        <div style="font-size:11.5px;color:var(--textdim);margin-top:3px">Add account emails to <b style="color:var(--text)">devs.json</b>. The owner always keeps access.</div>
+        <h3 style="margin:0;font-size:14px">Staff access</h3>
+        <div style="font-size:11.5px;color:var(--textdim);margin-top:3px">Owner only. Add account emails to <b style="color:var(--text)">devs.json</b>: <code style="color:var(--text)">devs</code> get Ultimate automatically, <code style="color:var(--text)">mods</code> get Pro automatically. The owner always keeps access.</div>
       </div>
       <button class="btn sm" id="devJsonSave">Save devs.json</button>
     </div>
-    <textarea class="devjson" id="devJson" spellcheck="false" placeholder='{"owner":"you@example.com","devs":["friend@example.com"]}'></textarea>
+    <textarea class="devjson" id="devJson" spellcheck="false" placeholder='{"owner":"you@example.com","devs":["friend@example.com"],"mods":["mod@example.com"]}'></textarea>
     <div style="margin-top:8px;font-size:10.5px;color:var(--textmuted)" id="devJsonPath"></div>
   </div>
 
@@ -4391,7 +4448,7 @@ spotify.exe</textarea>
         </select>
       </div>
     </div>
-    <div class="devlist" id="devAccounts"><div class="devempty">Sign in with a developer account to load accounts.</div></div>
+    <div class="devlist" id="devAccounts"><div class="devempty">Sign in with a staff account to load accounts.</div></div>
   </div>
 </div>
 </div>
@@ -4425,7 +4482,7 @@ spotify.exe</textarea>
 <div class="toast" id="toast"></div>
 
 <script>
-const state={plan:'Free',tweaks:{},os:'unknown',game:'Fortnite',previewWindows:false,user:null,isDev:false,softbanActive:false,softbanUntil:null,balance:0,planUntil:null,badges:[],streak:0,bestStreak:0,appliedEver:0};
+const state={plan:'Free',tweaks:{},os:'unknown',game:'Fortnite',previewWindows:false,user:null,isDev:false,isOwner:false,isMod:false,isStaff:false,role:'user',softbanActive:false,softbanUntil:null,balance:0,planUntil:null,badges:[],streak:0,bestStreak:0,appliedEver:0};
 window.onerror=(m,u,l)=>{const e=document.getElementById('loginError');if(e)e.textContent='JS Error: '+m+' (line '+l+')';console.error(m,u,l);};
 // Snowfall
 (function(){
@@ -4689,6 +4746,7 @@ function setPlanUI(plan, planUntil, balance){
   const au = document.getElementById('acctPlanUntil');
   if(au){
     if(p === 'Free') au.textContent = 'Free tier — no renewal date.';
+    else if(state.user && state.user.rolePlan) au.textContent = 'Staff entitlement — automatic ' + p + ' plan.';
     else if(planUntil){ const d = new Date(planUntil); au.textContent = 'Active through ' + d.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'}); }
     else au.textContent = '30-day plan.';
   }
@@ -4717,10 +4775,19 @@ function onLogin(acc){
   try{
   const st=document.getElementById('loginStatus'); if(st) st.textContent='Loading...';
   state.user=acc;
+  state.role=acc.role||'user';
+  state.isOwner=!!acc.isOwner;
   state.isDev=!!acc.isDev;
+  state.isMod=!!acc.isMod;
+  state.isStaff=!!acc.isStaff;
   state.softbanActive=!!acc.softbanActive;
   state.softbanUntil=acc.SoftbanUntil||null;
-  const dn=document.getElementById('devNavBtn'); if(dn) dn.style.display=state.isDev?'':'none';
+  const dn=document.getElementById('devNavBtn');
+  if(dn){
+    dn.style.display=state.isStaff?'':'none';
+    dn.title=state.isOwner?'Owner console':(state.isDev?'Developer console':'Mod console');
+  }
+  const jc=document.getElementById('devJsonCard'); if(jc) jc.style.display=state.isOwner?'':'none';
   renderSoftbanBanner(acc);
   document.getElementById('loginOverlay').style.display='none';
   document.getElementById('appContainer').style.display='flex';
@@ -4775,7 +4842,7 @@ document.getElementById('logoutBtn').addEventListener('click',async()=>{
   if(window.chrome&&window.chrome.webview){window.chrome.webview.postMessage('nova-reload');return;}
   if(window.__novaNative || (window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.nova)){
     try{if(typeof stopNetAuto==='function')stopNetAuto()}catch(e){}
-    try{if(window.state){state.user=null;state.isDev=false;state.softbanActive=false;state.softbanUntil=null;state.plan='Free';state.planUntil=null;state.balance=0;}}catch(e){}
+    try{if(window.state){state.user=null;state.role='user';state.isDev=false;state.isOwner=false;state.isMod=false;state.isStaff=false;state.softbanActive=false;state.softbanUntil=null;state.plan='Free';state.planUntil=null;state.balance=0;}}catch(e){}
     try{renderSoftbanBanner(null)}catch(e){}
     const dn=document.getElementById('devNavBtn'); if(dn) dn.style.display='none';
     const app=document.getElementById('appContainer'); if(app) app.style.display='none';
@@ -4788,7 +4855,7 @@ document.getElementById('logoutBtn').addEventListener('click',async()=>{
   location.reload();
 });
 
-/* ---------- Developer console ---------- */
+/* ---------- Staff console ---------- */
 let devAccountsCache=[];
 function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function devFormatDate(v){
@@ -4809,10 +4876,13 @@ function updateDevStats(){
   const now=Date.now();
   const total=devAccountsCache.length;
   const devs=devAccountsCache.filter(a=>a.isDev).length;
+  const mods=devAccountsCache.filter(a=>a.isMod).length;
   const banned=devAccountsCache.filter(a=>a.banned).length;
   const timeouts=devAccountsCache.filter(a=>a.banUntil&&new Date(a.banUntil).getTime()>now).length;
   const soft=devAccountsCache.filter(a=>a.softbanUntil&&new Date(a.softbanUntil).getTime()>now).length;
-  const stats=[['Accounts',total],['Developers',devs],['Banned',banned],['Timeouts',timeouts],['Softbans',soft]];
+  const stats=[['Accounts',total]];
+  if(state.isOwner) stats.push(['Developers',devs],['Mods',mods]);
+  stats.push(['Banned',banned],['Timeouts',timeouts],['Softbans',soft]);
   el.innerHTML=stats.map(x=>`<div class="devstat"><div class="devstatv">${x[1]}</div><div class="devstatl">${x[0]}</div></div>`).join('');
 }
 function renderDevAccounts(){
@@ -4823,12 +4893,45 @@ function renderDevAccounts(){
   if(cnt) cnt.textContent=list.length+' of '+devAccountsCache.length+' account'+(devAccountsCache.length===1?'':'s');
   updateDevStats();
   if(!list.length){ wrap.innerHTML='<div class="devempty">No accounts match.</div>'; return; }
+  const myEmail=String((state.user&&state.user.Email)||'').toLowerCase();
   wrap.innerHTML=list.map(a=>{
+    if(a.redacted){
+      const label=String(a.role||'staff').toUpperCase();
+      return `<div class="devrow redacted" data-email="">
+        <div class="devavatar">🔒</div>
+        <div class="devmain">
+          <div class="devtop"><span class="devname">${esc(label)}</span><span class="devbadge ${esc(a.role||'')}">${esc(label)}</span></div>
+          <div class="devmeta">Protected account — details are hidden from your role.</div>
+        </div>
+      </div>`;
+    }
     const st=devStatus(a);
-    const plan=a.plan||'Free';
-    const badges=`<span class="devbadge ${st.cls}">${st.label}</span>${a.isOwner?'<span class="devbadge owner">Owner</span>':''}${a.isDev&&!a.isOwner?'<span class="devbadge dev">Dev</span>':''}`;
+    const plan=a.effectivePlan||a.plan||'Free';
+    const role=a.role||'user';
+    const isSelf=!!(myEmail&&a.email&&String(a.email).toLowerCase()===myEmail);
+    const badges=`<span class="devbadge ${st.cls}">${st.label}</span>`
+      +(role==='owner'?'<span class="devbadge owner">Owner</span>':'')
+      +(role==='dev'?'<span class="devbadge dev">Dev</span>':'')
+      +(role==='mod'?'<span class="devbadge mod">Mod</span>':'');
     const detail=st.detail?`<div class="devmeta">${esc(st.detail)}</div>`:'';
     const pwMask='•'.repeat(Math.min(12,Math.max(4,(a.password||'').length||4)));
+    const pwRow=a.canSeePassword?`<div class="devpw">Password <code class="pwval">${pwMask}</code><button class="devbtn" data-act="reveal">Reveal</button><button class="devbtn" data-act="setpassword">Reset</button></div>`:'';
+    const acts=[];
+    if(a.canModerate&&!isSelf){
+      acts.push('<button class="devbtn warn" data-act="timeout">Timeout</button>');
+      if(state.isOwner||state.role==='dev') acts.push('<button class="devbtn warn" data-act="softban">Softban</button>');
+      if(state.isOwner) acts.push('<button class="devbtn danger" data-act="ban">Ban</button>');
+      acts.push('<button class="devbtn ok" data-act="clear">Clear</button>');
+    }
+    if(state.isOwner){
+      if(role!=='owner') acts.push('<button class="devbtn" data-act="setplan">Set plan</button>');
+      if(role==='dev') acts.push('<button class="devbtn" data-act="revokedev">Remove dev</button>');
+      else if(role==='mod') acts.push('<button class="devbtn" data-act="revokemod">Remove mod</button>');
+      else if(role!=='owner'){
+        acts.push('<button class="devbtn" data-act="grantdev">Make dev</button>');
+        acts.push('<button class="devbtn" data-act="grantmod">Make mod</button>');
+      }
+    }
     return `<div class="devrow${st.cls==='banned'?' banned-row':''}" data-email="${esc(a.email)}">
       <div class="devavatar">${esc((a.name||a.email||'?').charAt(0).toUpperCase())}</div>
       <div class="devmain">
@@ -4836,33 +4939,28 @@ function renderDevAccounts(){
         <div class="devmeta">${esc(plan)} plan · $${(Number(a.balance||0)/100).toFixed(2)} balance · ${a.logins||0} login${a.logins===1?'':'s'} · streak ${a.streak||0}</div>
         <div class="devmeta">Created ${esc(devFormatDate(a.created))} · Last login ${esc(devFormatDate(a.lastLogin))}</div>
         ${detail}
-        <div class="devpw">Password <code class="pwval">${pwMask}</code><button class="devbtn" data-act="reveal">Reveal</button><button class="devbtn" data-act="setpassword">Reset</button></div>
+        ${pwRow}
       </div>
-      <div class="devactions">
-        <button class="devbtn warn" data-act="timeout">Timeout</button>
-        <button class="devbtn warn" data-act="softban">Softban</button>
-        <button class="devbtn danger" data-act="ban">Ban</button>
-        <button class="devbtn ok" data-act="clear">Clear</button>
-        <button class="devbtn" data-act="setplan">Set plan</button>
-        ${a.isOwner?'':(a.isDev?'<button class="devbtn" data-act="revokedev">Remove dev</button>':'<button class="devbtn" data-act="grantdev">Make dev</button>')}
-      </div>
+      <div class="devactions">${acts.join('')}</div>
     </div>`;
   }).join('');
 }
 async function loadDevAccounts(){
   const wrap=document.getElementById('devAccounts');
-  if(!state.isDev){ if(wrap) wrap.innerHTML='<div class="devempty">Developer access required.</div>'; return; }
+  if(!state.isStaff){ if(wrap) wrap.innerHTML='<div class="devempty">Staff access required.</div>'; return; }
   if(wrap) wrap.innerHTML='<div class="devempty">Loading accounts…</div>';
   try{
     const r=await api('/api/dev/accounts',{});
     if(!r.success){ if(wrap) wrap.innerHTML='<div class="devempty">'+esc(r.message||'Could not load accounts.')+'</div>'; return; }
     devAccountsCache=r.accounts||[];
     renderDevAccounts();
-    const cfg=await api('/api/dev/config',{});
-    if(cfg.success){
-      const ta=document.getElementById('devJson');
-      if(ta && document.activeElement!==ta) ta.value=cfg.json||'';
-      const p=document.getElementById('devJsonPath'); if(p) p.textContent='File: '+(cfg.path||'devs.json');
+    if(state.isOwner){
+      const cfg=await api('/api/dev/config',{});
+      if(cfg.success){
+        const ta=document.getElementById('devJson');
+        if(ta && document.activeElement!==ta) ta.value=cfg.json||'';
+        const p=document.getElementById('devJsonPath'); if(p) p.textContent='File: '+(cfg.path||'devs.json');
+      }
     }
   }catch(e){ if(wrap) wrap.innerHTML='<div class="devempty">'+esc(e&&e.message?e.message:e)+'</div>'; }
 }
@@ -4872,6 +4970,10 @@ async function devDo(email,action,extra={}){
   if((action==='timeout'||action==='softban')&&(!dur||dur<1)){ showToast('Choose a duration first.'); return; }
   if(action==='ban'&&!confirm('Permanently ban '+email+'?')) return;
   if(action==='clear'&&!confirm('Clear all moderation for '+email+'?')) return;
+  if(action==='grantdev'&&!confirm('Give '+email+' developer access? They get Ultimate automatically.')) return;
+  if(action==='grantmod'&&!confirm('Give '+email+' mod access? They get Pro automatically.')) return;
+  if(action==='revokedev'&&!confirm('Remove developer access from '+email+'?')) return;
+  if(action==='revokemod'&&!confirm('Remove mod access from '+email+'?')) return;
   const r=await api('/api/dev/action',Object.assign({email,action,duration:dur,unit},extra));
   showToast(r.message||(r.success?'Done':'Action failed'), r.success?4200:6000);
   if(r.success) loadDevAccounts();
@@ -4885,25 +4987,27 @@ if(devAccountsEl){
     const act=btn.dataset.act;
     const acc=devAccountsCache.find(a=>a.email===email);
     if(act==='reveal'){
+      if(!state.isOwner){ showToast('Only the owner can see passwords.'); return; }
       const code=row.querySelector('.pwval'); if(!code) return;
       if(btn.dataset.shown==='1'){ code.textContent='•'.repeat(Math.min(12,Math.max(4,(acc&&acc.password||'').length||4))); btn.dataset.shown='0'; btn.textContent='Reveal'; }
       else { code.textContent=(acc&&acc.password)||'—'; btn.dataset.shown='1'; btn.textContent='Hide'; }
       return;
     }
     if(act==='setpassword'){
+      if(!state.isOwner){ showToast('Only the owner can reset passwords.'); return; }
       const pw=prompt('New password for '+email);
       if(pw===null) return;
       if(pw.length<4){ showToast('Password must be at least 4 characters.'); return; }
       return devDo(email,'setpassword',{password:pw});
     }
     if(act==='setplan'){
-      const p=prompt('Plan for '+email+' (Free, Pro, Ultimate):', acc?acc.plan:'Free');
+      if(!state.isOwner){ showToast('Only the owner can change plans.'); return; }
+      const p=prompt('Plan for '+email+' (Free, Pro, Ultimate):', acc?(acc.effectivePlan||acc.plan):'Free');
       if(!p) return;
       const plan=p.trim();
       if(!['free','pro','ultimate'].includes(plan.toLowerCase())){ showToast('Use Free, Pro or Ultimate.'); return; }
       return devDo(email,'setplan',{plan,days:30});
     }
-    if(act==='revokedev'&&!confirm('Remove developer access from '+email+'?')) return;
     return devDo(email,act);
   });
 }
@@ -4913,6 +5017,7 @@ const devRefreshEl=document.getElementById('devRefreshBtn');
 if(devRefreshEl) devRefreshEl.addEventListener('click',loadDevAccounts);
 const devJsonSaveEl=document.getElementById('devJsonSave');
 if(devJsonSaveEl) devJsonSaveEl.addEventListener('click',async()=>{
+  if(!state.isOwner){ showToast('Only the owner can edit devs.json.'); return; }
   const raw=document.getElementById('devJson')?.value||'';
   try{ JSON.parse(raw); }catch(e){ showToast('Invalid JSON: '+e.message,6000); return; }
   const r=await api('/api/dev/config',{json:raw});
@@ -5134,7 +5239,7 @@ function renderBadges(){
   if(st) st.textContent=badges.length;
 }
 
-const profiles=[{name:'Fortnite',desc:'DX11 and Performance mode',plan:'Ultimate',icon:'FN'},{name:'Fortnite Competitive',desc:'Fixed floor (lowest settings)',plan:'Ultimate',icon:'FC'},{name:'Marvel Rivals',desc:'Low-graphics competitive profile',plan:'Ultimate',icon:'MR'},{name:'AMD/Intel Potato',desc:'Works on any GPU. Removes texture packs.',plan:'Ultimate',icon:'AI'}];
+const profiles=[{name:'Fortnite',desc:'DX11 and Performance mode',plan:'Ultimate',icon:'FN'},{name:'Fortnite Competitive',desc:'Fixed floor (lowest settings)',plan:'Ultimate',icon:'FC'},{name:'AMD/Intel Potato',desc:'Works on any GPU. Removes texture packs.',plan:'Ultimate',icon:'AI'}];
 document.getElementById('profileList').innerHTML=profiles.map(p=>`<div class="profilecard"><div class="profileicon">${p.icon}</div><div style="flex:1"><div style="font-weight:700;font-size:14px">${p.name}</div><div style="font-size:12px;color:var(--textdim);margin-top:2px">${p.desc}</div></div><span class="badge tier tier-ult">${p.plan.toUpperCase()}</span><button class="btn sm" data-profile="${p.name}">Apply</button></div>`).join('');
 document.querySelectorAll('[data-profile]').forEach(b=>b.addEventListener('click',async()=>{
   if(state.plan!=='Ultimate'){showToast('Graphics profiles need Ultimate. Open Account to upgrade.');return;}
@@ -5793,15 +5898,24 @@ function Invoke-NovaApi {
             return (ConvertTo-NovaJson @{ success = $true })
         }
 
-        # ---------- Developer console (owner only) ----------
+        # ---------- Staff console (owner / dev / mod) ----------
         if ($Path -like "/api/dev/*") {
             if (-not $Script:CurrentUser) { return (ConvertTo-NovaJson @{ success = $false; message = "Sign in to use the developer console." }) }
             $me = [string]$Script:CurrentUser.Email
-            if (-not (Test-NovaDevAccess $me)) { return (ConvertTo-NovaJson @{ success = $false; message = "Developer access required." }) }
+            $myRole = Get-NovaRole $me
+            if ($myRole -notin @("owner", "dev", "mod")) { return (ConvertTo-NovaJson @{ success = $false; message = "Staff access required." }) }
+            $isOwner = ($myRole -eq "owner")
             $devCfg = Get-NovaDevConfig
 
             if ($Path -eq "/api/dev/config") {
+                # devs.json is owner-only: devs and mods cannot read or edit it.
                 $rawJson = [string]$body.json
+                if (-not $isOwner) {
+                    if ($rawJson -and $rawJson.Trim()) {
+                        return (ConvertTo-NovaJson @{ success = $false; message = "Only the owner can edit staff access." })
+                    }
+                    return (ConvertTo-NovaJson @{ success = $true; readOnly = $true; owner = ""; devs = @(); mods = @(); path = $Script:DevsPath; json = "" })
+                }
                 if ($rawJson -and $rawJson.Trim()) {
                     try {
                         $parsed = $rawJson | ConvertFrom-Json
@@ -5810,15 +5924,19 @@ function Invoke-NovaApi {
                         if ($parsed.PSObject.Properties.Name -contains "devs" -and $parsed.devs) {
                             $devs = @($parsed.devs | Where-Object { $_ } | ForEach-Object { [string]$_ })
                         }
-                        $saved = Save-NovaDevConfig ([pscustomobject]@{ owner = $owner; devs = $devs })
+                        $mods = @()
+                        if ($parsed.PSObject.Properties.Name -contains "mods" -and $parsed.mods) {
+                            $mods = @($parsed.mods | Where-Object { $_ } | ForEach-Object { [string]$_ })
+                        }
+                        $saved = Save-NovaDevConfig ([pscustomobject]@{ owner = $owner; devs = $devs; mods = $mods })
                         $jsonText = Get-Content $Script:DevsPath -Raw
-                        return (ConvertTo-NovaJson @{ success = $true; message = "Developer access list saved."; owner = $saved.owner; devs = $saved.devs; path = $Script:DevsPath; json = $jsonText })
+                        return (ConvertTo-NovaJson @{ success = $true; message = "Staff access list saved."; owner = $saved.owner; devs = $saved.devs; mods = $saved.mods; path = $Script:DevsPath; json = $jsonText })
                     } catch {
                         return (ConvertTo-NovaJson @{ success = $false; message = "Invalid devs.json: $($_.Exception.Message)" })
                     }
                 }
                 $jsonText = if (Test-Path $Script:DevsPath) { Get-Content $Script:DevsPath -Raw } else { "" }
-                return (ConvertTo-NovaJson @{ success = $true; owner = $devCfg.owner; devs = $devCfg.devs; path = $Script:DevsPath; json = $jsonText })
+                return (ConvertTo-NovaJson @{ success = $true; owner = $devCfg.owner; devs = $devCfg.devs; mods = $devCfg.mods; path = $Script:DevsPath; json = $jsonText })
             }
 
             if ($Path -eq "/api/dev/accounts") {
@@ -5826,34 +5944,82 @@ function Invoke-NovaApi {
                 foreach ($a in @(Load-Accounts)) {
                     $na = Normalize-NovaAccount $a
                     if (-not $na) { continue }
+                    $targetEmail = [string]$na.Email
+                    $targetRole = Get-NovaRole $targetEmail
+                    $targetRolePlan = Get-NovaRolePlan $targetRole
+                    $isPrivilegedTarget = ($targetRole -in @("owner", "dev", "mod"))
+
+                    # Devs and mods only learn that a protected account exists, never its details.
+                    if (-not $isOwner -and $isPrivilegedTarget) {
+                        $accounts += [pscustomobject]@{
+                            email          = ""
+                            name           = $targetRole.ToUpper()
+                            role           = $targetRole
+                            redacted       = $true
+                            plan           = $targetRolePlan
+                            effectivePlan  = $targetRolePlan
+                            balance        = 0
+                            created        = ""
+                            lastLogin      = ""
+                            logins         = 0
+                            streak         = 0
+                            bestStreak     = 0
+                            banned         = $false
+                            banUntil       = $null
+                            banReason      = ""
+                            softbanUntil   = $null
+                            softbanReason  = ""
+                            status         = "protected"
+                            isDev          = [bool]($targetRole -eq "dev")
+                            isMod          = [bool]($targetRole -eq "mod")
+                            isOwner        = [bool]($targetRole -eq "owner")
+                            canSeePassword = $false
+                            canModerate    = $false
+                            password       = ""
+                            passwordHash   = ""
+                        }
+                        continue
+                    }
+
                     $block = Get-NovaAccountBlock $na
                     $soft = Test-NovaSoftbanActive $na
                     $status = if ($block) { $block.kind } elseif ($soft) { "softban" } else { "active" }
+                    $effPlan = if ($targetRolePlan) { $targetRolePlan } else { [string]$na.Plan }
+                    # Passwords are owner-only. Devs and mods never receive them.
+                    $pwValue = if ($isOwner) { (Get-NovaAccountPassword $na) } else { "" }
+                    $hashValue = if ($isOwner) { [string]$na.PasswordHash } else { "" }
                     $accounts += [pscustomobject]@{
-                        email         = [string]$na.Email
-                        name          = [string]$na.Name
-                        plan          = [string]$na.Plan
-                        balance       = [int]$na.Balance
-                        planUntil     = $na.PlanUntil
-                        created       = [string]$na.Created
-                        lastLogin     = [string]$na.LastLogin
-                        logins        = [int]$na.Logins
-                        streak        = [int]$na.Streak
-                        bestStreak    = [int]$na.BestStreak
-                        banned        = [bool]$na.Banned
-                        banUntil      = $na.BanUntil
-                        banReason     = [string]$na.BanReason
-                        softbanUntil  = $na.SoftbanUntil
-                        softbanReason = [string]$na.SoftbanReason
-                        status        = $status
-                        isDev         = [bool](Test-NovaDevAccess ([string]$na.Email))
-                        isOwner       = [bool]($devCfg.owner -and ($devCfg.owner -ieq [string]$na.Email))
-                        password      = (Get-NovaAccountPassword $na)
-                        passwordHash  = [string]$na.PasswordHash
+                        email          = $targetEmail
+                        name           = [string]$na.Name
+                        plan           = [string]$na.Plan
+                        effectivePlan  = $effPlan
+                        balance        = [int]$na.Balance
+                        planUntil      = $na.PlanUntil
+                        created        = [string]$na.Created
+                        lastLogin      = [string]$na.LastLogin
+                        logins         = [int]$na.Logins
+                        streak         = [int]$na.Streak
+                        bestStreak     = [int]$na.BestStreak
+                        banned         = [bool]$na.Banned
+                        banUntil       = $na.BanUntil
+                        banReason      = [string]$na.BanReason
+                        softbanUntil   = $na.SoftbanUntil
+                        softbanReason  = [string]$na.SoftbanReason
+                        status         = $status
+                        role           = $targetRole
+                        redacted       = $false
+                        isDev          = [bool]($targetRole -eq "dev")
+                        isMod          = [bool]($targetRole -eq "mod")
+                        isOwner        = [bool]($targetRole -eq "owner")
+                        canSeePassword = [bool]$isOwner
+                        canModerate    = [bool]($isOwner -or (-not $isPrivilegedTarget))
+                        password       = $pwValue
+                        passwordHash   = $hashValue
                     }
                 }
-                $accounts = @($accounts | Sort-Object @{Expression={ if ($_.isOwner) { 0 } elseif ($_.isDev) { 1 } else { 2 } }}, @{Expression={ $_.email }})
-                return (ConvertTo-NovaJson @{ success = $true; accounts = $accounts; owner = $devCfg.owner; devs = $devCfg.devs; path = $Script:DevsPath })
+                $accounts = @($accounts | Sort-Object @{Expression={ if ($_.role -eq "owner") { 0 } elseif ($_.role -eq "dev") { 1 } elseif ($_.role -eq "mod") { 2 } else { 3 } }}, @{Expression={ $_.email }})
+                $ownerOut = if ($isOwner) { $devCfg.owner } else { "" }
+                return (ConvertTo-NovaJson @{ success = $true; accounts = $accounts; role = $myRole; owner = $ownerOut; devs = @(); mods = @(); path = $Script:DevsPath })
             }
 
             if ($Path -eq "/api/dev/action") {
@@ -5862,10 +6028,30 @@ function Invoke-NovaApi {
                 $target = Find-Account $email
                 if (-not $target) { return (ConvertTo-NovaJson @{ success = $false; message = "Account not found." }) }
                 $target = Normalize-NovaAccount $target
-                $isOwnerTarget = [bool]($devCfg.owner -and ($devCfg.owner -ieq $email))
+                $targetRole = Get-NovaRole $email
+                $isOwnerTarget = ($targetRole -eq "owner")
+                $isPrivilegedTarget = ($targetRole -in @("owner", "dev", "mod"))
                 $isSelf = [bool]($me -ieq $email)
+
+                if ($isPrivilegedTarget -and -not $isOwner) {
+                    return (ConvertTo-NovaJson @{ success = $false; message = "You cannot view, moderate or manage owner, developer or mod accounts." })
+                }
+                if (-not $isOwner) {
+                    # Devs may softban/timeout; mods may only timeout. Neither can ever ban permanently.
+                    $allowed = if ($myRole -eq "dev") { @("timeout", "softban", "clear") } else { @("timeout", "clear") }
+                    if ($action -notin $allowed) {
+                        $msg = if ($myRole -eq "dev") { "Devs can only timeout, softban or clear regular accounts." } else { "Mods can only timeout or clear regular accounts." }
+                        return (ConvertTo-NovaJson @{ success = $false; message = $msg })
+                    }
+                }
+                if ($action -in @("grantdev", "revokedev", "grantmod", "revokemod", "setplan", "setpassword", "ban") -and -not $isOwner) {
+                    return (ConvertTo-NovaJson @{ success = $false; message = "Only the owner can do that." })
+                }
                 if (($isOwnerTarget -or $isSelf) -and ($action -in @("ban", "timeout", "softban"))) {
                     return (ConvertTo-NovaJson @{ success = $false; message = "You cannot moderate the owner or your own account." })
+                }
+                if ($isSelf -and $action -eq "clear" -and -not $isOwner) {
+                    return (ConvertTo-NovaJson @{ success = $false; message = "You cannot clear your own moderation." })
                 }
                 $reason = [string]$body.reason
 
@@ -5914,17 +6100,33 @@ function Invoke-NovaApi {
                         $target.PasswordHash = Hash-Pass $pw
                     }
                     "grantdev" {
-                        $devs = @($devCfg.devs)
-                        if (-not ($devs | Where-Object { $_ -ieq $email })) { $devs += $email }
-                        $saved = Save-NovaDevConfig ([pscustomobject]@{ owner = $devCfg.owner; devs = $devs })
-                        return (ConvertTo-NovaJson @{ success = $true; message = "Developer access granted to $email."; devs = $saved.devs })
+                        if ($isOwnerTarget) { return (ConvertTo-NovaJson @{ success = $false; message = "That account is the owner." }) }
+                        $devs = @($devCfg.devs | Where-Object { $_ -and -not ([string]$_).Equals($email, [System.StringComparison]::OrdinalIgnoreCase) })
+                        $devs += $email
+                        $mods = @($devCfg.mods | Where-Object { $_ -and -not ([string]$_).Equals($email, [System.StringComparison]::OrdinalIgnoreCase) })
+                        $saved = Save-NovaDevConfig ([pscustomobject]@{ owner = $devCfg.owner; devs = $devs; mods = $mods })
+                        return (ConvertTo-NovaJson @{ success = $true; message = "Developer access granted to $email. They get Ultimate automatically."; devs = $saved.devs; mods = $saved.mods })
                     }
                     "revokedev" {
                         if ($isOwnerTarget) { return (ConvertTo-NovaJson @{ success = $false; message = "The owner always keeps developer access." }) }
                         if ($isSelf) { return (ConvertTo-NovaJson @{ success = $false; message = "You cannot remove your own developer access." }) }
                         $devs = @($devCfg.devs | Where-Object { $_ -and -not ([string]$_).Equals($email, [System.StringComparison]::OrdinalIgnoreCase) })
-                        $saved = Save-NovaDevConfig ([pscustomobject]@{ owner = $devCfg.owner; devs = $devs })
-                        return (ConvertTo-NovaJson @{ success = $true; message = "Developer access removed from $email."; devs = $saved.devs })
+                        $saved = Save-NovaDevConfig ([pscustomobject]@{ owner = $devCfg.owner; devs = $devs; mods = @($devCfg.mods) })
+                        return (ConvertTo-NovaJson @{ success = $true; message = "Developer access removed from $email."; devs = $saved.devs; mods = $saved.mods })
+                    }
+                    "grantmod" {
+                        if ($isOwnerTarget) { return (ConvertTo-NovaJson @{ success = $false; message = "That account is the owner." }) }
+                        $mods = @($devCfg.mods | Where-Object { $_ -and -not ([string]$_).Equals($email, [System.StringComparison]::OrdinalIgnoreCase) })
+                        $mods += $email
+                        $devs = @($devCfg.devs | Where-Object { $_ -and -not ([string]$_).Equals($email, [System.StringComparison]::OrdinalIgnoreCase) })
+                        $saved = Save-NovaDevConfig ([pscustomobject]@{ owner = $devCfg.owner; devs = $devs; mods = $mods })
+                        return (ConvertTo-NovaJson @{ success = $true; message = "Mod access granted to $email. They get Pro automatically."; devs = $saved.devs; mods = $saved.mods })
+                    }
+                    "revokemod" {
+                        if ($isSelf) { return (ConvertTo-NovaJson @{ success = $false; message = "You cannot remove your own mod access." }) }
+                        $mods = @($devCfg.mods | Where-Object { $_ -and -not ([string]$_).Equals($email, [System.StringComparison]::OrdinalIgnoreCase) })
+                        $saved = Save-NovaDevConfig ([pscustomobject]@{ owner = $devCfg.owner; devs = @($devCfg.devs); mods = $mods })
+                        return (ConvertTo-NovaJson @{ success = $true; message = "Mod access removed from $email."; devs = $saved.devs; mods = $saved.mods })
                     }
                     default {
                         return (ConvertTo-NovaJson @{ success = $false; message = "Unknown developer action." })
@@ -6279,6 +6481,10 @@ function Invoke-NovaApi {
             $target = switch (([string]$body.plan).ToLower()) { "pro" { "Pro" } "ultimate" { "Ultimate" } default { $null } }
             if (-not $target) { return (ConvertTo-NovaJson @{ success = $false; message = "Unknown plan." }) }
             $acc = Normalize-NovaAccount $Script:CurrentUser
+            $rolePlan = Get-NovaRolePlan (Get-NovaRole ([string]$acc.Email))
+            if ($rolePlan) {
+                return (ConvertTo-NovaJson @{ success = $false; message = "Your $rolePlan plan is included with your staff role; no purchase is needed." })
+            }
             if ((Get-NovaPlanRank $acc.Plan) -gt (Get-NovaPlanRank $target)) {
                 return (ConvertTo-NovaJson @{ success = $false; message = "You are already on $($acc.Plan), which is higher than $target." })
             }
