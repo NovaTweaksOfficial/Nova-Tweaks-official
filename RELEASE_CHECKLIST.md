@@ -6,7 +6,7 @@ This checklist covers the current Nova Tweaks project state (shared core, Window
 - [ ] **Rotate secrets** in `shared/Nova_Tweaks_WebGUI.ps1` (`$Script:GiftSecret`, `$Script:LicenseSecret`) and keep them identical in `shared/tools/New-NovaKey.ps1`. Do not ship default placeholder secrets.
 - [ ] **Tweak validation passes:** `pwsh -NoProfile -File ./shared/tools/Check-Tweaks.ps1` (AST parse + implemented actions; review missing-Off info).
 - [ ] **AST parse:** `pwsh -NoProfile -Command '$e=$null;$t=$null;[System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path ./shared/Nova_Tweaks_WebGUI.ps1),[ref]$t,[ref]$e)|Out-Null; if($e){$e|%{throw $_.Message}} else {"AST OK"}'`
-- [ ] **No Marvel Rivals tweaks** and no destructive anti-cheat/core game file deletion in Fortnite potato flows.
+- [ ] **No Marvel Rivals anywhere** (no profile, tweak, category or copy) and no destructive anti-cheat/core game file deletion in Fortnite potato flows.
 - [ ] **Storefront config:** review `docs/config.js` / `docs/app.js` (checkout URLs, download links, support/contact, product status).
 
 ## Windows Fortnite (must test on real Windows 10/11 + Fortnite)
@@ -50,10 +50,19 @@ This checklist covers the current Nova Tweaks project state (shared core, Window
 - [ ] End-to-end test: purchase → receive key → redeem in app → plan activates.
 - [ ] Confirm key format/secrets match the app build.
 
+## Staff roles / Dev Console (owner / dev / mod)
+- [x] Role resolution (`owner`, `dev`, `mod`, `user`) and automatic plans: owner/dev = Ultimate, mod = Pro.
+- [x] Server-side enforcement: only owners receive password fields; devs/mods never receive passwords or password hashes.
+- [x] Devs/mods see owner/dev/mod accounts only as redacted `OWNER`/`DEV`/`MOD` rows and cannot moderate or manage them.
+- [x] Only owners can edit `devs.json`, grant/revoke dev or mod, change plans, reset passwords or permanently ban.
+- [x] Devs can only timeout, softban or clear regular accounts; mods can only timeout or clear regular accounts.
+- [ ] Re-test the role UI and redaction in the packaged Windows exes on real Windows.
+- [ ] Confirm a newly granted dev immediately shows Ultimate and a newly granted mod immediately shows Pro after refresh/login.
+
 ## CI / distribution
 - [x] Build separate Windows executables in CI (`NovaTweaks-Fortnite-Windows.exe`, `NovaTweaks-Minecraft-Windows.exe`).
 - [x] Point `docs/config.js` Windows download URLs at the per-product release assets.
-- [ ] Push a `v*` tag and confirm all three assets attach to the GitHub release.
+- [x] Push a `v*` tag and confirm all three assets attach to the GitHub release (`v5.5.0` verified: two Windows exes + macOS zip).
 - [ ] Verify GitHub Pages deploy from `main`/`docs`.
 
 ## Safety notes
