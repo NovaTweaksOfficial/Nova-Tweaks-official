@@ -36,6 +36,18 @@ else
   rm -f "$DEST"/*.xml
 fi
 
+# Trim runtime pieces the Nova engine never uses (verified: engine boots, tweaks/dev APIs work).
+echo "Trimming bundled runtime..."
+rm -f "$DEST/Microsoft.CodeAnalysis.CSharp.dll" "$DEST/Microsoft.CodeAnalysis.dll" "$DEST/System.Private.ServiceModel.dll"
+find "$DEST" -maxdepth 1 -type d \( -name '??' -o -name '??-??' \) -exec rm -rf {} +
+rm -rf "$DEST/Schemas"
+rm -rf "$DEST/Modules/Microsoft.PowerShell.PSResourceGet" \
+       "$DEST/Modules/PowerShellGet" \
+       "$DEST/Modules/PackageManagement" \
+       "$DEST/Modules/PSReadLine" \
+       "$DEST/Modules/Microsoft.PowerShell.Archive" \
+       "$DEST/Modules/ThreadJob"
+
 echo "Rebuilding zip..."
 mkdir -p "$ROOT/docs/downloads"
 rm -f "$ZIP"

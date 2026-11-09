@@ -137,6 +137,16 @@ jobs:
           chmod +x "$RES/pwsh/pwsh"
           rm -rf "$RES/pwsh/ref"
           rm -f "$RES/pwsh"/*.xml
+          # Trim runtime pieces the Nova engine never uses.
+          rm -f "$RES/pwsh/Microsoft.CodeAnalysis.CSharp.dll" "$RES/pwsh/Microsoft.CodeAnalysis.dll" "$RES/pwsh/System.Private.ServiceModel.dll"
+          find "$RES/pwsh" -maxdepth 1 -type d \( -name '??' -o -name '??-??' \) -exec rm -rf {} +
+          rm -rf "$RES/pwsh/Schemas"
+          rm -rf "$RES/pwsh/Modules/Microsoft.PowerShell.PSResourceGet" \
+                 "$RES/pwsh/Modules/PowerShellGet" \
+                 "$RES/pwsh/Modules/PackageManagement" \
+                 "$RES/pwsh/Modules/PSReadLine" \
+                 "$RES/pwsh/Modules/Microsoft.PowerShell.Archive" \
+                 "$RES/pwsh/Modules/ThreadJob"
           test -x "$RES/pwsh/pwsh"
           du -sh "$RES/pwsh"
 
