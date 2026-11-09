@@ -6,7 +6,7 @@ This checklist covers the current Nova Tweaks project state (shared core, Window
 - [ ] **Rotate secrets** in `shared/Nova_Tweaks_WebGUI.ps1` (`$Script:GiftSecret`, `$Script:LicenseSecret`) and keep them identical in `shared/tools/New-NovaKey.ps1`. Do not ship default placeholder secrets.
 - [ ] **Tweak validation passes:** `pwsh -NoProfile -File ./shared/tools/Check-Tweaks.ps1` (AST parse + implemented actions; review missing-Off info).
 - [ ] **AST parse:** `pwsh -NoProfile -Command '$e=$null;$t=$null;[System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path ./shared/Nova_Tweaks_WebGUI.ps1),[ref]$t,[ref]$e)|Out-Null; if($e){$e|%{throw $_.Message}} else {"AST OK"}'`
-- [ ] **No Marvel Rivals anywhere** (no profile, tweak, category or copy) and no destructive anti-cheat/core game file deletion in Fortnite potato flows.
+- [ ] **Only Fortnite and Minecraft content** — no other game profiles, tweaks, categories or copy — and no destructive anti-cheat/core game file deletion in Fortnite potato flows.
 - [ ] **Storefront config:** review `docs/config.js` / `docs/app.js` (checkout URLs, download links, support/contact, product status).
 
 ## Windows Fortnite (must test on real Windows 10/11 + Fortnite)
