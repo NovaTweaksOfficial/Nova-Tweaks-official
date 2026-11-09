@@ -33,8 +33,9 @@ in Fortnite mode.
 **Settings → Motion & sound** controls the UI feel on both Windows and macOS: tab transitions (Fade, Slide or
 Zoom), animation speed (Fast, Normal, Slow), and a full on/off switch. Click sounds are synthesized with Web
 Audio (no audio files) in four packs — Soft, Arcade, Mechanical and Chime — with a volume slider and a test
-button. Tabs, category buttons, tweak toggles, Apply All / Remove All, login and errors each get their own
-sound. Both preferences persist in `localStorage`.
+button. The 🔊 button in the header plays a quick sound check at any time. Tabs, category buttons, tweak
+toggles, Apply All / Remove All, login and errors each get their own sound. Sounds are armed by your first
+click and play immediately, including that first click. Both preferences persist in `localStorage`.
 
 ## Plans and accounts
 

@@ -3402,26 +3402,26 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 @keyframes fadeIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 
 /* Motion system (Settings -> Motion & sound) */
-:root{--motion-fast:.18s;--motion-med:.3s}
+:root{--motion-fast:.2s;--motion-med:.42s}
 html[data-anim="fade"] .page.active{animation:novaFade var(--motion-med) ease both}
 html[data-anim="slide"] .page.active{animation:novaSlide var(--motion-med) cubic-bezier(.2,.8,.2,1) both}
 html[data-anim="zoom"] .page.active{animation:novaZoom var(--motion-med) cubic-bezier(.2,.9,.25,1.12) both}
-html[data-anim] .tweakcard{animation:novaCardIn var(--motion-med) ease both;animation-delay:calc(var(--i,0) * 16ms)}
+html[data-anim] .tweakcard{animation:novaCardIn var(--motion-med) ease both;animation-delay:calc(var(--i,0) * 22ms)}
 html[data-anim] .card,html[data-anim] .acctcard{animation:novaRise var(--motion-med) ease both}
 html[data-anim="off"] .page.active,html[data-anim="off"] .tweakcard,html[data-anim="off"] .card,html[data-anim="off"] .acctcard,html[data-anim="off"] .chip,html[data-anim="off"] .catbtn{animation:none!important;transition:none!important}
-@keyframes novaFade{from{opacity:0}to{opacity:1}}
-@keyframes novaSlide{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
-@keyframes novaZoom{from{opacity:0;transform:scale(.982)}to{opacity:1;transform:scale(1)}}
-@keyframes novaCardIn{from{opacity:0;transform:translateY(10px) scale(.99)}to{opacity:1;transform:none}}
-@keyframes novaRise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-@keyframes novaPulse{0%{transform:scale(1)}45%{transform:scale(1.022);box-shadow:0 0 0 2px rgba(239,68,68,.22),0 10px 32px rgba(0,0,0,.45)}100%{transform:scale(1)}}
-.tweakcard.pulse{animation:novaPulse .38s ease!important}
+@keyframes novaFade{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
+@keyframes novaSlide{from{opacity:0;transform:translateY(38px)}to{opacity:1;transform:none}}
+@keyframes novaZoom{from{opacity:0;transform:scale(.88)}to{opacity:1;transform:scale(1)}}
+@keyframes novaCardIn{from{opacity:0;transform:translateY(22px) scale(.96)}to{opacity:1;transform:none}}
+@keyframes novaRise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+@keyframes novaPulse{0%{transform:scale(1)}45%{transform:scale(1.04);box-shadow:0 0 0 3px rgba(239,68,68,.32),0 10px 32px rgba(0,0,0,.45)}100%{transform:scale(1)}}
+.tweakcard.pulse{animation:novaPulse .5s ease!important}
 .uiopts{display:flex;flex-wrap:wrap;gap:12px 22px;align-items:center}
 .uiopt{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--textdim)}
 .uiopt input[type=checkbox]{width:16px;height:16px;accent-color:var(--red);cursor:pointer}
 .uiopt input[type=range]{accent-color:var(--red);cursor:pointer}
 .uiopt select{background:rgba(0,0,0,.4);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 10px;font-family:inherit;font-size:12px;cursor:pointer}
-@media (prefers-reduced-motion:reduce){html[data-anim] .page.active,html[data-anim] .tweakcard,html[data-anim] .card,html[data-anim] .acctcard{animation:none!important}}
+/* Motion is user-controlled in Settings; do not auto-disable it here. */
 @media (max-width:1180px){.headsearch{width:150px}.headside .iconbtn{width:30px;height:30px}}
 @media (max-width:980px){.headsearch{display:none}.headrow{gap:12px;padding:10px 16px}.chiprail{padding:0 16px 10px}.content{padding:22px 16px 32px}}
 
@@ -3814,6 +3814,7 @@ h1{font-family:"Nova Sans","Plus Jakarta Sans",system-ui,sans-serif;font-size:26
     </div>
     <div class="headside">
       <span class="planbadge free" id="planBadge">FREE</span>
+      <button class="iconbtn" id="soundQuickBtn" title="Test sound">🔊</button>
       <button class="iconbtn" id="devNavBtn" data-page="dev" title="Developer console" style="display:none">🛠</button>
       <button class="iconbtn" data-page="settings" title="Settings">⚙</button>
       <button class="iconbtn" data-page="restore" title="Restore">↺</button>
@@ -4463,7 +4464,7 @@ const NovaAnim=(()=>{
   function apply(){
     const r=document.documentElement;
     r.dataset.anim=p.on?(p.mode||'fade'):'off';
-    const speeds={fast:['.12s','.18s'],normal:['.22s','.3s'],slow:['.4s','.62s']};
+    const speeds={fast:['.16s','.28s'],normal:['.28s','.46s'],slow:['.5s','.9s']};
     const s=speeds[p.speed]||speeds.normal;
     r.style.setProperty('--motion-fast',s[0]);
     r.style.setProperty('--motion-med',s[1]);
@@ -4475,50 +4476,50 @@ const NovaAnim=(()=>{
 })();
 
 const NovaSound=(()=>{
-  const defaults={on:true,volume:35,pack:'soft'};
+  const defaults={on:true,volume:60,pack:'soft'};
   let p=Object.assign({},defaults);
   try{Object.assign(p,JSON.parse(localStorage.getItem('nova_sound')||'{}'))}catch(e){}
   let ctx=null,master=null,armed=false;
   const PACKS={
     soft:{
-      click:[{f:640,d:.05,g:.10}],
-      tab:[{f:440,d:.09,g:.12},{f:660,d:.11,t:.05,g:.11}],
-      on:[{f:523.25,d:.12,g:.15},{f:783.99,d:.17,t:.07,g:.13}],
-      off:[{f:523.25,d:.10,g:.12},{f:349.23,d:.15,t:.06,g:.10}],
-      success:[{f:659.25,d:.12,g:.14},{f:880,d:.18,t:.09,g:.12}],
-      error:[{f:220,d:.20,type:'triangle',g:.14}],
-      sparkle:[{f:1046.5,d:.08,g:.10},{f:1318.5,d:.08,t:.06,g:.10},{f:1568,d:.16,t:.12,g:.09}],
-      login:[{f:392,d:.12,g:.12},{f:523.25,d:.12,t:.08,g:.12},{f:659.25,d:.2,t:.16,g:.12}]
+      click:[{f:560,d:.09,g:.28}],
+      tab:[{f:392,d:.16,g:.30},{f:587.33,d:.22,t:.07,g:.28}],
+      on:[{f:440,d:.18,g:.30},{f:659.25,d:.26,t:.09,g:.28}],
+      off:[{f:493.88,d:.16,g:.28},{f:329.63,d:.24,t:.08,g:.26}],
+      success:[{f:523.25,d:.16,g:.30},{f:659.25,d:.18,t:.09,g:.28},{f:783.99,d:.30,t:.18,g:.26}],
+      error:[{f:196,d:.34,type:'triangle',g:.32}],
+      sparkle:[{f:880,d:.12,g:.26},{f:1174.66,d:.12,t:.07,g:.24},{f:1568,d:.26,t:.16,g:.22}],
+      login:[{f:392,d:.18,g:.28},{f:523.25,d:.18,t:.10,g:.28},{f:659.25,d:.36,t:.22,g:.26}]
     },
     arcade:{
-      click:[{f:880,d:.035,type:'square',g:.07}],
-      tab:[{f:660,d:.06,type:'square',g:.08},{f:990,d:.08,t:.04,type:'square',g:.07}],
-      on:[{f:523.25,d:.07,type:'square',g:.09},{f:659.25,d:.07,t:.06,type:'square',g:.09},{f:1046.5,d:.12,t:.12,type:'square',g:.08}],
-      off:[{f:659.25,d:.06,type:'square',g:.08},{f:440,d:.06,t:.05,type:'square',g:.08},{f:329.63,d:.12,t:.10,type:'square',g:.07}],
-      success:[{f:783.99,d:.06,type:'square',g:.09},{f:1046.5,d:.06,t:.06,type:'square',g:.09},{f:1318.5,d:.14,t:.12,type:'square',g:.08}],
-      error:[{f:196,d:.08,type:'square',g:.10},{f:147,d:.14,t:.08,type:'square',g:.09}],
-      sparkle:[{f:1046.5,d:.05,type:'square',g:.08},{f:1318.5,d:.05,t:.04,type:'square',g:.08},{f:1568,d:.05,t:.08,type:'square',g:.08},{f:2093,d:.14,t:.12,type:'square',g:.07}],
-      login:[{f:523.25,d:.06,type:'square',g:.09},{f:659.25,d:.06,t:.06,type:'square',g:.09},{f:783.99,d:.06,t:.12,type:'square',g:.09},{f:1046.5,d:.16,t:.18,type:'square',g:.08}]
+      click:[{f:880,d:.05,type:'square',g:.14}],
+      tab:[{f:660,d:.08,type:'square',g:.16},{f:990,d:.10,t:.05,type:'square',g:.15}],
+      on:[{f:523.25,d:.09,type:'square',g:.18},{f:659.25,d:.09,t:.07,type:'square',g:.18},{f:1046.5,d:.16,t:.14,type:'square',g:.16}],
+      off:[{f:659.25,d:.08,type:'square',g:.16},{f:440,d:.08,t:.06,type:'square',g:.16},{f:329.63,d:.16,t:.12,type:'square',g:.15}],
+      success:[{f:783.99,d:.08,type:'square',g:.18},{f:1046.5,d:.08,t:.07,type:'square',g:.18},{f:1318.5,d:.18,t:.14,type:'square',g:.16}],
+      error:[{f:196,d:.12,type:'square',g:.18},{f:147,d:.18,t:.10,type:'square',g:.16}],
+      sparkle:[{f:1046.5,d:.07,type:'square',g:.16},{f:1318.5,d:.07,t:.05,type:'square',g:.16},{f:1568,d:.07,t:.10,type:'square',g:.15},{f:2093,d:.18,t:.15,type:'square',g:.14}],
+      login:[{f:523.25,d:.08,type:'square',g:.17},{f:659.25,d:.08,t:.07,type:'square',g:.17},{f:783.99,d:.08,t:.14,type:'square',g:.17},{f:1046.5,d:.22,t:.21,type:'square',g:.15}]
     },
     mechanical:{
-      click:[{f:300,d:.03,type:'sawtooth',g:.07}],
-      tab:[{f:240,d:.05,type:'sawtooth',g:.09},{f:360,d:.06,t:.05,type:'sawtooth',g:.07}],
-      on:[{f:180,d:.07,type:'sawtooth',g:.11,slide:520},{f:520,d:.06,t:.08,type:'triangle',g:.08}],
-      off:[{f:520,d:.06,type:'sawtooth',g:.10,slide:180},{f:160,d:.10,t:.07,type:'triangle',g:.07}],
-      success:[{f:260,d:.06,type:'sawtooth',g:.10,slide:520},{f:520,d:.08,t:.07,type:'sawtooth',g:.09,slide:780}],
-      error:[{f:140,d:.22,type:'sawtooth',g:.12}],
-      sparkle:[{f:720,d:.04,type:'square',g:.08},{f:960,d:.04,t:.04,type:'square',g:.08},{f:1280,d:.10,t:.08,type:'square',g:.07}],
-      login:[{f:200,d:.06,type:'sawtooth',g:.10,slide:400},{f:400,d:.06,t:.07,type:'sawtooth',g:.09,slide:800},{f:800,d:.12,t:.14,type:'triangle',g:.08}]
+      click:[{f:300,d:.05,type:'sawtooth',g:.14}],
+      tab:[{f:240,d:.08,type:'sawtooth',g:.17},{f:360,d:.09,t:.06,type:'sawtooth',g:.15}],
+      on:[{f:180,d:.10,type:'sawtooth',g:.20,slide:520},{f:520,d:.09,t:.10,type:'triangle',g:.16}],
+      off:[{f:520,d:.09,type:'sawtooth',g:.18,slide:180},{f:160,d:.14,t:.09,type:'triangle',g:.15}],
+      success:[{f:260,d:.09,type:'sawtooth',g:.18,slide:520},{f:520,d:.12,t:.09,type:'sawtooth',g:.17,slide:780}],
+      error:[{f:140,d:.30,type:'sawtooth',g:.20}],
+      sparkle:[{f:720,d:.06,type:'square',g:.15},{f:960,d:.06,t:.05,type:'square',g:.15},{f:1280,d:.14,t:.10,type:'square',g:.14}],
+      login:[{f:200,d:.09,type:'sawtooth',g:.18,slide:400},{f:400,d:.09,t:.09,type:'sawtooth',g:.17,slide:800},{f:800,d:.16,t:.18,type:'triangle',g:.15}]
     },
     chime:{
-      click:[{f:1046.5,d:.12,g:.06},{f:2093,d:.10,t:.01,g:.03}],
-      tab:[{f:783.99,d:.22,g:.09},{f:1174.66,d:.26,t:.06,g:.07},{f:1568,d:.3,t:.12,g:.05}],
-      on:[{f:523.25,d:.28,g:.10},{f:1046.5,d:.3,t:.02,g:.05},{f:1318.5,d:.34,t:.08,g:.05}],
-      off:[{f:523.25,d:.24,g:.09},{f:392,d:.3,t:.06,g:.07},{f:261.63,d:.36,t:.14,g:.06}],
-      success:[{f:659.25,d:.3,g:.10},{f:987.77,d:.34,t:.07,g:.07},{f:1318.5,d:.4,t:.14,g:.06},{f:1975.5,d:.5,t:.2,g:.04}],
-      error:[{f:246.94,d:.4,g:.10,type:'triangle'},{f:185,d:.5,t:.06,g:.07,type:'triangle'}],
-      sparkle:[{f:1568,d:.18,g:.06},{f:2093,d:.2,t:.05,g:.05},{f:2637,d:.24,t:.1,g:.04},{f:3136,d:.3,t:.16,g:.03}],
-      login:[{f:523.25,d:.24,g:.09},{f:659.25,d:.24,t:.08,g:.08},{f:783.99,d:.24,t:.16,g:.08},{f:1046.5,d:.42,t:.24,g:.07}]
+      click:[{f:1046.5,d:.16,g:.12},{f:2093,d:.14,t:.01,g:.08}],
+      tab:[{f:783.99,d:.28,g:.18},{f:1174.66,d:.32,t:.08,g:.15},{f:1568,d:.36,t:.15,g:.12}],
+      on:[{f:523.25,d:.32,g:.18},{f:1046.5,d:.34,t:.03,g:.12},{f:1318.5,d:.40,t:.10,g:.12}],
+      off:[{f:523.25,d:.28,g:.17},{f:392,d:.34,t:.07,g:.15},{f:261.63,d:.42,t:.16,g:.14}],
+      success:[{f:659.25,d:.34,g:.18},{f:987.77,d:.38,t:.08,g:.15},{f:1318.5,d:.44,t:.16,g:.14},{f:1975.5,d:.56,t:.24,g:.10}],
+      error:[{f:246.94,d:.46,g:.18,type:'triangle'},{f:185,d:.56,t:.07,g:.15,type:'triangle'}],
+      sparkle:[{f:1568,d:.20,g:.12},{f:2093,d:.22,t:.06,g:.11},{f:2637,d:.26,t:.12,g:.10},{f:3136,d:.34,t:.18,g:.08}],
+      login:[{f:523.25,d:.28,g:.17},{f:659.25,d:.28,t:.09,g:.16},{f:783.99,d:.28,t:.18,g:.16},{f:1046.5,d:.48,t:.27,g:.14}]
     }
   };
   function ensure(){
@@ -4529,37 +4530,52 @@ const NovaSound=(()=>{
       try{
         ctx=new AC();
         master=ctx.createGain();
-        master.gain.value=(Number(p.volume)||0)/100*.45;
+        master.gain.value=(Number(p.volume)||0)/100*.9;
         master.connect(ctx.destination);
       }catch(e){ return null; }
     }
     if(ctx.state==='suspended'){ try{ctx.resume()}catch(e){} }
-    if(master) master.gain.value=(Number(p.volume)||0)/100*.45;
+    if(master) master.gain.value=(Number(p.volume)||0)/100*.9;
     return ctx;
   }
   function note(def){
     const c=ensure(); if(!c||!master) return;
     try{
-      const t=c.currentTime+(def.t||0),dur=def.d||.12;
+      // Schedule relative to the context clock once. (The old code added currentTime twice,
+      // so after the context had been running for a while every note landed far in the future.)
+      const t=c.currentTime+(def.t||0)+.02,dur=def.d||.12;
       const o=c.createOscillator(),g=c.createGain();
       o.type=def.type||'sine';
-      o.frequency.setValueAtTime(def.f,c.currentTime+t);
-      if(def.slide) o.frequency.exponentialRampToValueAtTime(def.slide,c.currentTime+t+dur);
-      g.gain.setValueAtTime(.0001,c.currentTime+t);
-      g.gain.exponentialRampToValueAtTime(Math.max(.0002,def.g||.1),c.currentTime+t+.012);
-      g.gain.exponentialRampToValueAtTime(.0001,c.currentTime+t+dur);
+      o.frequency.setValueAtTime(def.f,t);
+      if(def.slide) o.frequency.exponentialRampToValueAtTime(def.slide,t+dur);
+      g.gain.setValueAtTime(.0001,t);
+      g.gain.exponentialRampToValueAtTime(Math.max(.0002,def.g||.1),t+.012);
+      g.gain.exponentialRampToValueAtTime(.0001,t+dur);
       o.connect(g);g.connect(master);
-      o.start(c.currentTime+t);o.stop(c.currentTime+t+dur+.03);
+      o.start(t);o.stop(t+dur+.03);
     }catch(e){}
   }
   function play(name){
-    if(!p.on||!armed) return;
+    if(!p.on) return;
+    if(!armed){ try{ resume(); }catch(e){} }
+    if(!armed) return;
     const pack=PACKS[p.pack]||PACKS.soft;
     const seq=pack[name]||pack.click;
-    if(seq) seq.forEach(note);
+    if(!seq) return;
+    const c=ensure();
+    if(!c) return;
+    const fire=()=>{ try{ seq.forEach(note); }catch(e){} };
+    // On the first gesture the context is still resuming; wait for it so the very first click is audible.
+    if(c.state==='suspended'){
+      try{
+        const pr=c.resume();
+        if(pr&&typeof pr.then==='function') pr.then(fire).catch(fire);
+        else fire();
+      }catch(e){ fire(); }
+    } else fire();
   }
   function save(){try{localStorage.setItem('nova_sound',JSON.stringify(p))}catch(e){}}
-  function set(k,v){p[k]=v;save();if(k==='volume'&&master)master.gain.value=(Number(v)||0)/100*.45;}
+  function set(k,v){p[k]=v;save();if(k==='volume'&&master)master.gain.value=(Number(v)||0)/100*.9;}
   function resume(){armed=true;ensure();}
   return {get prefs(){return Object.assign({},p)},set,play,resume,defaults,packs:Object.keys(PACKS)};
 })();
@@ -4576,7 +4592,7 @@ const NovaSound=(()=>{
     if(el.matches('.catbtn')) return;
     if(el.matches('.navbtn,.chip[data-page],.iconbtn[data-page]')) return;
     if(el.closest('.tweakcard')) return;
-    if(el.id==='soundTestBtn') return;
+    if(el.id==='soundTestBtn'||el.id==='soundQuickBtn') return;
     if(el.matches('.gamebtn,.login-tab')) NovaSound.play('tab');
     else NovaSound.play('click');
   },true);
@@ -5532,7 +5548,7 @@ document.getElementById('toggleSnow').addEventListener('change',e=>{document.get
 (function(){
   const a=NovaAnim.prefs, s=NovaSound.prefs;
   const animOn=document.getElementById('animOn'), animStyle=document.getElementById('animStyle'), animSpeed=document.getElementById('animSpeed');
-  const soundOn=document.getElementById('soundOn'), soundPack=document.getElementById('soundPack'), soundVolume=document.getElementById('soundVolume'), soundTest=document.getElementById('soundTestBtn');
+  const soundOn=document.getElementById('soundOn'), soundPack=document.getElementById('soundPack'), soundVolume=document.getElementById('soundVolume'), soundTest=document.getElementById('soundTestBtn'), soundQuick=document.getElementById('soundQuickBtn');
   if(animOn) animOn.checked=!!a.on;
   if(animStyle) animStyle.value=a.mode||'fade';
   if(animSpeed) animSpeed.value=a.speed||'normal';
@@ -5545,7 +5561,8 @@ document.getElementById('toggleSnow').addEventListener('change',e=>{document.get
   if(soundOn) soundOn.addEventListener('change',e=>NovaSound.set('on',e.target.checked));
   if(soundPack) soundPack.addEventListener('change',e=>{NovaSound.set('pack',e.target.value);NovaSound.resume();NovaSound.play('tab');});
   if(soundVolume) soundVolume.addEventListener('input',e=>NovaSound.set('volume',Number(e.target.value)));
-  if(soundTest) soundTest.addEventListener('click',()=>{NovaSound.resume();NovaSound.play('sparkle');});
+  if(soundTest) soundTest.addEventListener('click',()=>{NovaSound.resume();NovaSound.play('sparkle');showToast('Sound test played ('+NovaSound.prefs.pack+')');});
+  if(soundQuick) soundQuick.addEventListener('click',()=>{NovaSound.resume();NovaSound.play('success');showToast('Sound test played ('+NovaSound.prefs.pack+')');});
 })();
 function restartPageAnim(){
   const p=document.querySelector('.page.active');
