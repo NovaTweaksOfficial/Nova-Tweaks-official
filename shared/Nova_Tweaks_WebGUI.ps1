@@ -3472,19 +3472,28 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 #page-tweaks #tweakGrid{flex:0 0 auto;align-content:start}
 @keyframes fadeIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 
-/* Motion system (Settings -> Motion & sound) */
+/* Motion system (Settings -> Motion & sound). Each mode has a clearly different
+   page + card motion so switching modes is visible immediately. */
 :root{--motion-fast:.2s;--motion-med:.42s}
 html[data-anim="fade"] .page.active{animation:novaFade var(--motion-med) ease both}
 html[data-anim="slide"] .page.active{animation:novaSlide var(--motion-med) cubic-bezier(.2,.8,.2,1) both}
 html[data-anim="zoom"] .page.active{animation:novaZoom var(--motion-med) cubic-bezier(.2,.9,.25,1.12) both}
-html[data-anim] .tweakcard{animation:novaCardIn var(--motion-med) ease both;animation-delay:calc(var(--i,0) * 22ms)}
-html[data-anim] .card,html[data-anim] .acctcard{animation:novaRise var(--motion-med) ease both}
-html[data-anim="off"] .page.active,html[data-anim="off"] .tweakcard,html[data-anim="off"] .card,html[data-anim="off"] .acctcard,html[data-anim="off"] .chip,html[data-anim="off"] .catbtn{animation:none!important;transition:none!important}
-@keyframes novaFade{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
-@keyframes novaSlide{from{opacity:0;transform:translateY(38px)}to{opacity:1;transform:none}}
-@keyframes novaZoom{from{opacity:0;transform:scale(.88)}to{opacity:1;transform:scale(1)}}
-@keyframes novaCardIn{from{opacity:0;transform:translateY(22px) scale(.96)}to{opacity:1;transform:none}}
-@keyframes novaRise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+
+html[data-anim="fade"] .tweakcard{animation:novaFadeCard var(--motion-med) ease both;animation-delay:min(calc(var(--i,0) * 18ms),320ms)}
+html[data-anim="slide"] .tweakcard{animation:novaSlideCard var(--motion-med) cubic-bezier(.2,.8,.2,1) both;animation-delay:min(calc(var(--i,0) * 26ms),420ms)}
+html[data-anim="zoom"] .tweakcard{animation:novaZoomCard var(--motion-med) cubic-bezier(.2,.9,.25,1.12) both;animation-delay:min(calc(var(--i,0) * 22ms),380ms)}
+
+html[data-anim="fade"] .card,html[data-anim="fade"] .acctcard,html[data-anim="fade"] .profilecard,html[data-anim="fade"] .statcard{animation:novaFadeCard var(--motion-med) ease both}
+html[data-anim="slide"] .card,html[data-anim="slide"] .acctcard,html[data-anim="slide"] .profilecard,html[data-anim="slide"] .statcard{animation:novaSlideCard var(--motion-med) cubic-bezier(.2,.8,.2,1) both}
+html[data-anim="zoom"] .card,html[data-anim="zoom"] .acctcard,html[data-anim="zoom"] .profilecard,html[data-anim="zoom"] .statcard{animation:novaZoomCard var(--motion-med) cubic-bezier(.2,.9,.25,1.12) both}
+
+html[data-anim="off"] .page.active,html[data-anim="off"] .tweakcard,html[data-anim="off"] .card,html[data-anim="off"] .acctcard,html[data-anim="off"] .profilecard,html[data-anim="off"] .statcard,html[data-anim="off"] .chip,html[data-anim="off"] .catbtn{animation:none!important;transition:none!important}
+@keyframes novaFade{from{opacity:0}to{opacity:1}}
+@keyframes novaSlide{from{opacity:0;transform:translateX(110px)}to{opacity:1;transform:none}}
+@keyframes novaZoom{from{opacity:0;transform:scale(.72)}to{opacity:1;transform:scale(1)}}
+@keyframes novaFadeCard{from{opacity:0}to{opacity:1}}
+@keyframes novaSlideCard{from{opacity:0;transform:translateX(140px) rotate(.5deg)}to{opacity:1;transform:none}}
+@keyframes novaZoomCard{from{opacity:0;transform:scale(.55) rotate(-1.5deg)}to{opacity:1;transform:scale(1) rotate(0)}}
 @keyframes novaPulse{0%{transform:scale(1)}45%{transform:scale(1.04);box-shadow:0 0 0 3px rgba(239,68,68,.32),0 10px 32px rgba(0,0,0,.45)}100%{transform:scale(1)}}
 .tweakcard.pulse{animation:novaPulse .5s ease!important}
 .uiopts{display:flex;flex-wrap:wrap;gap:12px 22px;align-items:center}
@@ -5834,9 +5843,11 @@ document.getElementById('toggleSnow').addEventListener('change',e=>{document.get
 function restartPageAnim(){
   const p=document.querySelector('.page.active');
   if(!p) return;
-  p.style.animation='none';
+  // Replay the page and every animated card so changing Fade/Slide/Zoom is obvious.
+  const els=[p].concat(Array.from(p.querySelectorAll('.tweakcard,.card,.acctcard,.profilecard,.statcard,.chip,.catbtn')));
+  els.forEach(el=>{el.style.animation='none';});
   void p.offsetWidth;
-  p.style.animation='';
+  els.forEach(el=>{el.style.animation='';});
 }
 
 

@@ -65,6 +65,8 @@ This checklist covers the current Nova Tweaks project state (shared core, Window
 ## Local testing
 - [x] `Start-Windows-Test.command` opens one localhost with both the Fortnite and Minecraft Windows catalogs (`NOVA_WINDOWS_PREVIEW=1`, no fixed game).
 - [x] macOS native host implements `WKUIDelegate` alert/confirm/prompt panels.
+- [x] Motion modes are visibly distinct: Fade (opacity), Slide (horizontal), Zoom (scale), with matching card animations and live replay when changed.
+- [x] Animation speed setting changes the actual transition duration (fast/normal/slow).
 
 ## CI / distribution
 - [x] Build separate Windows executables in CI (`NovaTweaks-Fortnite-Windows.exe`, `NovaTweaks-Minecraft-Windows.exe`).
