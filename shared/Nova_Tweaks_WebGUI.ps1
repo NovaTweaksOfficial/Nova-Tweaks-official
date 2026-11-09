@@ -3400,6 +3400,28 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 #page-tweaks.active{display:flex;flex-direction:column;min-height:0}
 #page-tweaks #tweakGrid{flex:0 0 auto;align-content:start}
 @keyframes fadeIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+
+/* Motion system (Settings -> Motion & sound) */
+:root{--motion-fast:.18s;--motion-med:.3s}
+html[data-anim="fade"] .page.active{animation:novaFade var(--motion-med) ease both}
+html[data-anim="slide"] .page.active{animation:novaSlide var(--motion-med) cubic-bezier(.2,.8,.2,1) both}
+html[data-anim="zoom"] .page.active{animation:novaZoom var(--motion-med) cubic-bezier(.2,.9,.25,1.12) both}
+html[data-anim] .tweakcard{animation:novaCardIn var(--motion-med) ease both;animation-delay:calc(var(--i,0) * 16ms)}
+html[data-anim] .card,html[data-anim] .acctcard{animation:novaRise var(--motion-med) ease both}
+html[data-anim="off"] .page.active,html[data-anim="off"] .tweakcard,html[data-anim="off"] .card,html[data-anim="off"] .acctcard,html[data-anim="off"] .chip,html[data-anim="off"] .catbtn{animation:none!important;transition:none!important}
+@keyframes novaFade{from{opacity:0}to{opacity:1}}
+@keyframes novaSlide{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+@keyframes novaZoom{from{opacity:0;transform:scale(.982)}to{opacity:1;transform:scale(1)}}
+@keyframes novaCardIn{from{opacity:0;transform:translateY(10px) scale(.99)}to{opacity:1;transform:none}}
+@keyframes novaRise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes novaPulse{0%{transform:scale(1)}45%{transform:scale(1.022);box-shadow:0 0 0 2px rgba(239,68,68,.22),0 10px 32px rgba(0,0,0,.45)}100%{transform:scale(1)}}
+.tweakcard.pulse{animation:novaPulse .38s ease!important}
+.uiopts{display:flex;flex-wrap:wrap;gap:12px 22px;align-items:center}
+.uiopt{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--textdim)}
+.uiopt input[type=checkbox]{width:16px;height:16px;accent-color:var(--red);cursor:pointer}
+.uiopt input[type=range]{accent-color:var(--red);cursor:pointer}
+.uiopt select{background:rgba(0,0,0,.4);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 10px;font-family:inherit;font-size:12px;cursor:pointer}
+@media (prefers-reduced-motion:reduce){html[data-anim] .page.active,html[data-anim] .tweakcard,html[data-anim] .card,html[data-anim] .acctcard{animation:none!important}}
 @media (max-width:1180px){.headsearch{width:150px}.headside .iconbtn{width:30px;height:30px}}
 @media (max-width:980px){.headsearch{display:none}.headrow{gap:12px;padding:10px 16px}.chiprail{padding:0 16px 10px}.content{padding:22px 16px 32px}}
 
@@ -4298,6 +4320,28 @@ spotify.exe</textarea>
       <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="toggleSnow"> Snowfall</label>
     </div>
   </div>
+
+  <div class="card">
+    <h3 style="margin-bottom:6px;font-size:14px">Motion &amp; sound</h3>
+    <div style="font-size:12px;color:var(--textdim);margin-bottom:12px">Choose how tabs and tweaks animate, and what you hear when you click something.</div>
+    <div class="uiopts">
+      <label class="uiopt"><span>Animations</span><input type="checkbox" id="animOn" checked></label>
+      <label class="uiopt"><span>Style</span>
+        <select id="animStyle"><option value="fade">Fade</option><option value="slide">Slide</option><option value="zoom">Zoom</option></select>
+      </label>
+      <label class="uiopt"><span>Speed</span>
+        <select id="animSpeed"><option value="fast">Fast</option><option value="normal">Normal</option><option value="slow">Slow</option></select>
+      </label>
+    </div>
+    <div class="uiopts" style="margin-top:14px">
+      <label class="uiopt"><span>Sounds</span><input type="checkbox" id="soundOn" checked></label>
+      <label class="uiopt"><span>Pack</span>
+        <select id="soundPack"><option value="soft">Soft</option><option value="arcade">Arcade</option><option value="mechanical">Mechanical</option><option value="chime">Chime</option></select>
+      </label>
+      <label class="uiopt"><span>Volume</span><input type="range" id="soundVolume" min="0" max="100" value="35" style="width:130px"></label>
+      <button class="btn ghost sm" id="soundTestBtn">Test sound</button>
+    </div>
+  </div>
 </div>
 
 <!-- DEVELOPER CONSOLE (owner only) -->
@@ -4410,6 +4454,138 @@ window.onerror=(m,u,l)=>{const e=document.getElementById('loginError');if(e)e.te
   document.addEventListener('mousedown',onDown);document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);
 })();
 function showToast(msg,ms){const t=document.getElementById('toast');if(!t)return;const dur=ms||(typeof msg==='string'&&/no automatic restore|failed|error|locked|preview|admin/i.test(msg)?5200:3200);t.textContent=msg;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),dur)}
+
+/* ---------- Motion & sound ---------- */
+const NovaAnim=(()=>{
+  const defaults={on:true,mode:'fade',speed:'normal'};
+  let p=Object.assign({},defaults);
+  try{Object.assign(p,JSON.parse(localStorage.getItem('nova_anim')||'{}'))}catch(e){}
+  function apply(){
+    const r=document.documentElement;
+    r.dataset.anim=p.on?(p.mode||'fade'):'off';
+    const speeds={fast:['.12s','.18s'],normal:['.22s','.3s'],slow:['.4s','.62s']};
+    const s=speeds[p.speed]||speeds.normal;
+    r.style.setProperty('--motion-fast',s[0]);
+    r.style.setProperty('--motion-med',s[1]);
+  }
+  function save(){try{localStorage.setItem('nova_anim',JSON.stringify(p))}catch(e){}}
+  function set(k,v){p[k]=v;save();apply();}
+  apply();
+  return {get prefs(){return Object.assign({},p)},set,apply,defaults};
+})();
+
+const NovaSound=(()=>{
+  const defaults={on:true,volume:35,pack:'soft'};
+  let p=Object.assign({},defaults);
+  try{Object.assign(p,JSON.parse(localStorage.getItem('nova_sound')||'{}'))}catch(e){}
+  let ctx=null,master=null,armed=false;
+  const PACKS={
+    soft:{
+      click:[{f:640,d:.05,g:.10}],
+      tab:[{f:440,d:.09,g:.12},{f:660,d:.11,t:.05,g:.11}],
+      on:[{f:523.25,d:.12,g:.15},{f:783.99,d:.17,t:.07,g:.13}],
+      off:[{f:523.25,d:.10,g:.12},{f:349.23,d:.15,t:.06,g:.10}],
+      success:[{f:659.25,d:.12,g:.14},{f:880,d:.18,t:.09,g:.12}],
+      error:[{f:220,d:.20,type:'triangle',g:.14}],
+      sparkle:[{f:1046.5,d:.08,g:.10},{f:1318.5,d:.08,t:.06,g:.10},{f:1568,d:.16,t:.12,g:.09}],
+      login:[{f:392,d:.12,g:.12},{f:523.25,d:.12,t:.08,g:.12},{f:659.25,d:.2,t:.16,g:.12}]
+    },
+    arcade:{
+      click:[{f:880,d:.035,type:'square',g:.07}],
+      tab:[{f:660,d:.06,type:'square',g:.08},{f:990,d:.08,t:.04,type:'square',g:.07}],
+      on:[{f:523.25,d:.07,type:'square',g:.09},{f:659.25,d:.07,t:.06,type:'square',g:.09},{f:1046.5,d:.12,t:.12,type:'square',g:.08}],
+      off:[{f:659.25,d:.06,type:'square',g:.08},{f:440,d:.06,t:.05,type:'square',g:.08},{f:329.63,d:.12,t:.10,type:'square',g:.07}],
+      success:[{f:783.99,d:.06,type:'square',g:.09},{f:1046.5,d:.06,t:.06,type:'square',g:.09},{f:1318.5,d:.14,t:.12,type:'square',g:.08}],
+      error:[{f:196,d:.08,type:'square',g:.10},{f:147,d:.14,t:.08,type:'square',g:.09}],
+      sparkle:[{f:1046.5,d:.05,type:'square',g:.08},{f:1318.5,d:.05,t:.04,type:'square',g:.08},{f:1568,d:.05,t:.08,type:'square',g:.08},{f:2093,d:.14,t:.12,type:'square',g:.07}],
+      login:[{f:523.25,d:.06,type:'square',g:.09},{f:659.25,d:.06,t:.06,type:'square',g:.09},{f:783.99,d:.06,t:.12,type:'square',g:.09},{f:1046.5,d:.16,t:.18,type:'square',g:.08}]
+    },
+    mechanical:{
+      click:[{f:300,d:.03,type:'sawtooth',g:.07}],
+      tab:[{f:240,d:.05,type:'sawtooth',g:.09},{f:360,d:.06,t:.05,type:'sawtooth',g:.07}],
+      on:[{f:180,d:.07,type:'sawtooth',g:.11,slide:520},{f:520,d:.06,t:.08,type:'triangle',g:.08}],
+      off:[{f:520,d:.06,type:'sawtooth',g:.10,slide:180},{f:160,d:.10,t:.07,type:'triangle',g:.07}],
+      success:[{f:260,d:.06,type:'sawtooth',g:.10,slide:520},{f:520,d:.08,t:.07,type:'sawtooth',g:.09,slide:780}],
+      error:[{f:140,d:.22,type:'sawtooth',g:.12}],
+      sparkle:[{f:720,d:.04,type:'square',g:.08},{f:960,d:.04,t:.04,type:'square',g:.08},{f:1280,d:.10,t:.08,type:'square',g:.07}],
+      login:[{f:200,d:.06,type:'sawtooth',g:.10,slide:400},{f:400,d:.06,t:.07,type:'sawtooth',g:.09,slide:800},{f:800,d:.12,t:.14,type:'triangle',g:.08}]
+    },
+    chime:{
+      click:[{f:1046.5,d:.12,g:.06},{f:2093,d:.10,t:.01,g:.03}],
+      tab:[{f:783.99,d:.22,g:.09},{f:1174.66,d:.26,t:.06,g:.07},{f:1568,d:.3,t:.12,g:.05}],
+      on:[{f:523.25,d:.28,g:.10},{f:1046.5,d:.3,t:.02,g:.05},{f:1318.5,d:.34,t:.08,g:.05}],
+      off:[{f:523.25,d:.24,g:.09},{f:392,d:.3,t:.06,g:.07},{f:261.63,d:.36,t:.14,g:.06}],
+      success:[{f:659.25,d:.3,g:.10},{f:987.77,d:.34,t:.07,g:.07},{f:1318.5,d:.4,t:.14,g:.06},{f:1975.5,d:.5,t:.2,g:.04}],
+      error:[{f:246.94,d:.4,g:.10,type:'triangle'},{f:185,d:.5,t:.06,g:.07,type:'triangle'}],
+      sparkle:[{f:1568,d:.18,g:.06},{f:2093,d:.2,t:.05,g:.05},{f:2637,d:.24,t:.1,g:.04},{f:3136,d:.3,t:.16,g:.03}],
+      login:[{f:523.25,d:.24,g:.09},{f:659.25,d:.24,t:.08,g:.08},{f:783.99,d:.24,t:.16,g:.08},{f:1046.5,d:.42,t:.24,g:.07}]
+    }
+  };
+  function ensure(){
+    if(!p.on) return null;
+    const AC=window.AudioContext||window.webkitAudioContext;
+    if(!AC) return null;
+    if(!ctx){
+      try{
+        ctx=new AC();
+        master=ctx.createGain();
+        master.gain.value=(Number(p.volume)||0)/100*.45;
+        master.connect(ctx.destination);
+      }catch(e){ return null; }
+    }
+    if(ctx.state==='suspended'){ try{ctx.resume()}catch(e){} }
+    if(master) master.gain.value=(Number(p.volume)||0)/100*.45;
+    return ctx;
+  }
+  function note(def){
+    const c=ensure(); if(!c||!master) return;
+    try{
+      const t=c.currentTime+(def.t||0),dur=def.d||.12;
+      const o=c.createOscillator(),g=c.createGain();
+      o.type=def.type||'sine';
+      o.frequency.setValueAtTime(def.f,c.currentTime+t);
+      if(def.slide) o.frequency.exponentialRampToValueAtTime(def.slide,c.currentTime+t+dur);
+      g.gain.setValueAtTime(.0001,c.currentTime+t);
+      g.gain.exponentialRampToValueAtTime(Math.max(.0002,def.g||.1),c.currentTime+t+.012);
+      g.gain.exponentialRampToValueAtTime(.0001,c.currentTime+t+dur);
+      o.connect(g);g.connect(master);
+      o.start(c.currentTime+t);o.stop(c.currentTime+t+dur+.03);
+    }catch(e){}
+  }
+  function play(name){
+    if(!p.on||!armed) return;
+    const pack=PACKS[p.pack]||PACKS.soft;
+    const seq=pack[name]||pack.click;
+    if(seq) seq.forEach(note);
+  }
+  function save(){try{localStorage.setItem('nova_sound',JSON.stringify(p))}catch(e){}}
+  function set(k,v){p[k]=v;save();if(k==='volume'&&master)master.gain.value=(Number(v)||0)/100*.45;}
+  function resume(){armed=true;ensure();}
+  return {get prefs(){return Object.assign({},p)},set,play,resume,defaults,packs:Object.keys(PACKS)};
+})();
+
+(function(){
+  const arm=()=>{try{NovaSound.resume()}catch(e){}};
+  document.addEventListener('pointerdown',arm,{passive:true});
+  document.addEventListener('keydown',arm);
+  document.addEventListener('click',e=>{
+    const el=e.target.closest('button,a,.chip,.navbtn,.iconbtn,.gamebtn,.login-tab,.catbtn');
+    if(!el) return;
+    if(el.closest('.toggle')) return;
+    if(el.matches('input[type=checkbox],input[type=range],select')) return;
+    if(el.matches('.catbtn')) return;
+    if(el.matches('.navbtn,.chip[data-page],.iconbtn[data-page]')) return;
+    if(el.closest('.tweakcard')) return;
+    if(el.id==='soundTestBtn') return;
+    if(el.matches('.gamebtn,.login-tab')) NovaSound.play('tab');
+    else NovaSound.play('click');
+  },true);
+  document.addEventListener('change',e=>{
+    const t=e.target;
+    if(t.matches('input[type=checkbox]')&&!t.dataset.id) NovaSound.play(t.checked?'on':'off');
+    else if(t.matches('select')&&!t.dataset.id&&t.id!=='soundPack') NovaSound.play('click');
+  });
+})();
 
 const GAME_PROFILES={
   Fortnite:{brand:'Nova Tweaks',sub:'Fortnite Performance Suite',welcome:'Welcome to Fortnite Tweaks',icon:'🎮',note:'Current profile: Fortnite. Fortnite and shared Windows tweaks are loaded.'},
@@ -4533,6 +4709,7 @@ function onLogin(acc){
   document.getElementById('loginOverlay').style.display='none';
   document.getElementById('appContainer').style.display='flex';
   document.getElementById('accountBadge').style.display='flex';
+  try{NovaSound.play('login')}catch(e){}
   document.getElementById('userInfo').textContent=acc.Name||acc.Email;
   document.getElementById('accountAvatar').textContent=(acc.Name||acc.Email).charAt(0).toUpperCase();
   setPlanUI(acc.Plan, acc.PlanUntil, acc.Balance);
@@ -4545,10 +4722,17 @@ function onLogin(acc){
 (async function(){const r=await api('/api/autologin');if(r.success){onLogin(r.account)}})();
 
 function showPage(page){
+  const changed=state.page!==page;
   document.querySelectorAll('.navbtn,.chip[data-page],.iconbtn[data-page]').forEach(x=>x.classList.toggle('active',x.dataset.page===page));
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   const target=document.getElementById('page-'+page);
-  if(target) target.classList.add('active');
+  if(target){
+    // Restart the entrance animation each time a tab is opened.
+    void target.offsetWidth;
+    target.classList.add('active');
+  }
+  state.page=page;
+  if(changed){ try{NovaSound.play('tab')}catch(e){} }
   if(page==='log')refreshLog();
   if(page==='home')loadSysInfoText('homeSysInfo');
   if(page==='bios')loadBios();
@@ -4752,6 +4936,7 @@ function renderCatBar(){
   if(!cats.includes(currentCat)) currentCat='General';
   document.getElementById('catBar').innerHTML=cats.map(c=>`<button class="catbtn ${c===currentCat&&!tweakQuery?'active':''}" data-cat="${c}" title="${c}">${catLabel(c)}<span class="catcount">${catCount(c)}</span></button>`).join('');
   document.querySelectorAll('.catbtn').forEach(b=>b.addEventListener('click',()=>{
+    try{NovaSound.play('click')}catch(e){}
     currentCat=b.dataset.cat;tweakQuery='';const si=document.getElementById('tweakSearch');if(si)si.value='';
     renderCatBar();renderTweaks();
     const nav=document.querySelector('.navbtn[data-page="tweaks"]');if(nav&&!nav.classList.contains('active'))nav.click();
@@ -4862,8 +5047,10 @@ function renderTweaks(){
       </div>
       <div class="grid">${bySub[sub].map(tweakCard).join('')}</div>
     </div>`).join('');
+  grid.querySelectorAll('.tweakcard').forEach((c,i)=>c.style.setProperty('--i',Math.min(i,24)));
   grid.querySelectorAll('.tweakcard.locked').forEach(card=>card.addEventListener('click',e=>{
     if(e.target.closest('.toggle'))return;
+    try{NovaSound.play('error')}catch(err){}
     const t=state.tweaks[card.dataset.tweak];
     showToast('Locked: '+t.name+' needs '+t.required+'. Open Settings to upgrade.');
   }));
@@ -4875,14 +5062,18 @@ function renderTweaks(){
     const r=await api('/api/tweak/toggle',{id,state:cb.checked});
     if(r && (r.locked || r.success===false || r.preview)){
       cb.checked=prev;
+      try{NovaSound.play('error')}catch(e){}
       showToast((r&&r.message)||'Could not change tweak.',5200);
       return;
     }
     tw.state=cb.checked;
     if(r && r.noAutoRestore && !cb.checked) showToast(r.message||('Turned off in app: '+tw.name+'. No automatic restore.'),6500);
     else showToast((r&&r.message)||(cb.checked?('Applied: '+tw.name):('Turned off: '+tw.name)), cb.checked?3400:4200);
+    try{NovaSound.play(cb.checked?'on':'off')}catch(e){}
     renderTweaks();
     updateCounts();
+    const newCard=grid.querySelector('.tweakcard[data-tweak="'+id+'"]');
+    if(newCard){newCard.classList.add('pulse');setTimeout(()=>newCard.classList.remove('pulse'),420);}
     try{const b=await api('/api/badges');if(b&&b.success){state.badges=b.badges;state.streak=b.streak;state.bestStreak=b.bestStreak;renderBadges();}}catch{}
   }));
 }
@@ -5066,8 +5257,17 @@ window.addEventListener('resize',()=>{
   }
 });
 
-document.getElementById('applyAllBtn').addEventListener('click',async()=>{const r=await api('/api/applyall');showToast(r.message);await loadTweaks()});
-document.getElementById('removeAllBtn').addEventListener('click',async()=>{if(!confirm('Remove ALL tweaks? This reverts every tweak.'))return;const r=await api('/api/revertall');showToast(r.message);await loadTweaks()});
+document.getElementById('applyAllBtn').addEventListener('click',async()=>{
+  const r=await api('/api/applyall');showToast(r.message);
+  try{NovaSound.play(r&&r.success===false?'error':'success')}catch(e){}
+  await loadTweaks();
+});
+document.getElementById('removeAllBtn').addEventListener('click',async()=>{
+  if(!confirm('Remove ALL tweaks? This reverts every tweak.'))return;
+  const r=await api('/api/revertall');showToast(r.message);
+  try{NovaSound.play(r&&r.success===false?'error':'success')}catch(e){}
+  await loadTweaks();
+});
 document.getElementById('removeCatBtn').addEventListener('click',async()=>{if(!confirm('Remove all tweaks in '+currentCat+'?'))return;const ids=tweaksFor(currentCat).filter(t=>t.available).map(t=>t.id);for(const id of ids){await api('/api/tweak/toggle',{id,state:false})}showToast('Removed '+ids.length+' tweaks in '+currentCat);await loadTweaks()});
 document.getElementById('revertAllBtn2').addEventListener('click',async()=>{if(!confirm('Revert ALL changes? Reboot recommended after.'))return;const r=await api('/api/revertall');showToast(r.message);await loadTweaks()});
 async function loadSysInfoText(targetId){
@@ -5327,6 +5527,33 @@ document.getElementById('accentColor').addEventListener('input',e=>{document.doc
 const _sbColor=document.getElementById('sidebarColor'); if(_sbColor) _sbColor.addEventListener('input',e=>{const mc=document.querySelector('.maincol'); if(mc) mc.style.background=e.target.value;});
 document.getElementById('toggleOutline').addEventListener('change',e=>{document.querySelectorAll('.tweakcard').forEach(c=>{if(e.target.checked)c.classList.add('rotating-outline');else c.classList.remove('rotating-outline');});});
 document.getElementById('toggleSnow').addEventListener('change',e=>{document.getElementById('snowCanvas').style.display=e.target.checked?'block':'none';});
+
+/* Motion & sound settings */
+(function(){
+  const a=NovaAnim.prefs, s=NovaSound.prefs;
+  const animOn=document.getElementById('animOn'), animStyle=document.getElementById('animStyle'), animSpeed=document.getElementById('animSpeed');
+  const soundOn=document.getElementById('soundOn'), soundPack=document.getElementById('soundPack'), soundVolume=document.getElementById('soundVolume'), soundTest=document.getElementById('soundTestBtn');
+  if(animOn) animOn.checked=!!a.on;
+  if(animStyle) animStyle.value=a.mode||'fade';
+  if(animSpeed) animSpeed.value=a.speed||'normal';
+  if(soundOn) soundOn.checked=!!s.on;
+  if(soundPack) soundPack.value=s.pack||'soft';
+  if(soundVolume) soundVolume.value=(s.volume==null?35:s.volume);
+  if(animOn) animOn.addEventListener('change',e=>NovaAnim.set('on',e.target.checked));
+  if(animStyle) animStyle.addEventListener('change',e=>{NovaAnim.set('mode',e.target.value);restartPageAnim();});
+  if(animSpeed) animSpeed.addEventListener('change',e=>{NovaAnim.set('speed',e.target.value);restartPageAnim();});
+  if(soundOn) soundOn.addEventListener('change',e=>NovaSound.set('on',e.target.checked));
+  if(soundPack) soundPack.addEventListener('change',e=>{NovaSound.set('pack',e.target.value);NovaSound.resume();NovaSound.play('tab');});
+  if(soundVolume) soundVolume.addEventListener('input',e=>NovaSound.set('volume',Number(e.target.value)));
+  if(soundTest) soundTest.addEventListener('click',()=>{NovaSound.resume();NovaSound.play('sparkle');});
+})();
+function restartPageAnim(){
+  const p=document.querySelector('.page.active');
+  if(!p) return;
+  p.style.animation='none';
+  void p.offsetWidth;
+  p.style.animation='';
+}
 
 
 // Live online-user counter (tracks open sessions via BroadcastChannel + localStorage heartbeat)
