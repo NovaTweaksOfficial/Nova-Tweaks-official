@@ -43,13 +43,6 @@ jobs:
           # The shared engine has no $PSScriptRoot dependencies, so it runs from the merged file.
           $products = @(
             @{
-              Name  = "NovaTweaks"
-              Title = "Nova Tweaks"
-              Desc  = "Nova Tweaks performance suite - combined build"
-              Game  = ""
-              Var   = "NovaTweaks"
-            },
-            @{
               Name  = "NovaTweaks-Fortnite-Windows"
               Title = "Nova Tweaks - Fortnite (Windows)"
               Desc  = "Nova Tweaks for Fortnite on Windows"
@@ -98,7 +91,6 @@ jobs:
         with:
           name: NovaTweaks_Windows_EXEs
           path: |
-            NovaTweaks.exe
             NovaTweaks-Fortnite-Windows.exe
             NovaTweaks-Minecraft-Windows.exe
           retention-days: 30
@@ -110,7 +102,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           files: |
-            NovaTweaks.exe
             NovaTweaks-Fortnite-Windows.exe
             NovaTweaks-Minecraft-Windows.exe
           tag_name: ${{ github.ref_name }}

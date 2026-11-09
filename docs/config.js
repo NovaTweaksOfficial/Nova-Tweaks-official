@@ -9,8 +9,8 @@
 window.NOVA_CONFIG = {
   version: "v1",
 
-  // Legacy/fallback Windows download (combined build). Prefer per-product URLs when separate builds are published.
-  windowsDownload: "https://github.com/NovaTweaksOfficial/Nova-Tweaks-official/releases/latest/download/NovaTweaks.exe",
+  // Fallback Windows download (Fortnite build). The storefront uses the per-product URLs below.
+  windowsDownload: "https://github.com/NovaTweaksOfficial/Nova-Tweaks-official/releases/latest/download/NovaTweaks-Fortnite-Windows.exe",
   windowsFortniteDownload: "https://github.com/NovaTweaksOfficial/Nova-Tweaks-official/releases/latest/download/NovaTweaks-Fortnite-Windows.exe",
   windowsMinecraftDownload: "https://github.com/NovaTweaksOfficial/Nova-Tweaks-official/releases/latest/download/NovaTweaks-Minecraft-Windows.exe",
   macMinecraftDownload: "https://github.com/NovaTweaksOfficial/Nova-Tweaks-official/releases/latest/download/Nova-Tweaks-Minecraft-macOS.zip",

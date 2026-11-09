@@ -57,7 +57,7 @@ subscriptions would need a backend.
 
 ## How the Windows app works
 
-`NovaTweaks.exe` is a real native Windows application. It opens a dark, maximized WinForms window that hosts
+The Windows builds (`NovaTweaks-Fortnite-Windows.exe` and `NovaTweaks-Minecraft-Windows.exe`) are real native Windows applications. Each opens a dark, maximized WinForms window that hosts
 **Microsoft Edge WebView2** and renders the Nova Tweaks UI directly inside the app.
 
 - **No localhost, no browser, no web server.** Nothing is served over HTTP and no external browser is opened.

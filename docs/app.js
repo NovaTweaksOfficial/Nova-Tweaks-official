@@ -16,7 +16,7 @@
 
   const fallbackWin = isUrl(CFG.windowsDownload)
     ? CFG.windowsDownload
-    : "https://github.com/NovaTweaksOfficial/Nova-Tweaks-official/releases/latest/download/NovaTweaks.exe";
+    : "https://github.com/NovaTweaksOfficial/Nova-Tweaks-official/releases/latest/download/NovaTweaks-Fortnite-Windows.exe";
   const winEl = $("#winDownload");
   if (winEl) winEl.href = fallbackWin;
   const winFort = $("#winFortniteDownload");
