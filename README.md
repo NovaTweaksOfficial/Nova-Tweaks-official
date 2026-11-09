@@ -81,6 +81,17 @@ The Windows builds (`NovaTweaks-Fortnite-Windows.exe` and `NovaTweaks-Minecraft-
 The local `http://localhost:8765` PowerShell listener still exists only as a development preview for editing
 the UI on non-Windows machines. It is not shipped and is not part of the Windows app.
 
+### Combined Windows preview (Fortnite + Minecraft)
+
+Double-click `Start-Windows-Test.command` at the repo root to open one localhost session with **both** the
+Fortnite and Minecraft Windows catalogs. It sets `NOVA_WINDOWS_PREVIEW=1`, clears any fixed-game/variant
+environment variables, and uses the real `~/.novatweaks` accounts/config. Windows tweaks are simulated only;
+no system changes are made on macOS.
+
+Staff moderation in the Dev Console uses an in-app dialog: Ban and Softban require a reason, and Timeout
+and Softban durations are capped at one year. The native macOS host also implements `WKUIDelegate` so
+ordinary `confirm()`/`prompt()` flows work inside the packaged app.
+
 ## Data locations
 
 The Windows app stores `config.json`, `accounts.json`, `session.token` and `nova.log` in
@@ -112,6 +123,7 @@ Invoke-PS2EXE -InputFile "windows/Minecraft/Nova_Tweaks_Minecraft_Windows.ps1" -
 - `windows/Fortnite/` — `Nova_Tweaks_Fortnite_Windows.ps1` (separate Windows app entrypoint).
 - `windows/Minecraft/` — `Nova_Tweaks_Minecraft_Windows.ps1` (separate Windows app entrypoint).
 - `macos/Minecraft/` — `Nova_Tweaks_Minecraft_macOS.ps1`, `Nova Tweaks Minecraft.app` (native WKWebView + stdio bridge, no localhost), `native/` (Swift source/binary).
+- `Start-Windows-Test.command` — combined Fortnite + Minecraft Windows-catalog localhost preview.
 - `dev/` — localhost/preview launchers (`Start-Localhost*`).
 - `docs/` — static storefront (GitHub Pages): supported games, downloads, pricing, checkout modal, FAQ.
 - `archive/` — older reference variants.

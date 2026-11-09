@@ -136,7 +136,7 @@ final class Bridge: NSObject, WKScriptMessageHandler {
     }
 }
 
-class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKUIDelegate {
     var window: NSWindow!
     var bridge: Bridge!
 
@@ -175,6 +175,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         config.userContentController = uc
 
         let webView = WKWebView(frame: .zero, configuration: config)
+        webView.uiDelegate = self
         bridge = Bridge(webView: webView)
         uc.add(bridge, name: "nova")
 
@@ -206,6 +207,55 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.terminate(nil)
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+
+    // WKWebView does not show JavaScript dialogs by default. Without these the packaged
+    // app silently treats confirm() as false and prompt() as null, which broke moderation
+    // actions (Ban, Clear, role grants) that were gated behind confirm().
+    func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String,
+                 initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping () -> Void) {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = "Nova Tweaks"
+        alert.informativeText = message
+        alert.addButton(withTitle: "OK")
+        present(alert) { _ in completionHandler() }
+    }
+
+    func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String,
+                 initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (Bool) -> Void) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Nova Tweaks"
+        alert.informativeText = message
+        alert.addButton(withTitle: "Continue")
+        alert.addButton(withTitle: "Cancel")
+        present(alert) { response in completionHandler(response == .alertFirstButtonReturn) }
+    }
+
+    func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String,
+                 defaultText: String?, initiatedByFrame frame: WKFrameInfo,
+                 completionHandler: @escaping (String?) -> Void) {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = "Nova Tweaks"
+        alert.informativeText = prompt
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Cancel")
+        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
+        input.stringValue = defaultText ?? ""
+        alert.accessoryView = input
+        present(alert) { response in
+            completionHandler(response == .alertFirstButtonReturn ? input.stringValue : nil)
+        }
+    }
+
+    private func present(_ alert: NSAlert, completion: @escaping (NSApplication.ModalResponse) -> Void) {
+        if let window = window, window.isVisible {
+            alert.beginSheetModal(for: window, completionHandler: completion)
+        } else {
+            completion(alert.runModal())
+        }
+    }
 }
 
 let app = NSApplication.shared

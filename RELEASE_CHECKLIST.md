@@ -56,8 +56,15 @@ This checklist covers the current Nova Tweaks project state (shared core, Window
 - [x] Devs/mods see owner/dev/mod accounts only as redacted `OWNER`/`DEV`/`MOD` rows and cannot moderate or manage them.
 - [x] Only owners can edit `devs.json`, grant/revoke dev or mod, change plans, reset passwords or permanently ban.
 - [x] Devs can only timeout, softban or clear regular accounts; mods can only timeout or clear regular accounts.
+- [x] Moderation actions use the in-app dialog (not native `confirm()`/`prompt()`), so Ban/Clear/role actions work in the packaged macOS app.
+- [x] Ban and Softban require a reason server-side; Timeout and Softban durations are capped at one year server-side.
+- [x] Verified owner Ban, missing-reason rejection, over-one-year rejection, softban, and clear against a live local server.
 - [ ] Re-test the role UI and redaction in the packaged Windows exes on real Windows.
 - [ ] Confirm a newly granted dev immediately shows Ultimate and a newly granted mod immediately shows Pro after refresh/login.
+
+## Local testing
+- [x] `Start-Windows-Test.command` opens one localhost with both the Fortnite and Minecraft Windows catalogs (`NOVA_WINDOWS_PREVIEW=1`, no fixed game).
+- [x] macOS native host implements `WKUIDelegate` alert/confirm/prompt panels.
 
 ## CI / distribution
 - [x] Build separate Windows executables in CI (`NovaTweaks-Fortnite-Windows.exe`, `NovaTweaks-Minecraft-Windows.exe`).

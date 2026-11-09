@@ -135,13 +135,30 @@ function Get-NovaDurationUntil { param($Amount, $Unit)
     $n = 0
     [void][int]::TryParse([string]$Amount, [ref]$n)
     if ($n -le 0) { $n = 1 }
-    switch (([string]$Unit).ToLower()) {
-        "minutes" { return (Get-Date).AddMinutes($n) }
-        "hours"   { return (Get-Date).AddHours($n) }
-        "days"    { return (Get-Date).AddDays($n) }
-        "weeks"   { return (Get-Date).AddDays($n * 7) }
-        default   { return (Get-Date).AddHours($n) }
+    $now = Get-Date
+    try {
+        switch (([string]$Unit).ToLower()) {
+            "minutes" { return $now.AddMinutes($n) }
+            "hours"   { return $now.AddHours($n) }
+            "days"    { return $now.AddDays($n) }
+            "weeks"   { return $now.AddDays($n * 7) }
+            default   { return $now.AddHours($n) }
+        }
+    } catch { return $now.AddYears(1) }
+}
+# Timeouts and softbans are capped at one year.
+function Test-NovaDurationTooLong { param($Amount, $Unit)
+    $n = 0
+    [void][int]::TryParse([string]$Amount, [ref]$n)
+    if ($n -le 0) { return $false }
+    $max = switch (([string]$Unit).ToLower()) {
+        "minutes" { 525600 }
+        "hours"   { 8760 }
+        "days"    { 365 }
+        "weeks"   { 52 }
+        default   { 8760 }
     }
+    return ($n -gt $max)
 }
 function Get-NovaDevConfig {
     $cfg = $null
@@ -3599,6 +3616,30 @@ h1{font-family:"Nova Sans","Plus Jakarta Sans",system-ui,sans-serif;font-size:26
 .toast{position:fixed;bottom:28px;right:28px;background:var(--card);border:1px solid var(--borderlit);padding:14px 20px;border-radius:12px;font-size:13px;color:var(--text);opacity:0;transform:translateY(24px) scale(.98);transition:opacity .18s ease,transform .18s ease;pointer-events:none;box-shadow:0 18px 50px rgba(0,0,0,.6);z-index:1000;font-weight:600;backdrop-filter:none}
 .toast.show{opacity:1;transform:translateY(0) scale(1)}
 
+/* In-app dialog: packaged WebView hosts do not always expose JS confirm()/prompt() */
+.nmodal{position:fixed;inset:0;z-index:1200;display:flex;align-items:center;justify-content:center;padding:24px;opacity:0;pointer-events:none;transition:opacity .16s ease}
+.nmodal.show{opacity:1;pointer-events:auto}
+.nmodal-back{position:absolute;inset:0;background:rgba(2,2,6,.72);backdrop-filter:blur(6px)}
+.nmodal-card{position:relative;width:min(460px,100%);max-height:calc(100vh - 48px);overflow:auto;background:linear-gradient(180deg,var(--card),var(--bg));border:1px solid var(--borderlit);border-radius:16px;padding:20px;box-shadow:0 30px 90px rgba(0,0,0,.75);transform:translateY(14px) scale(.98);transition:transform .18s ease}
+.nmodal.show .nmodal-card{transform:translateY(0) scale(1)}
+.nmodal-head{display:flex;gap:12px;align-items:flex-start;margin-bottom:14px}
+.nmodal-icon{width:38px;height:38px;flex:0 0 38px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:18px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.32)}
+.nmodal-title{font-size:15px;font-weight:700;color:var(--text);line-height:1.3}
+.nmodal-sub{font-size:11.5px;color:var(--textdim);margin-top:2px;word-break:break-word}
+.nmodal-msg{font-size:12.5px;line-height:1.55;color:var(--textdim);margin-bottom:14px}
+.nmodal-field{display:flex;flex-direction:column;gap:5px;margin-bottom:11px}
+.nmodal-field label{font-size:11px;font-weight:600;color:var(--textdim);letter-spacing:.02em}
+.nmodal-field input,.nmodal-field select,.nmodal-field textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:9px;color:var(--text);font-family:inherit;font-size:13px;padding:9px 11px;outline:none;transition:border-color .14s ease}
+.nmodal-field input:focus,.nmodal-field select:focus,.nmodal-field textarea:focus{border-color:rgba(239,68,68,.55)}
+.nmodal-row{display:flex;gap:8px}
+.nmodal-row .nmodal-field:first-child{flex:1 1 120px}
+.nmodal-row .nmodal-field:last-child{flex:0 0 130px}
+.nmodal-hint{font-size:10.5px;color:var(--textmuted)}
+.nmodal-err{display:none;font-size:11.5px;color:#fca5a5;background:rgba(239,68,68,.09);border:1px solid rgba(239,68,68,.28);border-radius:8px;padding:8px 10px;margin-bottom:12px}
+.nmodal-err.show{display:block}
+.nmodal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:6px}
+.nmodal-actions .btn{min-width:96px;justify-content:center}
+
 /* Warn box */
 .warnbox{background:linear-gradient(135deg,rgba(239,68,68,.08),rgba(239,68,68,.02));border:1px solid rgba(239,68,68,.35);border-radius:var(--radius);padding:14px 18px;font-size:12.5px;color:var(--warn);margin-bottom:16px;box-shadow:0 2px 12px rgba(239,68,68,.08)}
 
@@ -4437,16 +4478,6 @@ spotify.exe</textarea>
     </div>
     <div class="devtoolbar">
       <input class="devsearch" id="devSearch" placeholder="Search name or email…" autocomplete="off">
-      <div class="devdur" title="How long timeout and softban last">
-        <label for="devDuration">Duration</label>
-        <input id="devDuration" type="number" min="1" value="24">
-        <select id="devUnit">
-          <option value="minutes">minutes</option>
-          <option value="hours" selected>hours</option>
-          <option value="days">days</option>
-          <option value="weeks">weeks</option>
-        </select>
-      </div>
     </div>
     <div class="devlist" id="devAccounts"><div class="devempty">Sign in with a staff account to load accounts.</div></div>
   </div>
@@ -4481,6 +4512,23 @@ spotify.exe</textarea>
 
 <div class="toast" id="toast"></div>
 
+<div class="nmodal" id="novaModal" aria-hidden="true">
+  <div class="nmodal-back"></div>
+  <div class="nmodal-card" role="dialog" aria-modal="true" aria-labelledby="nmTitle">
+    <div class="nmodal-head">
+      <div class="nmodal-icon" id="nmIcon">⚠</div>
+      <div style="min-width:0"><div class="nmodal-title" id="nmTitle">Confirm</div><div class="nmodal-sub" id="nmSub"></div></div>
+    </div>
+    <div class="nmodal-msg" id="nmMsg"></div>
+    <div id="nmFields"></div>
+    <div class="nmodal-err" id="nmErr"></div>
+    <div class="nmodal-actions">
+      <button type="button" class="btn sm ghost" id="nmCancel">Cancel</button>
+      <button type="button" class="btn sm" id="nmOk">Confirm</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const state={plan:'Free',tweaks:{},os:'unknown',game:'Fortnite',previewWindows:false,user:null,isDev:false,isOwner:false,isMod:false,isStaff:false,role:'user',softbanActive:false,softbanUntil:null,balance:0,planUntil:null,badges:[],streak:0,bestStreak:0,appliedEver:0};
 window.onerror=(m,u,l)=>{const e=document.getElementById('loginError');if(e)e.textContent='JS Error: '+m+' (line '+l+')';console.error(m,u,l);};
@@ -4512,6 +4560,77 @@ window.onerror=(m,u,l)=>{const e=document.getElementById('loginError');if(e)e.te
   document.addEventListener('mousedown',onDown);document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);
 })();
 function showToast(msg,ms){const t=document.getElementById('toast');if(!t)return;const dur=ms||(typeof msg==='string'&&/no automatic restore|failed|error|locked|preview|admin/i.test(msg)?5200:3200);t.textContent=msg;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),dur)}
+
+/* In-app dialog used by moderation and other critical confirmations. The native macOS
+   host and some embedded WebViews do not surface window.confirm()/prompt(), so we never
+   rely on them for actions that must actually run. */
+function novaDialog(opts={}){
+  return new Promise(resolve=>{
+    const root=document.getElementById('novaModal');
+    if(!root){ resolve(null); return; }
+    if(root._resolve) root._resolve(null);
+    root._resolve=resolve;
+    const $=id=>document.getElementById(id);
+    const fields=opts.fields||[];
+    $('nmIcon').textContent=opts.icon||'⚠';
+    $('nmTitle').textContent=opts.title||'Confirm';
+    $('nmSub').textContent=opts.sub||'';
+    $('nmSub').style.display=opts.sub?'':'none';
+    $('nmMsg').textContent=opts.message||'';
+    $('nmMsg').style.display=opts.message?'':'none';
+    const errEl=$('nmErr'); errEl.classList.remove('show'); errEl.textContent='';
+    $('nmFields').innerHTML=fields.map((f,i)=>{
+      const id='nmf'+i;
+      let input='';
+      if(f.type==='select'){
+        input='<select id="'+id+'" data-nmf="'+esc(f.name)+'">'+(f.options||[]).map(o=>{
+          const val=Array.isArray(o)?o[0]:o.value;
+          const lab=Array.isArray(o)?o[1]:o.label;
+          return '<option value="'+esc(val)+'"'+(String(val)===String(f.value==null?'':f.value)?' selected':'')+'>'+esc(lab)+'</option>';
+        }).join('')+'</select>';
+      } else if(f.type==='textarea'){
+        input='<textarea id="'+id+'" data-nmf="'+esc(f.name)+'" rows="3" placeholder="'+esc(f.placeholder||'')+'">'+esc(f.value==null?'':f.value)+'</textarea>';
+      } else {
+        input='<input id="'+id+'" data-nmf="'+esc(f.name)+'" type="'+esc(f.type||'text')+'" value="'+esc(f.value==null?'':f.value)+'" placeholder="'+esc(f.placeholder||'')+'"'+(f.min!=null?' min="'+esc(f.min)+'"':'')+(f.max!=null?' max="'+esc(f.max)+'"':'')+' autocomplete="off">';
+      }
+      return '<div class="nmodal-field"><label for="'+id+'">'+esc(f.label||f.name)+(f.required?' *':'')+'</label>'+input+(f.hint?'<div class="nmodal-hint">'+esc(f.hint)+'</div>':'')+'</div>';
+    }).join('');
+    const ok=$('nmOk'), cancel=$('nmCancel');
+    ok.textContent=opts.confirmText||'Confirm';
+    ok.className='btn sm'+(opts.danger?' danger':'');
+    cancel.textContent=opts.cancelText||'Cancel';
+    cancel.style.display=opts.hideCancel?'none':'';
+    const collect=()=>{const vals={};$('nmFields').querySelectorAll('[data-nmf]').forEach(el=>{vals[el.dataset.nmf]=el.value;});return vals;};
+    const finish=value=>{
+      if(root._resolve!==resolve) return;
+      root._resolve=null; root.classList.remove('show'); root.setAttribute('aria-hidden','true');
+      document.removeEventListener('keydown',onKey);
+      resolve(value);
+    };
+    const submit=()=>{
+      const vals=collect();
+      for(const f of fields){
+        if(f.required && !String(vals[f.name]==null?'':vals[f.name]).trim()){
+          errEl.textContent=(f.label||f.name)+' is required.'; errEl.classList.add('show'); return;
+        }
+      }
+      let err=null;
+      try{ err=opts.validate?opts.validate(vals):null; }catch(e){ err=String(e&&e.message?e.message:e); }
+      if(err){ errEl.textContent=err; errEl.classList.add('show'); return; }
+      finish(fields.length?vals:true);
+    };
+    const onKey=e=>{
+      if(e.key==='Escape'){ e.preventDefault(); finish(null); }
+      else if(e.key==='Enter' && e.target && e.target.tagName!=='TEXTAREA'){ e.preventDefault(); submit(); }
+    };
+    ok.onclick=submit;
+    cancel.onclick=()=>finish(null);
+    root.querySelector('.nmodal-back').onclick=()=>finish(null);
+    document.addEventListener('keydown',onKey);
+    root.classList.add('show'); root.setAttribute('aria-hidden','false');
+    setTimeout(()=>{ const first=$('nmFields').querySelector('input,select,textarea'); (first||ok).focus(); },40);
+  });
+}
 
 /* ---------- Motion & sound ---------- */
 const NovaAnim=(()=>{
@@ -4964,23 +5083,61 @@ async function loadDevAccounts(){
     }
   }catch(e){ if(wrap) wrap.innerHTML='<div class="devempty">'+esc(e&&e.message?e.message:e)+'</div>'; }
 }
+const NOVA_MAX_MOD_LIMITS={minutes:525600,hours:8760,days:365,weeks:52};
+function novaDurationCap(amount,unit){
+  const n=Number(amount);
+  if(!isFinite(n)||n<1) return 'Choose a duration of at least 1.';
+  const max=NOVA_MAX_MOD_LIMITS[unit]||NOVA_MAX_MOD_LIMITS.hours;
+  if(n>max) return 'Maximum duration is one year ('+max+' '+unit+').';
+  return null;
+}
+async function askModeration(email,action,acc){
+  const who=acc&&acc.name?acc.name+' ('+email+')':email;
+  if(action==='ban'){
+    return await novaDialog({
+      icon:'⛔',title:'Permanently ban account',sub:who,danger:true,confirmText:'Ban permanently',
+      message:'This blocks every login until an owner clears it. The account stays in the database.',
+      fields:[{name:'reason',label:'Reason',type:'text',placeholder:'Why is this account being banned?',required:true,hint:'Required. Stored with the account for the owner to review.'}]
+    });
+  }
+  const isSoft=action==='softban';
+  return await novaDialog({
+    icon:isSoft?'◒':'⏱',title:isSoft?'Softban account':'Timeout account',sub:who,danger:!isSoft,
+    confirmText:isSoft?'Apply softban':'Apply timeout',
+    message:isSoft?'Blocks paid features until the softban expires. The user can still sign in.':'Blocks sign-in until the timeout expires.',
+    fields:[
+      {name:'reason',label:'Reason',type:'text',placeholder:isSoft?'Why is this account being softbanned?':'Optional note',required:isSoft,hint:isSoft?'Required.':'Optional.'},
+      {name:'amount',label:'Duration',type:'number',value:24,min:1,required:true},
+      {name:'unit',label:'Unit',type:'select',value:'hours',options:[['minutes','Minutes'],['hours','Hours'],['days','Days'],['weeks','Weeks']],required:true,hint:'Maximum one year.'}
+    ],
+    validate:v=>novaDurationCap(v.amount,v.unit)
+  });
+}
 async function devDo(email,action,extra={}){
-  const dur=Number(document.getElementById('devDuration')?.value||0);
-  const unit=document.getElementById('devUnit')?.value||'hours';
-  if((action==='timeout'||action==='softban')&&(!dur||dur<1)){ showToast('Choose a duration first.'); return; }
-  if(action==='ban'&&!confirm('Permanently ban '+email+'?')) return;
-  if(action==='clear'&&!confirm('Clear all moderation for '+email+'?')) return;
-  if(action==='grantdev'&&!confirm('Give '+email+' developer access? They get Ultimate automatically.')) return;
-  if(action==='grantmod'&&!confirm('Give '+email+' mod access? They get Pro automatically.')) return;
-  if(action==='revokedev'&&!confirm('Remove developer access from '+email+'?')) return;
-  if(action==='revokemod'&&!confirm('Remove mod access from '+email+'?')) return;
-  const r=await api('/api/dev/action',Object.assign({email,action,duration:dur,unit},extra));
+  const acc=devAccountsCache.find(a=>a.email===email);
+  const payload=Object.assign({email,action},extra);
+  if(action==='ban'||action==='softban'||action==='timeout'){
+    const v=await askModeration(email,action,acc);
+    if(!v) return;
+    payload.reason=v.reason||'';
+    if(action!=='ban'){ payload.duration=Number(v.amount); payload.unit=v.unit; }
+  } else {
+    const copy={
+      clear:{icon:'✕',title:'Clear moderation',message:'Remove all bans, timeouts and softbans from '+email+'?',confirmText:'Clear moderation'},
+      grantdev:{icon:'◆',title:'Grant developer access',message:email+' will get developer tools and Ultimate automatically.',confirmText:'Make dev'},
+      grantmod:{icon:'◇',title:'Grant mod access',message:email+' will get moderation tools and Pro automatically.',confirmText:'Make mod'},
+      revokedev:{icon:'◆',title:'Remove developer access',message:'Remove developer access from '+email+'?',confirmText:'Remove dev',danger:true},
+      revokemod:{icon:'◇',title:'Remove mod access',message:'Remove mod access from '+email+'?',confirmText:'Remove mod',danger:true}
+    }[action];
+    if(copy){ const ok=await novaDialog(Object.assign({sub:email},copy)); if(!ok) return; }
+  }
+  const r=await api('/api/dev/action',payload);
   showToast(r.message||(r.success?'Done':'Action failed'), r.success?4200:6000);
   if(r.success) loadDevAccounts();
 }
 const devAccountsEl=document.getElementById('devAccounts');
 if(devAccountsEl){
-  devAccountsEl.addEventListener('click',e=>{
+  devAccountsEl.addEventListener('click',async e=>{
     const btn=e.target.closest('button[data-act]'); if(!btn) return;
     const row=btn.closest('.devrow'); if(!row) return;
     const email=row.dataset.email;
@@ -4995,18 +5152,23 @@ if(devAccountsEl){
     }
     if(act==='setpassword'){
       if(!state.isOwner){ showToast('Only the owner can reset passwords.'); return; }
-      const pw=prompt('New password for '+email);
-      if(pw===null) return;
-      if(pw.length<4){ showToast('Password must be at least 4 characters.'); return; }
-      return devDo(email,'setpassword',{password:pw});
+      const v=await novaDialog({
+        icon:'🔑',title:'Reset password',sub:email,confirmText:'Reset password',
+        fields:[{name:'password',label:'New password',type:'password',required:true,hint:'At least 4 characters.'}],
+        validate:x=>String(x.password||'').length<4?'Password must be at least 4 characters.':null
+      });
+      if(!v) return;
+      return devDo(email,'setpassword',{password:v.password});
     }
     if(act==='setplan'){
       if(!state.isOwner){ showToast('Only the owner can change plans.'); return; }
-      const p=prompt('Plan for '+email+' (Free, Pro, Ultimate):', acc?(acc.effectivePlan||acc.plan):'Free');
-      if(!p) return;
-      const plan=p.trim();
-      if(!['free','pro','ultimate'].includes(plan.toLowerCase())){ showToast('Use Free, Pro or Ultimate.'); return; }
-      return devDo(email,'setplan',{plan,days:30});
+      const v=await novaDialog({
+        icon:'★',title:'Change plan',sub:email,confirmText:'Save plan',
+        fields:[{name:'plan',label:'Plan',type:'select',value:(acc?(acc.effectivePlan||acc.plan):'Free'),options:[['Free','Free'],['Pro','Pro'],['Ultimate','Ultimate']],required:true}],
+        validate:x=>['free','pro','ultimate'].includes(String(x.plan||'').toLowerCase())?null:'Use Free, Pro or Ultimate.'
+      });
+      if(!v) return;
+      return devDo(email,'setplan',{plan:v.plan,days:30});
     }
     return devDo(email,act);
   });
@@ -6053,26 +6215,30 @@ function Invoke-NovaApi {
                 if ($isSelf -and $action -eq "clear" -and -not $isOwner) {
                     return (ConvertTo-NovaJson @{ success = $false; message = "You cannot clear your own moderation." })
                 }
-                $reason = [string]$body.reason
+                $reason = ([string]$body.reason).Trim()
 
                 switch ($action) {
                     "ban" {
+                        if (-not $reason) { return (ConvertTo-NovaJson @{ success = $false; message = "A reason is required to ban an account." }) }
                         $target.Banned = $true
                         $target.BanUntil = $null
-                        $target.BanReason = if ($reason) { $reason } else { "Banned by $me" }
+                        $target.BanReason = $reason
                         $target.SoftbanUntil = $null
                         $target.SoftbanReason = ""
                     }
                     "timeout" {
+                        if (Test-NovaDurationTooLong $body.duration $body.unit) { return (ConvertTo-NovaJson @{ success = $false; message = "Timeouts can be at most one year." }) }
                         $until = Get-NovaDurationUntil $body.duration $body.unit
                         $target.Banned = $false
                         $target.BanUntil = $until.ToString("o")
                         $target.BanReason = if ($reason) { $reason } else { "Timed out by $me" }
                     }
                     "softban" {
+                        if (-not $reason) { return (ConvertTo-NovaJson @{ success = $false; message = "A reason is required to softban an account." }) }
+                        if (Test-NovaDurationTooLong $body.duration $body.unit) { return (ConvertTo-NovaJson @{ success = $false; message = "Softbans can be at most one year." }) }
                         $until = Get-NovaDurationUntil $body.duration $body.unit
                         $target.SoftbanUntil = $until.ToString("o")
-                        $target.SoftbanReason = if ($reason) { $reason } else { "Softbanned by $me" }
+                        $target.SoftbanReason = $reason
                     }
                     "clear" {
                         $target.Banned = $false
