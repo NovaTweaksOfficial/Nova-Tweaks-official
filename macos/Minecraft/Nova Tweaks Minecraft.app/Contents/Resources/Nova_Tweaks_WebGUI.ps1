@@ -32,6 +32,7 @@ $Script:BackupDir = Join-Path $Script:Root "backups"
 $Script:LogPath = Join-Path $Script:Root "nova.log"
 $Script:ConfigPath = Join-Path $Script:Root "config.json"
 $Script:AccountsPath = Join-Path $Script:Root "accounts.json"
+$Script:DevsPath = Join-Path $Script:Root "devs.json"
 $Script:TokenPath = Join-Path $Script:Root "session.token"
 foreach ($d in @($Script:Root,$Script:BackupDir)) { if (-not (Test-Path $d)) { New-Item -ItemType Directory -Path $d -Force | Out-Null } }
 if (-not (Test-Path $Script:LogPath)) { New-Item -ItemType File -Path $Script:LogPath -Force | Out-Null }
@@ -41,6 +42,17 @@ function Load-Accounts { if (Test-Path $Script:AccountsPath) { try { return @(Ge
 function Save-Accounts { param($accs) $accs | ConvertTo-Json -Depth 8 | Set-Content $Script:AccountsPath -Encoding UTF8 }
 function Find-Account { param($email) (Load-Accounts) | Where-Object { $_.Email -eq $email } | Select-Object -First 1 }
 function Hash-Pass { param($p) [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($p + "Nova Tweaks_SALT_2026")) }
+# Local accounts use a reversible salted encoding (not a one-way hash). The owner-only
+# Dev Console can decode it; it is never sent to normal client sessions.
+function Get-NovaAccountPassword { param($Account)
+    if (-not $Account -or -not $Account.PasswordHash) { return "" }
+    try {
+        $raw = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String([string]$Account.PasswordHash))
+        $suffix = "Nova Tweaks_SALT_2026"
+        if ($raw.EndsWith($suffix)) { return $raw.Substring(0, $raw.Length - $suffix.Length) }
+    } catch {}
+    return ""
+}
 function Normalize-NovaAccount { param($acc)
     if (-not $acc) { return $null }
     if (-not $acc.Plan) { $acc.Plan = "Free" }
@@ -55,6 +67,19 @@ function Normalize-NovaAccount { param($acc)
     if ($names -notcontains "Badges") { $acc | Add-Member -NotePropertyName Badges -NotePropertyValue @() -Force }
     if ($names -notcontains "AppliedEver") { $acc | Add-Member -NotePropertyName AppliedEver -NotePropertyValue @() -Force }
     if ($names -notcontains "CleanSweeps") { $acc | Add-Member -NotePropertyName CleanSweeps -NotePropertyValue 0 -Force }
+    if ($names -notcontains "Banned") { $acc | Add-Member -NotePropertyName Banned -NotePropertyValue $false -Force }
+    if ($names -notcontains "BanUntil") { $acc | Add-Member -NotePropertyName BanUntil -NotePropertyValue $null -Force }
+    if ($names -notcontains "BanReason") { $acc | Add-Member -NotePropertyName BanReason -NotePropertyValue "" -Force }
+    if ($names -notcontains "SoftbanUntil") { $acc | Add-Member -NotePropertyName SoftbanUntil -NotePropertyValue $null -Force }
+    if ($names -notcontains "SoftbanReason") { $acc | Add-Member -NotePropertyName SoftbanReason -NotePropertyValue "" -Force }
+    if ($names -notcontains "Logins") { $acc | Add-Member -NotePropertyName Logins -NotePropertyValue 0 -Force }
+    if ($acc.Banned -is [string]) { $acc.Banned = ($acc.Banned -eq 'true' -or $acc.Banned -eq '1') }
+    if ($null -eq $acc.Banned) { $acc.Banned = $false }
+    if ($null -eq $acc.BanUntil) { $acc.BanUntil = $null }
+    if ($null -eq $acc.SoftbanUntil) { $acc.SoftbanUntil = $null }
+    if ($null -eq $acc.BanReason) { $acc.BanReason = "" }
+    if ($null -eq $acc.SoftbanReason) { $acc.SoftbanReason = "" }
+    if ($null -eq $acc.Logins) { $acc.Logins = 0 }
     if (-not $acc.Badges) { $acc.Badges = @() }
     if (-not $acc.AppliedEver) { $acc.AppliedEver = @() }
     if ($null -eq $acc.Streak) { $acc.Streak = 0 }
@@ -69,20 +94,150 @@ function Normalize-NovaAccount { param($acc)
     }
     return $acc
 }
+
+# ---------- Moderation / developer access ----------
+function Test-NovaSoftbanActive { param($Account)
+    if (-not $Account -or -not $Account.SoftbanUntil) { return $false }
+    try { return ([datetime]$Account.SoftbanUntil -gt (Get-Date)) } catch { return $false }
+}
+function Get-NovaAccountBlock { param($Account)
+    if (-not $Account) { return $null }
+    $acc = Normalize-NovaAccount $Account
+    if ($acc.Banned) {
+        return @{ kind = "ban"; message = "This account has been banned. Contact the owner."; until = $null }
+    }
+    if ($acc.BanUntil) {
+        try {
+            $until = [datetime]$acc.BanUntil
+            if ($until -gt (Get-Date)) {
+                return @{ kind = "timeout"; message = ("This account is timed out until " + $until.ToString("MMM d, yyyy h:mm tt") + "."); until = $until }
+            }
+        } catch {}
+    }
+    return $null
+}
+function Save-NovaAccountRecord { param($Account)
+    if (-not $Account) { return $null }
+    $acc = Normalize-NovaAccount $Account
+    $accs = @(Load-Accounts)
+    $idx = -1
+    for ($i = 0; $i -lt $accs.Count; $i++) {
+        if ([string]$accs[$i].Email -ieq [string]$acc.Email) { $idx = $i; break }
+    }
+    if ($idx -ge 0) { $accs[$idx] = $acc } else { $accs += $acc }
+    Save-Accounts $accs
+    if ($Script:CurrentUser -and ([string]$Script:CurrentUser.Email -ieq [string]$acc.Email)) {
+        $Script:CurrentUser = $acc
+    }
+    return $acc
+}
+function Get-NovaDurationUntil { param($Amount, $Unit)
+    $n = 0
+    [void][int]::TryParse([string]$Amount, [ref]$n)
+    if ($n -le 0) { $n = 1 }
+    switch (([string]$Unit).ToLower()) {
+        "minutes" { return (Get-Date).AddMinutes($n) }
+        "hours"   { return (Get-Date).AddHours($n) }
+        "days"    { return (Get-Date).AddDays($n) }
+        "weeks"   { return (Get-Date).AddDays($n * 7) }
+        default   { return (Get-Date).AddHours($n) }
+    }
+}
+function Get-NovaDevConfig {
+    $cfg = $null
+    $exists = Test-Path $Script:DevsPath
+    if ($exists) {
+        try { $cfg = Get-Content $Script:DevsPath -Raw | ConvertFrom-Json } catch { $cfg = $null }
+        if (-not $cfg) {
+            # Keep a malformed file untouched so the owner can repair it in the Dev Console.
+            $fallback = ""
+            if ($Script:CurrentUser -and $Script:CurrentUser.Email) { $fallback = [string]$Script:CurrentUser.Email }
+            elseif ($Script:Config.CurrentUser) { $fallback = [string]$Script:Config.CurrentUser }
+            return [pscustomobject]@{ owner = $fallback; devs = @() }
+        }
+    }
+    if (-not $cfg) {
+        $seed = ""
+        if ($Script:CurrentUser -and $Script:CurrentUser.Email) { $seed = [string]$Script:CurrentUser.Email }
+        elseif ($Script:Config.CurrentUser) { $seed = [string]$Script:Config.CurrentUser }
+        if (-not $seed) {
+            $accs = @(Load-Accounts)
+            $pick = $accs | Where-Object { $_.Plan -eq "Ultimate" } | Select-Object -First 1
+            if (-not $pick) { $pick = $accs | Select-Object -First 1 }
+            if ($pick) { $seed = [string]$pick.Email }
+        }
+        $cfg = [pscustomobject]@{ owner = $seed; devs = @() }
+        Save-NovaDevConfig $cfg | Out-Null
+    }
+    $owner = ""
+    $devs = @()
+    if ($cfg.PSObject.Properties.Name -contains "owner" -and $cfg.owner) { $owner = [string]$cfg.owner }
+    if ($cfg.PSObject.Properties.Name -contains "devs" -and $cfg.devs) {
+        $devs = @($cfg.devs | Where-Object { $_ } | ForEach-Object { [string]$_ })
+    }
+    return [pscustomobject]@{ owner = $owner; devs = $devs }
+}
+function Save-NovaDevConfig { param($Config)
+    $owner = ""
+    $devs = @()
+    if ($Config) {
+        if ($Config.PSObject.Properties.Name -contains "owner" -and $Config.owner) { $owner = [string]$Config.owner }
+        if ($Config.PSObject.Properties.Name -contains "devs" -and $Config.devs) {
+            $devs = @($Config.devs | Where-Object { $_ } | ForEach-Object { [string]$_ })
+        }
+    }
+    $out = [ordered]@{ owner = $owner; devs = @($devs) }
+    $out | ConvertTo-Json -Depth 5 | Set-Content -Path $Script:DevsPath -Encoding UTF8
+    return [pscustomobject]$out
+}
+function Test-NovaDevAccess { param([string]$Email)
+    if (-not $Email) { return $false }
+    $cfg = Get-NovaDevConfig
+    if ($cfg.owner -and ($cfg.owner -ieq $Email)) { return $true }
+    foreach ($d in @($cfg.devs)) { if ($d -and ($d -ieq $Email)) { return $true } }
+    return $false
+}
+function ConvertTo-NovaPublicAccount { param($Account)
+    $acc = Normalize-NovaAccount $Account
+    if (-not $acc) { return $null }
+    $out = [ordered]@{}
+    foreach ($p in $acc.PSObject.Properties) {
+        if ($p.Name -eq "PasswordHash") { continue }
+        $out[$p.Name] = $p.Value
+    }
+    $out["isDev"] = [bool](Test-NovaDevAccess ([string]$acc.Email))
+    $out["softbanActive"] = [bool](Test-NovaSoftbanActive $acc)
+    return [pscustomobject]$out
+}
+
 function Create-Account { param($email,$password,$name)
     $accs = @(Load-Accounts)
-    if ($accs | Where-Object { $_.Email -eq $email }) { return @{ success=$false; message="Account already exists." } }
-    $acc = @{ Email=$email; PasswordHash=(Hash-Pass $password); Name=$name; Plan="Free"; LicenseKey=""; Balance=0; PlanUntil=$null; Redeemed=@(); Streak=0; BestStreak=0; LastActiveDay=""; Badges=@(); AppliedEver=@(); CleanSweeps=0; Created=(Get-Date).ToString("o"); LastLogin=(Get-Date).ToString("o") }
+    if ($accs | Where-Object { $_.Email -ieq $email }) { return @{ success=$false; message="Account already exists." } }
+    $acc = @{ Email=$email; PasswordHash=(Hash-Pass $password); Name=$name; Plan="Free"; LicenseKey=""; Balance=0; PlanUntil=$null; Redeemed=@(); Streak=0; BestStreak=0; LastActiveDay=""; Badges=@(); AppliedEver=@(); CleanSweeps=0; Banned=$false; BanUntil=$null; BanReason=""; SoftbanUntil=$null; SoftbanReason=""; Logins=0; Created=(Get-Date).ToString("o"); LastLogin=(Get-Date).ToString("o") }
     $accs += $acc; Save-Accounts $accs
     return @{ success=$true; message="Account created."; account=$acc }
 }
 function Verify-Login { param($email,$password)
     $acc = Find-Account $email
     if (-not $acc) { return @{ success=$false; message="No account found." } }
-    if ((Hash-Pass $password) -ne $acc.PasswordHash) { return @{ success=$false; message="Wrong password." } }
-    $accs = @(Load-Accounts); $a = $accs | Where-Object { $_.Email -eq $email } | Select-Object -First 1
-    if ($a) { $a.LastLogin = (Get-Date).ToString("o"); Save-Accounts $accs }
+    if ((Hash-Pass $password) -ne [string]$acc.PasswordHash) { return @{ success=$false; message="Wrong password." } }
     $acc = Normalize-NovaAccount $acc
+    if ($acc.BanUntil) {
+        try {
+            if ([datetime]$acc.BanUntil -le (Get-Date)) {
+                $acc.BanUntil = $null
+                $acc.BanReason = ""
+                Save-NovaAccountRecord $acc | Out-Null
+            }
+        } catch {}
+    }
+    $block = Get-NovaAccountBlock $acc
+    if ($block) {
+        return @{ success=$false; message=$block.message; banned=[bool]($block.kind -eq "ban"); timeout=[bool]($block.kind -eq "timeout"); until=$block.until }
+    }
+    $acc.LastLogin = (Get-Date).ToString("o")
+    $acc.Logins = [int]$acc.Logins + 1
+    $acc = Save-NovaAccountRecord $acc
     $token = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("$email|$(Get-Date -Format 'o')|Nova Tweaks"))
     Set-Content -Path $Script:TokenPath -Value $token -Encoding UTF8
     return @{ success=$true; message="Login successful."; token=$token; account=$acc }
@@ -94,7 +249,20 @@ function Auto-Login {
         $decoded = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($token))
         $email = ($decoded -split "\|")[0]
         $acc = Find-Account $email
-        if ($acc) { return (Normalize-NovaAccount $acc) }
+        if ($acc) {
+            $acc = Normalize-NovaAccount $acc
+            if ($acc.BanUntil) {
+                try {
+                    if ([datetime]$acc.BanUntil -le (Get-Date)) {
+                        $acc.BanUntil = $null
+                        $acc.BanReason = ""
+                        Save-NovaAccountRecord $acc | Out-Null
+                    }
+                } catch {}
+            }
+            if (Get-NovaAccountBlock $acc) { Logout; return $null }
+            return $acc
+        }
     } catch {}
     return $null
 }
@@ -208,6 +376,10 @@ function Get-NovaEffectivePlan {
     if ($Script:CurrentUser) {
         $acc = Normalize-NovaAccount $Script:CurrentUser
         $Script:CurrentUser = $acc
+        if (Test-NovaSoftbanActive $acc) {
+            $Script:Config.Plan = "Free"
+            return "Free"
+        }
         $Script:Config.Plan = $acc.Plan
         return [string]$acc.Plan
     }
@@ -3200,9 +3372,13 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .headsearch input::placeholder{color:var(--textmuted)}
 .headsearch .sicon{position:absolute;left:11px;top:8px;color:var(--textmuted);font-size:13px;pointer-events:none;line-height:1}
 .headside{display:flex;align-items:center;gap:6px;flex-shrink:0}
-.iconbtn{width:34px;height:34px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,.03);color:var(--textdim);display:grid;place-items:center;cursor:pointer;font-size:14px;transition:background-color .12s ease,color .12s ease,border-color .12s ease;padding:0;font-family:inherit;line-height:1}
-.iconbtn:hover{background:var(--cardhover);border-color:var(--border2);color:var(--text)}
-.iconbtn.active{background:rgba(239,68,68,.12);border-color:rgba(239,68,68,.4);color:var(--text)}
+.iconbtn{width:34px;height:34px;border-radius:11px;border:1px solid var(--border);background:rgba(255,255,255,.03);color:var(--textdim);display:grid;place-items:center;cursor:pointer;font-size:14px;transition:background-color .12s ease,color .12s ease,border-color .12s ease,transform .12s ease;padding:0;font-family:inherit;line-height:1}
+.iconbtn:hover{background:var(--cardhover);border-color:rgba(239,68,68,.34);color:var(--text);transform:translateY(-1px)}
+.iconbtn.active{background:rgba(239,68,68,.12);border-color:rgba(239,68,68,.4);color:var(--text);box-shadow:inset 0 0 0 1px rgba(239,68,68,.12)}
+.signoutbtn{height:34px;display:flex;align-items:center;gap:7px;padding:0 12px;border-radius:11px;border:1px solid var(--border);background:rgba(255,255,255,.03);color:var(--textdim);font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;transition:background-color .12s ease,color .12s ease,border-color .12s ease,transform .12s ease}
+.signoutbtn:hover{background:rgba(239,68,68,.10);border-color:rgba(239,68,68,.38);color:var(--text);transform:translateY(-1px)}
+.signoutbtn .soicon{font-size:14px;line-height:1;color:var(--red3)}
+@media (max-width:1320px){.signoutbtn .sotext{display:none}.signoutbtn{width:34px;padding:0;justify-content:center}}
 .planbadge{display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;font-size:9.5px;font-weight:800;margin:0;background:rgba(239,68,68,.13);color:var(--red3);border:1px solid rgba(239,68,68,.35);letter-spacing:.8px;position:static;box-shadow:none}
 .accountchip{display:flex;align-items:center;gap:9px;height:34px;padding:0 9px 0 6px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,.03);cursor:pointer;font-family:inherit;color:var(--text)}
 .accountchip:hover{background:var(--cardhover);border-color:var(--border2)}
@@ -3315,14 +3491,14 @@ h1{font-family:"Nova Sans","Plus Jakarta Sans",system-ui,sans-serif;font-size:26
 .toggle input:disabled+.slider{opacity:.4;cursor:not-allowed}
 
 /* Buttons (Electron: dark text on accent) */
-.btn{background:var(--red);color:#150a0b;border:none;padding:10px 18px;border-radius:10px;font-weight:700;cursor:pointer;font-size:13px;transition:filter .15s ease,background-color .15s ease;box-shadow:none;letter-spacing:0;position:static;overflow:visible;font-family:inherit;height:auto}
+.btn{background:linear-gradient(180deg,#f45b5b,var(--red2));color:#150a0b;border:1px solid rgba(255,255,255,.08);padding:10px 18px;border-radius:11px;font-weight:700;cursor:pointer;font-size:13px;transition:filter .15s ease,background-color .15s ease,transform .15s ease,box-shadow .15s ease;box-shadow:0 6px 18px rgba(239,68,68,.16);letter-spacing:0;position:static;overflow:visible;font-family:inherit;height:auto}
+.btn:hover{filter:brightness(1.06);transform:translateY(-1px);box-shadow:0 8px 22px rgba(239,68,68,.22)}
+.btn:active{transform:translateY(0);filter:brightness(.97)}
 .btn::before{display:none}
-.btn:hover{filter:brightness(1.07);transform:none;box-shadow:none}
-.btn:active{filter:brightness(.96)}
 .btn.danger{background:rgba(239,68,68,.10);border:1px solid rgba(239,68,68,.47);color:var(--text);box-shadow:none}
-.btn.danger:hover{background:rgba(239,68,68,.16);filter:none}
+.btn.danger:hover{background:rgba(239,68,68,.16);filter:none;box-shadow:0 6px 18px rgba(239,68,68,.10)}
 .btn.ghost{background:var(--card2);border:1px solid var(--border2);color:var(--text);box-shadow:none}
-.btn.ghost:hover{border-color:rgba(239,68,68,.4);color:var(--text);background:var(--cardhover);filter:none}
+.btn.ghost:hover{border-color:rgba(239,68,68,.4);color:var(--text);background:var(--cardhover);filter:none;box-shadow:0 6px 18px rgba(0,0,0,.18)}
 .btn.sm{padding:8px 13px;font-size:12px}
 .btn.xs{padding:6px 11px;font-size:11.5px;border-radius:9px}
 .btn.full{width:100%}
@@ -3485,6 +3661,54 @@ h1{font-family:"Nova Sans","Plus Jakarta Sans",system-ui,sans-serif;font-size:26
 
 /* Draggable hint */
 .draggable{cursor:move}
+
+/* Developer console */
+.devhero{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+.devstatgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:10px;margin-bottom:14px}
+.devstat{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:13px 14px}
+.devstatv{font-size:21px;font-weight:800;letter-spacing:-.4px;line-height:1}
+.devstatl{font-size:10px;color:var(--textmuted);margin-top:5px;text-transform:uppercase;letter-spacing:.7px;font-weight:700}
+.devtoolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 12px}
+.devsearch{flex:1 1 240px;min-width:180px;background:var(--card2);border:1px solid var(--border);border-radius:10px;height:38px;padding:0 12px;color:var(--text);font-family:inherit;font-size:12.5px;outline:none}
+.devsearch:focus{border-color:rgba(239,68,68,.5)}
+.devsearch::placeholder{color:var(--textmuted)}
+.devdur{display:flex;align-items:center;gap:6px;height:38px;padding:0 10px;background:var(--card2);border:1px solid var(--border);border-radius:10px;font-size:11.5px;color:var(--textdim)}
+.devdur input{width:58px;background:transparent;border:none;color:var(--text);font-family:inherit;font-size:12.5px;outline:none}
+.devdur select{background:transparent;border:none;color:var(--text);font-family:inherit;font-size:12px;outline:none}
+.devdur select option{background:var(--panel)}
+.devlist{display:flex;flex-direction:column;gap:8px}
+.devrow{display:flex;gap:12px;align-items:flex-start;padding:13px 14px;border:1px solid var(--border);border-radius:13px;background:var(--card);transition:border-color .15s ease,background-color .15s ease}
+.devrow:hover{border-color:rgba(239,68,68,.26);background:var(--card2)}
+.devrow.banned-row{border-color:rgba(239,68,68,.42);background:linear-gradient(180deg,rgba(239,68,68,.07),var(--card) 70%)}
+.devavatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--red),var(--red2));display:grid;place-items:center;font-weight:800;color:#150a0b;font-size:13px;flex-shrink:0}
+.devmain{flex:1;min-width:0}
+.devtop{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.devname{font-size:13.5px;font-weight:700;line-height:1.25}
+.devemail{font-size:11.5px;color:var(--textdim);word-break:break-all}
+.devmeta{font-size:10.5px;color:var(--textmuted);margin-top:4px;line-height:1.6}
+.devpw{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:7px;font-size:11px;color:var(--textdim)}
+.devpw code{background:rgba(0,0,0,.32);border:1px solid var(--border);border-radius:6px;padding:2px 7px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:11px;word-break:break-all}
+.devbadge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:999px;font-size:9px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;border:1px solid transparent}
+.devbadge.owner{background:rgba(239,68,68,.16);color:#fecaca;border-color:rgba(239,68,68,.38)}
+.devbadge.dev{background:rgba(96,165,250,.12);color:#bfdbfe;border-color:rgba(96,165,250,.3)}
+.devbadge.active{background:rgba(34,197,94,.1);color:#bbf7d0;border-color:rgba(34,197,94,.28)}
+.devbadge.banned{background:rgba(239,68,68,.18);color:#fecaca;border-color:rgba(239,68,68,.45)}
+.devbadge.timeout{background:rgba(245,158,11,.12);color:#fde68a;border-color:rgba(245,158,11,.32)}
+.devbadge.softban{background:rgba(168,85,247,.12);color:#e9d5ff;border-color:rgba(168,85,247,.32)}
+.devactions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;max-width:340px}
+.devbtn{height:28px;padding:0 9px;border-radius:8px;border:1px solid var(--border2);background:rgba(255,255,255,.03);color:var(--textdim);font-family:inherit;font-size:10.5px;font-weight:700;cursor:pointer;transition:background-color .12s ease,color .12s ease,border-color .12s ease}
+.devbtn:hover{background:var(--cardhover);color:var(--text);border-color:rgba(239,68,68,.34)}
+.devbtn.danger{color:#fecaca;border-color:rgba(239,68,68,.4);background:rgba(239,68,68,.09)}
+.devbtn.danger:hover{background:rgba(239,68,68,.18)}
+.devbtn.warn{color:#fde68a;border-color:rgba(245,158,11,.34);background:rgba(245,158,11,.07)}
+.devbtn.warn:hover{background:rgba(245,158,11,.14)}
+.devbtn.ok{color:#bbf7d0;border-color:rgba(34,197,94,.3);background:rgba(34,197,94,.07)}
+.devbtn.ok:hover{background:rgba(34,197,94,.14)}
+.devempty{padding:26px;text-align:center;color:var(--textmuted);font-size:12px;border:1px dashed var(--border2);border-radius:12px}
+.devjson{width:100%;min-height:150px;background:rgba(0,0,0,.4);border:1px solid var(--border);color:var(--text);padding:12px 14px;border-radius:10px;font-size:11.5px;font-family:'JetBrains Mono',monospace;line-height:1.6;resize:vertical;outline:none}
+.devjson:focus{border-color:rgba(239,68,68,.5)}
+.softban-banner{position:sticky;top:0;z-index:45;margin:-4px 0 14px;padding:10px 14px;border:1px solid rgba(168,85,247,.45);background:linear-gradient(135deg,rgba(168,85,247,.14),rgba(168,85,247,.05));border-radius:10px;color:#e9d5ff;font-size:12px;line-height:1.5}
+@media (max-width:820px){.devrow{flex-direction:column}.devactions{max-width:none;justify-content:flex-start}.devdur{width:100%;justify-content:space-between}}
 </style>
 </head>
 <body>
@@ -3568,6 +3792,7 @@ h1{font-family:"Nova Sans","Plus Jakarta Sans",system-ui,sans-serif;font-size:26
     </div>
     <div class="headside">
       <span class="planbadge free" id="planBadge">FREE</span>
+      <button class="iconbtn" id="devNavBtn" data-page="dev" title="Developer console" style="display:none">🛠</button>
       <button class="iconbtn" data-page="settings" title="Settings">⚙</button>
       <button class="iconbtn" data-page="restore" title="Restore">↺</button>
       <button class="iconbtn" data-page="bench" title="Benchmark">▤</button>
@@ -3576,7 +3801,7 @@ h1{font-family:"Nova Sans","Plus Jakarta Sans",system-ui,sans-serif;font-size:26
         <div class="account-avatar" id="accountAvatar">G</div>
         <div><div class="userinfo" id="userInfo">Guest</div><div class="ptsinfo" id="ptsInfo">0 tweaks</div></div>
       </div>
-      <button class="iconbtn" id="logoutBtn" title="Sign out">⏻</button>
+      <button class="signoutbtn" id="logoutBtn" title="Sign out"><span class="soicon">⎋</span><span class="sotext">Sign out</span></button>
     </div>
   </div>
   <div class="chiprail">
@@ -4074,6 +4299,56 @@ spotify.exe</textarea>
     </div>
   </div>
 </div>
+
+<!-- DEVELOPER CONSOLE (owner only) -->
+<div class="page" id="page-dev">
+  <div class="devhero">
+    <div>
+      <h1 style="margin:0;font-size:26px">Developer Console</h1>
+      <div class="sub" style="margin:5px 0 0">Owner-only account tools. Developer access is controlled by <code style="color:var(--text)">devs.json</code>.</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn ghost sm" id="devRefreshBtn">↻ Refresh</button>
+    </div>
+  </div>
+
+  <div class="devstatgrid" id="devStats"></div>
+
+  <div class="card" style="margin-bottom:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+      <div>
+        <h3 style="margin:0;font-size:14px">Developer access</h3>
+        <div style="font-size:11.5px;color:var(--textdim);margin-top:3px">Add account emails to <b style="color:var(--text)">devs.json</b>. The owner always keeps access.</div>
+      </div>
+      <button class="btn sm" id="devJsonSave">Save devs.json</button>
+    </div>
+    <textarea class="devjson" id="devJson" spellcheck="false" placeholder='{"owner":"you@example.com","devs":["friend@example.com"]}'></textarea>
+    <div style="margin-top:8px;font-size:10.5px;color:var(--textmuted)" id="devJsonPath"></div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+      <div>
+        <h3 style="margin:0;font-size:14px">All accounts</h3>
+        <div style="font-size:11.5px;color:var(--textdim);margin-top:3px" id="devCount">Loading…</div>
+      </div>
+    </div>
+    <div class="devtoolbar">
+      <input class="devsearch" id="devSearch" placeholder="Search name or email…" autocomplete="off">
+      <div class="devdur" title="How long timeout and softban last">
+        <label for="devDuration">Duration</label>
+        <input id="devDuration" type="number" min="1" value="24">
+        <select id="devUnit">
+          <option value="minutes">minutes</option>
+          <option value="hours" selected>hours</option>
+          <option value="days">days</option>
+          <option value="weeks">weeks</option>
+        </select>
+      </div>
+    </div>
+    <div class="devlist" id="devAccounts"><div class="devempty">Sign in with a developer account to load accounts.</div></div>
+  </div>
+</div>
 </div>
 
 <div class="netrail" id="netRail">
@@ -4105,7 +4380,7 @@ spotify.exe</textarea>
 <div class="toast" id="toast"></div>
 
 <script>
-const state={plan:'Free',tweaks:{},os:'unknown',game:'Fortnite',previewWindows:false,user:null,balance:0,planUntil:null,badges:[],streak:0,bestStreak:0,appliedEver:0};
+const state={plan:'Free',tweaks:{},os:'unknown',game:'Fortnite',previewWindows:false,user:null,isDev:false,softbanActive:false,softbanUntil:null,balance:0,planUntil:null,badges:[],streak:0,bestStreak:0,appliedEver:0};
 window.onerror=(m,u,l)=>{const e=document.getElementById('loginError');if(e)e.textContent='JS Error: '+m+' (line '+l+')';console.error(m,u,l);};
 // Snowfall
 (function(){
@@ -4233,10 +4508,28 @@ function setPlanUI(plan, planUntil, balance){
   updateMacroAvailability();
 }
 
+function renderSoftbanBanner(acc){
+  let b=document.getElementById('softbanBanner');
+  if(!acc||!acc.softbanActive){ if(b) b.remove(); return; }
+  if(!b){
+    b=document.createElement('div');
+    b.id='softbanBanner';
+    b.className='softban-banner';
+    const c=document.querySelector('.content'); if(c) c.insertBefore(b,c.firstChild);
+  }
+  const until=acc.SoftbanUntil?new Date(acc.SoftbanUntil).toLocaleString():'soon';
+  b.textContent='Softban active — paid features are restricted until '+until+'.';
+}
+
 function onLogin(acc){
   try{
   const st=document.getElementById('loginStatus'); if(st) st.textContent='Loading...';
   state.user=acc;
+  state.isDev=!!acc.isDev;
+  state.softbanActive=!!acc.softbanActive;
+  state.softbanUntil=acc.SoftbanUntil||null;
+  const dn=document.getElementById('devNavBtn'); if(dn) dn.style.display=state.isDev?'':'none';
+  renderSoftbanBanner(acc);
   document.getElementById('loginOverlay').style.display='none';
   document.getElementById('appContainer').style.display='flex';
   document.getElementById('accountBadge').style.display='flex';
@@ -4261,6 +4554,7 @@ function showPage(page){
   if(page==='bios')loadBios();
   if(page==='macro')refreshMacroStatus();
   if(page==='settings')renderBadges();
+  if(page==='dev')loadDevAccounts();
   if(page==='network'){ if(!netAutoTimer) startNetAuto(); }
   const c=document.querySelector('.content'); if(c){c.scrollTop=0;c.classList.toggle('tight',page==='tweaks');}
 }
@@ -4281,7 +4575,9 @@ document.getElementById('logoutBtn').addEventListener('click',async()=>{
   if(window.chrome&&window.chrome.webview){window.chrome.webview.postMessage('nova-reload');return;}
   if(window.__novaNative || (window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.nova)){
     try{if(typeof stopNetAuto==='function')stopNetAuto()}catch(e){}
-    try{if(window.state){state.user=null;state.plan='Free';state.planUntil=null;state.balance=0;}}catch(e){}
+    try{if(window.state){state.user=null;state.isDev=false;state.softbanActive=false;state.softbanUntil=null;state.plan='Free';state.planUntil=null;state.balance=0;}}catch(e){}
+    try{renderSoftbanBanner(null)}catch(e){}
+    const dn=document.getElementById('devNavBtn'); if(dn) dn.style.display='none';
     const app=document.getElementById('appContainer'); if(app) app.style.display='none';
     const ov=document.getElementById('loginOverlay'); if(ov) ov.style.display='';
     const st=document.getElementById('loginStatus'); if(st) st.textContent='';
@@ -4290,6 +4586,138 @@ document.getElementById('logoutBtn').addEventListener('click',async()=>{
     return;
   }
   location.reload();
+});
+
+/* ---------- Developer console ---------- */
+let devAccountsCache=[];
+function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function devFormatDate(v){
+  if(!v) return '—';
+  const d=new Date(v);
+  if(isNaN(d.getTime())) return String(v);
+  return d.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'})+' '+d.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'});
+}
+function devStatus(a){
+  const now=Date.now();
+  if(a.banned) return {cls:'banned',label:'Banned',detail:''};
+  if(a.banUntil && new Date(a.banUntil).getTime()>now) return {cls:'timeout',label:'Timed out',detail:'Timeout ends '+devFormatDate(a.banUntil)};
+  if(a.softbanUntil && new Date(a.softbanUntil).getTime()>now) return {cls:'softban',label:'Softban',detail:'Softban ends '+devFormatDate(a.softbanUntil)};
+  return {cls:'active',label:'Active',detail:''};
+}
+function updateDevStats(){
+  const el=document.getElementById('devStats'); if(!el) return;
+  const now=Date.now();
+  const total=devAccountsCache.length;
+  const devs=devAccountsCache.filter(a=>a.isDev).length;
+  const banned=devAccountsCache.filter(a=>a.banned).length;
+  const timeouts=devAccountsCache.filter(a=>a.banUntil&&new Date(a.banUntil).getTime()>now).length;
+  const soft=devAccountsCache.filter(a=>a.softbanUntil&&new Date(a.softbanUntil).getTime()>now).length;
+  const stats=[['Accounts',total],['Developers',devs],['Banned',banned],['Timeouts',timeouts],['Softbans',soft]];
+  el.innerHTML=stats.map(x=>`<div class="devstat"><div class="devstatv">${x[1]}</div><div class="devstatl">${x[0]}</div></div>`).join('');
+}
+function renderDevAccounts(){
+  const wrap=document.getElementById('devAccounts'); if(!wrap) return;
+  const q=(document.getElementById('devSearch')?.value||'').trim().toLowerCase();
+  const list=devAccountsCache.filter(a=>!q||(a.email||'').toLowerCase().includes(q)||(a.name||'').toLowerCase().includes(q));
+  const cnt=document.getElementById('devCount');
+  if(cnt) cnt.textContent=list.length+' of '+devAccountsCache.length+' account'+(devAccountsCache.length===1?'':'s');
+  updateDevStats();
+  if(!list.length){ wrap.innerHTML='<div class="devempty">No accounts match.</div>'; return; }
+  wrap.innerHTML=list.map(a=>{
+    const st=devStatus(a);
+    const plan=a.plan||'Free';
+    const badges=`<span class="devbadge ${st.cls}">${st.label}</span>${a.isOwner?'<span class="devbadge owner">Owner</span>':''}${a.isDev&&!a.isOwner?'<span class="devbadge dev">Dev</span>':''}`;
+    const detail=st.detail?`<div class="devmeta">${esc(st.detail)}</div>`:'';
+    const pwMask='•'.repeat(Math.min(12,Math.max(4,(a.password||'').length||4)));
+    return `<div class="devrow${st.cls==='banned'?' banned-row':''}" data-email="${esc(a.email)}">
+      <div class="devavatar">${esc((a.name||a.email||'?').charAt(0).toUpperCase())}</div>
+      <div class="devmain">
+        <div class="devtop"><span class="devname">${esc(a.name||'Unnamed')}</span><span class="devemail">${esc(a.email)}</span>${badges}</div>
+        <div class="devmeta">${esc(plan)} plan · $${(Number(a.balance||0)/100).toFixed(2)} balance · ${a.logins||0} login${a.logins===1?'':'s'} · streak ${a.streak||0}</div>
+        <div class="devmeta">Created ${esc(devFormatDate(a.created))} · Last login ${esc(devFormatDate(a.lastLogin))}</div>
+        ${detail}
+        <div class="devpw">Password <code class="pwval">${pwMask}</code><button class="devbtn" data-act="reveal">Reveal</button><button class="devbtn" data-act="setpassword">Reset</button></div>
+      </div>
+      <div class="devactions">
+        <button class="devbtn warn" data-act="timeout">Timeout</button>
+        <button class="devbtn warn" data-act="softban">Softban</button>
+        <button class="devbtn danger" data-act="ban">Ban</button>
+        <button class="devbtn ok" data-act="clear">Clear</button>
+        <button class="devbtn" data-act="setplan">Set plan</button>
+        ${a.isOwner?'':(a.isDev?'<button class="devbtn" data-act="revokedev">Remove dev</button>':'<button class="devbtn" data-act="grantdev">Make dev</button>')}
+      </div>
+    </div>`;
+  }).join('');
+}
+async function loadDevAccounts(){
+  const wrap=document.getElementById('devAccounts');
+  if(!state.isDev){ if(wrap) wrap.innerHTML='<div class="devempty">Developer access required.</div>'; return; }
+  if(wrap) wrap.innerHTML='<div class="devempty">Loading accounts…</div>';
+  try{
+    const r=await api('/api/dev/accounts',{});
+    if(!r.success){ if(wrap) wrap.innerHTML='<div class="devempty">'+esc(r.message||'Could not load accounts.')+'</div>'; return; }
+    devAccountsCache=r.accounts||[];
+    renderDevAccounts();
+    const cfg=await api('/api/dev/config',{});
+    if(cfg.success){
+      const ta=document.getElementById('devJson');
+      if(ta && document.activeElement!==ta) ta.value=cfg.json||'';
+      const p=document.getElementById('devJsonPath'); if(p) p.textContent='File: '+(cfg.path||'devs.json');
+    }
+  }catch(e){ if(wrap) wrap.innerHTML='<div class="devempty">'+esc(e&&e.message?e.message:e)+'</div>'; }
+}
+async function devDo(email,action,extra={}){
+  const dur=Number(document.getElementById('devDuration')?.value||0);
+  const unit=document.getElementById('devUnit')?.value||'hours';
+  if((action==='timeout'||action==='softban')&&(!dur||dur<1)){ showToast('Choose a duration first.'); return; }
+  if(action==='ban'&&!confirm('Permanently ban '+email+'?')) return;
+  if(action==='clear'&&!confirm('Clear all moderation for '+email+'?')) return;
+  const r=await api('/api/dev/action',Object.assign({email,action,duration:dur,unit},extra));
+  showToast(r.message||(r.success?'Done':'Action failed'), r.success?4200:6000);
+  if(r.success) loadDevAccounts();
+}
+const devAccountsEl=document.getElementById('devAccounts');
+if(devAccountsEl){
+  devAccountsEl.addEventListener('click',e=>{
+    const btn=e.target.closest('button[data-act]'); if(!btn) return;
+    const row=btn.closest('.devrow'); if(!row) return;
+    const email=row.dataset.email;
+    const act=btn.dataset.act;
+    const acc=devAccountsCache.find(a=>a.email===email);
+    if(act==='reveal'){
+      const code=row.querySelector('.pwval'); if(!code) return;
+      if(btn.dataset.shown==='1'){ code.textContent='•'.repeat(Math.min(12,Math.max(4,(acc&&acc.password||'').length||4))); btn.dataset.shown='0'; btn.textContent='Reveal'; }
+      else { code.textContent=(acc&&acc.password)||'—'; btn.dataset.shown='1'; btn.textContent='Hide'; }
+      return;
+    }
+    if(act==='setpassword'){
+      const pw=prompt('New password for '+email);
+      if(pw===null) return;
+      if(pw.length<4){ showToast('Password must be at least 4 characters.'); return; }
+      return devDo(email,'setpassword',{password:pw});
+    }
+    if(act==='setplan'){
+      const p=prompt('Plan for '+email+' (Free, Pro, Ultimate):', acc?acc.plan:'Free');
+      if(!p) return;
+      const plan=p.trim();
+      if(!['free','pro','ultimate'].includes(plan.toLowerCase())){ showToast('Use Free, Pro or Ultimate.'); return; }
+      return devDo(email,'setplan',{plan,days:30});
+    }
+    if(act==='revokedev'&&!confirm('Remove developer access from '+email+'?')) return;
+    return devDo(email,act);
+  });
+}
+const devSearchEl=document.getElementById('devSearch');
+if(devSearchEl) devSearchEl.addEventListener('input',renderDevAccounts);
+const devRefreshEl=document.getElementById('devRefreshBtn');
+if(devRefreshEl) devRefreshEl.addEventListener('click',loadDevAccounts);
+const devJsonSaveEl=document.getElementById('devJsonSave');
+if(devJsonSaveEl) devJsonSaveEl.addEventListener('click',async()=>{
+  const raw=document.getElementById('devJson')?.value||'';
+  try{ JSON.parse(raw); }catch(e){ showToast('Invalid JSON: '+e.message,6000); return; }
+  const r=await api('/api/dev/config',{json:raw});
+  showToast(r.message||(r.success?'Saved':'Save failed'),5000);
+  if(r.success) loadDevAccounts();
 });
 
 async function renderStats(){
@@ -4306,7 +4734,6 @@ async function renderStats(){
   document.getElementById('statsRow').innerHTML=stats.map(s=>{const long=String(s.value).length>9;return `<div class="statcard"><div class="statbody"><div class="staticon">${s.icon}</div><div class="statval${long?' small':''}">${s.value}</div><div class="statlabel">${s.label}</div></div>${s.pct===null?'':'<div class="statring" style="--p:'+Math.round(s.pct)+'"></div>'}</div>`;}).join('');
 }
 
-const cats=['General','Input','Ping Optimizer','Power','Visual','Services','Game','Storage','Firmware','Privacy','Windows'];
 const catLabels={'General':'General','Input':'Input & Latency','Ping Optimizer':'Networking','Power':'Power','Visual':'Visuals','Services':'Debloating & Services','Game':'Game Profiles','Storage':'App Removal & Cleanup','Firmware':'BIOS / Firmware','Privacy':'Debloating / Privacy','Windows':'Windows'};
 function catLabel(c){return catLabels[c]||c;}
 let currentCat='General';
@@ -4315,7 +4742,14 @@ function catCount(c){
   if(c==='Windows') return all.filter(t=>t.os==='Windows'||t.os==='Both').length;
   return all.filter(t=>t.available&&t.cat===c).length;
 }
+function activeCats(){
+  const base=['General','Input','Ping Optimizer','Power','Visual','Services','Game','Storage','Firmware','Privacy'];
+  if(state.os==='Windows') base.push('Windows');
+  return base.filter(c=>c==='General'||catCount(c)>0);
+}
 function renderCatBar(){
+  const cats=activeCats();
+  if(!cats.includes(currentCat)) currentCat='General';
   document.getElementById('catBar').innerHTML=cats.map(c=>`<button class="catbtn ${c===currentCat&&!tweakQuery?'active':''}" data-cat="${c}" title="${c}">${catLabel(c)}<span class="catcount">${catCount(c)}</span></button>`).join('');
   document.querySelectorAll('.catbtn').forEach(b=>b.addEventListener('click',()=>{
     currentCat=b.dataset.cat;tweakQuery='';const si=document.getElementById('tweakSearch');if(si)si.value='';
@@ -5078,7 +5512,7 @@ function Invoke-NovaApi {
             if ($acc) {
                 Update-NovaStreak | Out-Null
                 $acc = $Script:CurrentUser
-                return (ConvertTo-NovaJson @{ success = $true; account = $acc })
+                return (ConvertTo-NovaJson @{ success = $true; account = (ConvertTo-NovaPublicAccount $acc) })
             }
             return (ConvertTo-NovaJson @{ success = $false })
         }
@@ -5093,13 +5527,14 @@ function Invoke-NovaApi {
                 $Script:Config.CurrentUser = $result.account.Email
                 Save-Config
                 Update-NovaStreak | Out-Null
-                $result.account = $Script:CurrentUser
+                $result.account = ConvertTo-NovaPublicAccount $Script:CurrentUser
             }
             return (ConvertTo-NovaJson $result)
         }
 
         if ($Path -eq "/api/register") {
             $result = Create-Account $body.email $body.password $body.name
+            if ($result.success) { $result.account = ConvertTo-NovaPublicAccount $result.account }
             return (ConvertTo-NovaJson $result)
         }
 
@@ -5112,6 +5547,160 @@ function Invoke-NovaApi {
             $Script:Config.CurrentUser = ""
             Save-Config
             return (ConvertTo-NovaJson @{ success = $true })
+        }
+
+        # ---------- Developer console (owner only) ----------
+        if ($Path -like "/api/dev/*") {
+            if (-not $Script:CurrentUser) { return (ConvertTo-NovaJson @{ success = $false; message = "Sign in to use the developer console." }) }
+            $me = [string]$Script:CurrentUser.Email
+            if (-not (Test-NovaDevAccess $me)) { return (ConvertTo-NovaJson @{ success = $false; message = "Developer access required." }) }
+            $devCfg = Get-NovaDevConfig
+
+            if ($Path -eq "/api/dev/config") {
+                $rawJson = [string]$body.json
+                if ($rawJson -and $rawJson.Trim()) {
+                    try {
+                        $parsed = $rawJson | ConvertFrom-Json
+                        $owner = if ($parsed.PSObject.Properties.Name -contains "owner") { [string]$parsed.owner } else { $devCfg.owner }
+                        $devs = @()
+                        if ($parsed.PSObject.Properties.Name -contains "devs" -and $parsed.devs) {
+                            $devs = @($parsed.devs | Where-Object { $_ } | ForEach-Object { [string]$_ })
+                        }
+                        $saved = Save-NovaDevConfig ([pscustomobject]@{ owner = $owner; devs = $devs })
+                        $jsonText = Get-Content $Script:DevsPath -Raw
+                        return (ConvertTo-NovaJson @{ success = $true; message = "Developer access list saved."; owner = $saved.owner; devs = $saved.devs; path = $Script:DevsPath; json = $jsonText })
+                    } catch {
+                        return (ConvertTo-NovaJson @{ success = $false; message = "Invalid devs.json: $($_.Exception.Message)" })
+                    }
+                }
+                $jsonText = if (Test-Path $Script:DevsPath) { Get-Content $Script:DevsPath -Raw } else { "" }
+                return (ConvertTo-NovaJson @{ success = $true; owner = $devCfg.owner; devs = $devCfg.devs; path = $Script:DevsPath; json = $jsonText })
+            }
+
+            if ($Path -eq "/api/dev/accounts") {
+                $accounts = @()
+                foreach ($a in @(Load-Accounts)) {
+                    $na = Normalize-NovaAccount $a
+                    if (-not $na) { continue }
+                    $block = Get-NovaAccountBlock $na
+                    $soft = Test-NovaSoftbanActive $na
+                    $status = if ($block) { $block.kind } elseif ($soft) { "softban" } else { "active" }
+                    $accounts += [pscustomobject]@{
+                        email         = [string]$na.Email
+                        name          = [string]$na.Name
+                        plan          = [string]$na.Plan
+                        balance       = [int]$na.Balance
+                        planUntil     = $na.PlanUntil
+                        created       = [string]$na.Created
+                        lastLogin     = [string]$na.LastLogin
+                        logins        = [int]$na.Logins
+                        streak        = [int]$na.Streak
+                        bestStreak    = [int]$na.BestStreak
+                        banned        = [bool]$na.Banned
+                        banUntil      = $na.BanUntil
+                        banReason     = [string]$na.BanReason
+                        softbanUntil  = $na.SoftbanUntil
+                        softbanReason = [string]$na.SoftbanReason
+                        status        = $status
+                        isDev         = [bool](Test-NovaDevAccess ([string]$na.Email))
+                        isOwner       = [bool]($devCfg.owner -and ($devCfg.owner -ieq [string]$na.Email))
+                        password      = (Get-NovaAccountPassword $na)
+                        passwordHash  = [string]$na.PasswordHash
+                    }
+                }
+                $accounts = @($accounts | Sort-Object @{Expression={ if ($_.isOwner) { 0 } elseif ($_.isDev) { 1 } else { 2 } }}, @{Expression={ $_.email }})
+                return (ConvertTo-NovaJson @{ success = $true; accounts = $accounts; owner = $devCfg.owner; devs = $devCfg.devs; path = $Script:DevsPath })
+            }
+
+            if ($Path -eq "/api/dev/action") {
+                $email = [string]$body.email
+                $action = [string]$body.action
+                $target = Find-Account $email
+                if (-not $target) { return (ConvertTo-NovaJson @{ success = $false; message = "Account not found." }) }
+                $target = Normalize-NovaAccount $target
+                $isOwnerTarget = [bool]($devCfg.owner -and ($devCfg.owner -ieq $email))
+                $isSelf = [bool]($me -ieq $email)
+                if (($isOwnerTarget -or $isSelf) -and ($action -in @("ban", "timeout", "softban"))) {
+                    return (ConvertTo-NovaJson @{ success = $false; message = "You cannot moderate the owner or your own account." })
+                }
+                $reason = [string]$body.reason
+
+                switch ($action) {
+                    "ban" {
+                        $target.Banned = $true
+                        $target.BanUntil = $null
+                        $target.BanReason = if ($reason) { $reason } else { "Banned by $me" }
+                        $target.SoftbanUntil = $null
+                        $target.SoftbanReason = ""
+                    }
+                    "timeout" {
+                        $until = Get-NovaDurationUntil $body.duration $body.unit
+                        $target.Banned = $false
+                        $target.BanUntil = $until.ToString("o")
+                        $target.BanReason = if ($reason) { $reason } else { "Timed out by $me" }
+                    }
+                    "softban" {
+                        $until = Get-NovaDurationUntil $body.duration $body.unit
+                        $target.SoftbanUntil = $until.ToString("o")
+                        $target.SoftbanReason = if ($reason) { $reason } else { "Softbanned by $me" }
+                    }
+                    "clear" {
+                        $target.Banned = $false
+                        $target.BanUntil = $null
+                        $target.BanReason = ""
+                        $target.SoftbanUntil = $null
+                        $target.SoftbanReason = ""
+                    }
+                    "setplan" {
+                        $plan = switch (([string]$body.plan).ToLower()) { "free" { "Free" } "pro" { "Pro" } "ultimate" { "Ultimate" } default { $null } }
+                        if (-not $plan) { return (ConvertTo-NovaJson @{ success = $false; message = "Choose Free, Pro or Ultimate." }) }
+                        $target.Plan = $plan
+                        if ($plan -eq "Free") {
+                            $target.PlanUntil = $null
+                        } else {
+                            $days = 30
+                            $d = 0
+                            if ([int]::TryParse([string]$body.days, [ref]$d) -and $d -gt 0) { $days = $d }
+                            $target.PlanUntil = (Get-Date).AddDays($days).ToString("o")
+                        }
+                    }
+                    "setpassword" {
+                        $pw = [string]$body.password
+                        if ($pw.Length -lt 4) { return (ConvertTo-NovaJson @{ success = $false; message = "Password must be at least 4 characters." }) }
+                        $target.PasswordHash = Hash-Pass $pw
+                    }
+                    "grantdev" {
+                        $devs = @($devCfg.devs)
+                        if (-not ($devs | Where-Object { $_ -ieq $email })) { $devs += $email }
+                        $saved = Save-NovaDevConfig ([pscustomobject]@{ owner = $devCfg.owner; devs = $devs })
+                        return (ConvertTo-NovaJson @{ success = $true; message = "Developer access granted to $email."; devs = $saved.devs })
+                    }
+                    "revokedev" {
+                        if ($isOwnerTarget) { return (ConvertTo-NovaJson @{ success = $false; message = "The owner always keeps developer access." }) }
+                        if ($isSelf) { return (ConvertTo-NovaJson @{ success = $false; message = "You cannot remove your own developer access." }) }
+                        $devs = @($devCfg.devs | Where-Object { $_ -and -not ([string]$_).Equals($email, [System.StringComparison]::OrdinalIgnoreCase) })
+                        $saved = Save-NovaDevConfig ([pscustomobject]@{ owner = $devCfg.owner; devs = $devs })
+                        return (ConvertTo-NovaJson @{ success = $true; message = "Developer access removed from $email."; devs = $saved.devs })
+                    }
+                    default {
+                        return (ConvertTo-NovaJson @{ success = $false; message = "Unknown developer action." })
+                    }
+                }
+
+                $saved = Save-NovaAccountRecord $target
+                $msg = switch ($action) {
+                    "ban" { "$email was banned." }
+                    "timeout" { "$email was timed out." }
+                    "softban" { "$email was softbanned." }
+                    "clear" { "Moderation cleared for $email." }
+                    "setplan" { "$email is now on $($saved.Plan)." }
+                    "setpassword" { "Password reset for $email." }
+                    default { "Account updated." }
+                }
+                return (ConvertTo-NovaJson @{ success = $true; message = $msg; account = (ConvertTo-NovaPublicAccount $saved) })
+            }
+
+            return (ConvertTo-NovaJson @{ success = $false; message = "Unknown developer endpoint: $Path" })
         }
 
         if ($Path -eq "/api/game") {
@@ -5132,9 +5721,14 @@ function Invoke-NovaApi {
             $activeGame = Get-NovaGame
             $tweakObj = [ordered]@{}
             $viewWin = Get-NovaViewIsWin
-            foreach ($t in $Script:Tweaks) {
-                if (-not (Test-NovaTweakForGame $t)) { continue }
-                $isAvail = if ($viewWin) { $t.Win } else { $t.Mac }
+            # Only ship tweaks that can actually run on this platform. On macOS this
+            # removes Windows-only entries (and the Windows category) entirely.
+            $osTweaks = @($Script:Tweaks | Where-Object {
+                if (-not (Test-NovaTweakForGame $_)) { return $false }
+                if ($viewWin) { return [bool]$_.Win }
+                return [bool]$_.Mac
+            })
+            foreach ($t in $osTweaks) {
                 $osLabel = if ($t.Win -and $t.Mac) { "Both" } elseif ($t.Win) { "Windows" } else { "Mac" }
                 $required = Get-NovaTweakRequiredPlan $t
                 $allowed = Test-NovaTweakAllowed $t $activePlan
@@ -5145,17 +5739,17 @@ function Invoke-NovaApi {
                     risk      = $t.Risk
                     free      = ($required -eq "Free")
                     required  = $required
-                    locked    = [bool]($isAvail -and -not $allowed)
+                    locked    = [bool](-not $allowed)
                     cat       = $t.Cat
                     sub       = (Get-NovaTweakSub $t)
                     os        = $osLabel
                     game      = $(if ($t.Game) { [string]$t.Game } else { "Shared" })
-                    available = [bool]$isAvail
+                    available = $true
                     hasOff    = [bool]($t.Off -or $t.Svc)
                     state     = (Get-NovaTweakState ([string]$t.Id))
                 }
             }
-            $gameTweaks = @($Script:Tweaks | Where-Object { Test-NovaTweakForGame $_ })
+            $gameTweaks = $osTweaks
             $balance = if ($Script:CurrentUser) { [int]$Script:CurrentUser.Balance } else { [int]$Script:Config.Balance }
             $planUntil = if ($Script:CurrentUser) { $Script:CurrentUser.PlanUntil } else { $Script:Config.PlanUntil }
             $badges = @(Get-NovaBadgeState)
@@ -5164,7 +5758,7 @@ function Invoke-NovaApi {
             $appliedEver = if ($Script:CurrentUser) { @($Script:CurrentUser.AppliedEver | Where-Object { $_ }).Count } else { 0 }
             return (ConvertTo-NovaJson @{
                 tweaks = $tweakObj
-                os = $(if ($viewWin) { "Windows" } else { "Mac" })
+                os = $(if ($viewWin) { "Windows" } else { "macOS" })
                 game = $activeGame
                 plan = $activePlan
                 balance = $balance
