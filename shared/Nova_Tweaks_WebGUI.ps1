@@ -131,6 +131,24 @@ function Save-NovaAccountRecord { param($Account)
     }
     return $acc
 }
+# Owner-only permanent removal. Deletes the record from accounts.json and any
+# role entry from devs.json so the email can register again from scratch.
+function Remove-NovaAccountRecord { param([string]$Email)
+    if (-not $Email) { return $false }
+    $accs = @(Load-Accounts)
+    $kept = @($accs | Where-Object { -not ([string]$_.Email -ieq $Email) })
+    if ($kept.Count -eq $accs.Count) { return $false }
+    Save-Accounts $kept
+    try {
+        $cfg = Get-NovaDevConfig
+        $devs = @($cfg.devs | Where-Object { $_ -and -not ([string]$_).Equals($Email, [System.StringComparison]::OrdinalIgnoreCase) })
+        $mods = @($cfg.mods | Where-Object { $_ -and -not ([string]$_).Equals($Email, [System.StringComparison]::OrdinalIgnoreCase) })
+        if ($devs.Count -ne @($cfg.devs).Count -or $mods.Count -ne @($cfg.mods).Count) {
+            Save-NovaDevConfig ([pscustomobject]@{ owner = $cfg.owner; devs = $devs; mods = $mods }) | Out-Null
+        }
+    } catch {}
+    return $true
+}
 function Get-NovaDurationUntil { param($Amount, $Unit)
     $n = 0
     [void][int]::TryParse([string]$Amount, [ref]$n)
@@ -4457,7 +4475,7 @@ spotify.exe</textarea>
   <div class="devhero">
     <div>
       <h1 style="margin:0;font-size:26px">Staff Console</h1>
-      <div class="sub" style="margin:5px 0 0">Owner, dev and mod account tools. Only the owner can edit <code style="color:var(--text)">devs.json</code>, grant roles, change plans, reset passwords or ban accounts.</div>
+      <div class="sub" style="margin:5px 0 0">Owner, dev and mod account tools. Only the owner can edit <code style="color:var(--text)">devs.json</code>, grant roles, change plans, reset passwords, ban accounts or permanently delete accounts.</div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn ghost sm" id="devRefreshBtn">↻ Refresh</button>
@@ -5051,6 +5069,9 @@ function renderDevAccounts(){
       if(state.isOwner) acts.push('<button class="devbtn danger" data-act="ban">Ban</button>');
       acts.push('<button class="devbtn ok" data-act="clear">Clear</button>');
     }
+    if((state.isOwner||state.role==='dev')&&role!=='owner'&&!isSelf){
+      acts.push('<button class="devbtn ok" data-act="grantmoney">Grant $</button>');
+    }
     if(state.isOwner){
       if(role!=='owner') acts.push('<button class="devbtn" data-act="setplan">Set plan</button>');
       if(role==='dev') acts.push('<button class="devbtn" data-act="revokedev">Remove dev</button>');
@@ -5059,6 +5080,7 @@ function renderDevAccounts(){
         acts.push('<button class="devbtn" data-act="grantdev">Make dev</button>');
         acts.push('<button class="devbtn" data-act="grantmod">Make mod</button>');
       }
+      if(role!=='owner'&&!isSelf) acts.push('<button class="devbtn danger" data-act="delete">Delete</button>');
     }
     return `<div class="devrow${st.cls==='banned'?' banned-row':''}" data-email="${esc(a.email)}">
       <div class="devavatar">${esc((a.name||a.email||'?').charAt(0).toUpperCase())}</div>
@@ -5130,13 +5152,29 @@ async function devDo(email,action,extra={}){
     if(!v) return;
     payload.reason=v.reason||'';
     if(action!=='ban'){ payload.duration=Number(v.amount); payload.unit=v.unit; }
+  } else if(action==='grantmoney'){
+    const v=await novaDialog({
+      icon:'💰',title:'Grant balance',sub:email,
+      confirmText:'Grant balance',
+      message:'Adds store credit to '+email+'’s Nova balance. Handy for giveaways and prizes.',
+      fields:[{name:'amount',label:'Amount (USD)',type:'number',value:10,min:0.01,required:true,hint:'Up to $10,000 per grant.'}],
+      validate:x=>{
+        const n=Number(x.amount);
+        if(!isFinite(n)||n<=0) return 'Enter an amount greater than 0.';
+        if(n>10000) return 'Maximum is $10,000 per grant.';
+        return null;
+      }
+    });
+    if(!v) return;
+    payload.cents=Math.round(Number(v.amount)*100);
   } else {
     const copy={
       clear:{icon:'✕',title:'Clear moderation',message:'Remove all bans, timeouts and softbans from '+email+'?',confirmText:'Clear moderation'},
       grantdev:{icon:'◆',title:'Grant developer access',message:email+' will get developer tools and Ultimate automatically.',confirmText:'Make dev'},
       grantmod:{icon:'◇',title:'Grant mod access',message:email+' will get moderation tools and Pro automatically.',confirmText:'Make mod'},
       revokedev:{icon:'◆',title:'Remove developer access',message:'Remove developer access from '+email+'?',confirmText:'Remove dev',danger:true},
-      revokemod:{icon:'◇',title:'Remove mod access',message:'Remove mod access from '+email+'?',confirmText:'Remove mod',danger:true}
+      revokemod:{icon:'◇',title:'Remove mod access',message:'Remove mod access from '+email+'?',confirmText:'Remove mod',danger:true},
+      delete:{icon:'🗑',title:'Delete account permanently',message:'This permanently removes '+email+' from accounts.json and strips any dev/mod role. They will be signed out and cannot log in again. This cannot be undone.',confirmText:'Delete forever',danger:true}
     }[action];
     if(copy){ const ok=await novaDialog(Object.assign({sub:email},copy)); if(!ok) return; }
   }
@@ -6209,24 +6247,35 @@ function Invoke-NovaApi {
                 if ($isPrivilegedTarget -and -not $isOwner) {
                     return (ConvertTo-NovaJson @{ success = $false; message = "You cannot view, moderate or manage owner, developer or mod accounts." })
                 }
+                if ($action -in @("grantdev", "revokedev", "grantmod", "revokemod", "setplan", "setpassword", "ban", "delete") -and -not $isOwner) {
+                    return (ConvertTo-NovaJson @{ success = $false; message = "Only the owner can do that." })
+                }
                 if (-not $isOwner) {
                     # Devs may softban/timeout; mods may only timeout. Neither can ever ban permanently.
-                    $allowed = if ($myRole -eq "dev") { @("timeout", "softban", "clear") } else { @("timeout", "clear") }
+                    $allowed = if ($myRole -eq "dev") { @("timeout", "softban", "clear", "grantmoney") } else { @("timeout", "clear") }
                     if ($action -notin $allowed) {
                         $msg = if ($myRole -eq "dev") { "Devs can only timeout, softban or clear regular accounts." } else { "Mods can only timeout or clear regular accounts." }
                         return (ConvertTo-NovaJson @{ success = $false; message = $msg })
                     }
                 }
-                if ($action -in @("grantdev", "revokedev", "grantmod", "revokemod", "setplan", "setpassword", "ban") -and -not $isOwner) {
-                    return (ConvertTo-NovaJson @{ success = $false; message = "Only the owner can do that." })
-                }
-                if (($isOwnerTarget -or $isSelf) -and ($action -in @("ban", "timeout", "softban"))) {
-                    return (ConvertTo-NovaJson @{ success = $false; message = "You cannot moderate the owner or your own account." })
+                if ($isOwnerTarget -or $isSelf) {
+                    if ($action -in @("ban", "timeout", "softban")) {
+                        return (ConvertTo-NovaJson @{ success = $false; message = "You cannot moderate the owner or your own account." })
+                    }
+                    if ($action -eq "delete") {
+                        return (ConvertTo-NovaJson @{ success = $false; message = "The owner account cannot be deleted, and you cannot delete your own account." })
+                    }
                 }
                 if ($isSelf -and $action -eq "clear" -and -not $isOwner) {
                     return (ConvertTo-NovaJson @{ success = $false; message = "You cannot clear your own moderation." })
                 }
                 $reason = ([string]$body.reason).Trim()
+
+                if ($action -eq "delete") {
+                    $removed = Remove-NovaAccountRecord $email
+                    if (-not $removed) { return (ConvertTo-NovaJson @{ success = $false; message = "Account not found." }) }
+                    return (ConvertTo-NovaJson @{ success = $true; message = "$email was permanently deleted."; deleted = $email })
+                }
 
                 switch ($action) {
                     "ban" {
@@ -6276,6 +6325,23 @@ function Invoke-NovaApi {
                         if ($pw.Length -lt 4) { return (ConvertTo-NovaJson @{ success = $false; message = "Password must be at least 4 characters." }) }
                         $target.PasswordHash = Hash-Pass $pw
                     }
+                    "grantmoney" {
+                        # Owners and devs hand out store credit for giveaways. Cents are
+                        # authoritative; "amount" in dollars is accepted as a convenience.
+                        $cents = 0
+                        $parsedCents = 0
+                        $parsedAmount = 0.0
+                        if ([int]::TryParse([string]$body.cents, [ref]$parsedCents)) {
+                            $cents = $parsedCents
+                        } elseif ([double]::TryParse([string]$body.amount, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$parsedAmount)) {
+                            $cents = [int][Math]::Round($parsedAmount * 100)
+                        } else {
+                            return (ConvertTo-NovaJson @{ success = $false; message = "Enter a dollar amount to grant." })
+                        }
+                        if ($cents -le 0) { return (ConvertTo-NovaJson @{ success = $false; message = "The grant amount must be greater than zero." }) }
+                        if ($cents -gt 1000000) { return (ConvertTo-NovaJson @{ success = $false; message = "You can grant at most `$10,000 at a time." }) }
+                        $target.Balance = [int]$target.Balance + $cents
+                    }
                     "grantdev" {
                         if ($isOwnerTarget) { return (ConvertTo-NovaJson @{ success = $false; message = "That account is the owner." }) }
                         $devs = @($devCfg.devs | Where-Object { $_ -and -not ([string]$_).Equals($email, [System.StringComparison]::OrdinalIgnoreCase) })
@@ -6318,6 +6384,7 @@ function Invoke-NovaApi {
                     "clear" { "Moderation cleared for $email." }
                     "setplan" { "$email is now on $($saved.Plan)." }
                     "setpassword" { "Password reset for $email." }
+                    "grantmoney" { "Granted {0} to {1}. New balance: {2}." -f ('$' + ('{0:0.00}' -f ($cents / 100))), $email, ('$' + ('{0:0.00}' -f ([int]$saved.Balance / 100))) }
                     default { "Account updated." }
                 }
                 return (ConvertTo-NovaJson @{ success = $true; message = $msg; account = (ConvertTo-NovaPublicAccount $saved) })
