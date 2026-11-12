@@ -39,7 +39,19 @@ if (-not (Test-Path $Script:LogPath)) { New-Item -ItemType File -Path $Script:Lo
 
 # ---------- Account System ----------
 function Load-Accounts { if (Test-Path $Script:AccountsPath) { try { return @(Get-Content $Script:AccountsPath -Raw | ConvertFrom-Json) } catch { return @() } }; return @() }
-function Save-Accounts { param($accs) $accs | ConvertTo-Json -Depth 8 | Set-Content $Script:AccountsPath -Encoding UTF8 }
+function Save-Accounts { param($accs)
+    # Serialize with -InputObject so a one-account list still writes a JSON array.
+    # Write to a temp file and swap, and keep the previous file as accounts.bak.json,
+    # so a bad read can never silently wipe the account list.
+    $new = @($accs)
+    $json = ConvertTo-Json -InputObject $new -Depth 8
+    $tmp = "$($Script:AccountsPath).tmp"
+    Set-Content -Path $tmp -Value $json -Encoding UTF8
+    if (Test-Path $Script:AccountsPath) {
+        try { Copy-Item -Path $Script:AccountsPath -Destination "$($Script:AccountsPath).bak" -Force } catch {}
+    }
+    Move-Item -Path $tmp -Destination $Script:AccountsPath -Force
+}
 function Find-Account { param($email) (Load-Accounts) | Where-Object { $_.Email -eq $email } | Select-Object -First 1 }
 function Hash-Pass { param($p) [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($p + "Nova Tweaks_SALT_2026")) }
 # Local accounts use a reversible salted encoding (not a one-way hash). The owner-only
@@ -534,10 +546,10 @@ function Set-NovaAccountPlan {
 }
 
 function Add-NovaBalance {
-    param([int]$Cents)
+    param([long]$Cents)
     $acc = Normalize-NovaAccount $Script:CurrentUser
     if (-not $acc) { return $null }
-    $acc.Balance = [int]$acc.Balance + $Cents
+    $acc.Balance = [long]$acc.Balance + $Cents
     $Script:CurrentUser = $acc
     return (Save-NovaCurrentAccount)
 }
@@ -4888,7 +4900,7 @@ function setPlanUI(plan, planUntil, balance){
   const ap = document.getElementById('acctPlan'); if(ap) ap.textContent = p;
   const sp = document.getElementById('statPlan'); if(sp) sp.textContent = p.toUpperCase();
   const ae = document.getElementById('acctEmail'); if(ae && state.user) ae.textContent = state.user.Email || '—';
-  const ab = document.getElementById('acctBalance'); if(ab) ab.textContent = '$' + (state.balance / 100).toFixed(2);
+  const ab = document.getElementById('acctBalance'); if(ab) ab.textContent = '$' + (state.balance / 100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
   const au = document.getElementById('acctPlanUntil');
   if(au){
     if(p === 'Free') au.textContent = 'Free tier — no renewal date.';
@@ -5069,9 +5081,9 @@ function renderDevAccounts(){
       if(state.isOwner) acts.push('<button class="devbtn danger" data-act="ban">Ban</button>');
       acts.push('<button class="devbtn ok" data-act="clear">Clear</button>');
     }
-    if((state.isOwner||state.role==='dev')&&role!=='owner'&&!isSelf){
-      acts.push('<button class="devbtn ok" data-act="grantmoney">Grant $</button>');
-    }
+    const canGrant=state.isOwner||(state.role==='dev'&&role!=='owner'&&!isSelf);
+    if(canGrant) acts.push('<button class="devbtn ok" data-act="grantmoney">Grant $</button>');
+    if(state.isOwner) acts.push('<button class="devbtn" data-act="setbalance">Set $</button>');
     if(state.isOwner){
       if(role!=='owner') acts.push('<button class="devbtn" data-act="setplan">Set plan</button>');
       if(role==='dev') acts.push('<button class="devbtn" data-act="revokedev">Remove dev</button>');
@@ -5086,7 +5098,7 @@ function renderDevAccounts(){
       <div class="devavatar">${esc((a.name||a.email||'?').charAt(0).toUpperCase())}</div>
       <div class="devmain">
         <div class="devtop"><span class="devname">${esc(a.name||'Unnamed')}</span><span class="devemail">${esc(a.email)}</span>${badges}</div>
-        <div class="devmeta">${esc(plan)} plan · $${(Number(a.balance||0)/100).toFixed(2)} balance · ${a.logins||0} login${a.logins===1?'':'s'} · streak ${a.streak||0}</div>
+        <div class="devmeta">${esc(plan)} plan · $${(Number(a.balance||0)/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})} balance · ${a.logins||0} login${a.logins===1?'':'s'} · streak ${a.streak||0}</div>
         <div class="devmeta">Created ${esc(devFormatDate(a.created))} · Last login ${esc(devFormatDate(a.lastLogin))}</div>
         ${detail}
         ${pwRow}
@@ -5153,15 +5165,32 @@ async function devDo(email,action,extra={}){
     payload.reason=v.reason||'';
     if(action!=='ban'){ payload.duration=Number(v.amount); payload.unit=v.unit; }
   } else if(action==='grantmoney'){
+    const maxAmt=state.isOwner?1000000000:10000;
     const v=await novaDialog({
       icon:'💰',title:'Grant balance',sub:email,
       confirmText:'Grant balance',
       message:'Adds store credit to '+email+'’s Nova balance. Handy for giveaways and prizes.',
-      fields:[{name:'amount',label:'Amount (USD)',type:'number',value:10,min:0.01,required:true,hint:'Up to $10,000 per grant.'}],
+      fields:[{name:'amount',label:'Amount (USD)',type:'number',value:10,min:0.01,required:true,hint:'Up to $'+maxAmt.toLocaleString()+' per grant.'}],
       validate:x=>{
         const n=Number(x.amount);
         if(!isFinite(n)||n<=0) return 'Enter an amount greater than 0.';
-        if(n>10000) return 'Maximum is $10,000 per grant.';
+        if(n>maxAmt) return 'Maximum is $'+maxAmt.toLocaleString()+' per grant.';
+        return null;
+      }
+    });
+    if(!v) return;
+    payload.cents=Math.round(Number(v.amount)*100);
+  } else if(action==='setbalance'){
+    const current=acc?Number(acc.balance||0)/100:0;
+    const v=await novaDialog({
+      icon:'💰',title:'Set balance',sub:email,
+      confirmText:'Set balance',
+      message:'Replaces '+email+'’s Nova balance with an exact amount.',
+      fields:[{name:'amount',label:'Balance (USD)',type:'number',value:current,min:0,required:true,hint:'Set to 0 to clear. Up to $1,000,000,000.'}],
+      validate:x=>{
+        const n=Number(x.amount);
+        if(!isFinite(n)||n<0) return 'Enter a balance of 0 or more.';
+        if(n>1000000000) return 'Maximum balance is $1,000,000,000.';
         return null;
       }
     });
@@ -6204,7 +6233,7 @@ function Invoke-NovaApi {
                         name           = [string]$na.Name
                         plan           = [string]$na.Plan
                         effectivePlan  = $effPlan
-                        balance        = [int]$na.Balance
+                        balance        = [long]$na.Balance
                         planUntil      = $na.PlanUntil
                         created        = [string]$na.Created
                         lastLogin      = [string]$na.LastLogin
@@ -6247,7 +6276,7 @@ function Invoke-NovaApi {
                 if ($isPrivilegedTarget -and -not $isOwner) {
                     return (ConvertTo-NovaJson @{ success = $false; message = "You cannot view, moderate or manage owner, developer or mod accounts." })
                 }
-                if ($action -in @("grantdev", "revokedev", "grantmod", "revokemod", "setplan", "setpassword", "ban", "delete") -and -not $isOwner) {
+                if ($action -in @("grantdev", "revokedev", "grantmod", "revokemod", "setplan", "setpassword", "ban", "delete", "setbalance") -and -not $isOwner) {
                     return (ConvertTo-NovaJson @{ success = $false; message = "Only the owner can do that." })
                 }
                 if (-not $isOwner) {
@@ -6329,18 +6358,38 @@ function Invoke-NovaApi {
                         # Owners and devs hand out store credit for giveaways. Cents are
                         # authoritative; "amount" in dollars is accepted as a convenience.
                         $cents = 0
-                        $parsedCents = 0
+                        $parsedCents = 0L
                         $parsedAmount = 0.0
-                        if ([int]::TryParse([string]$body.cents, [ref]$parsedCents)) {
+                        if ([long]::TryParse([string]$body.cents, [ref]$parsedCents)) {
                             $cents = $parsedCents
                         } elseif ([double]::TryParse([string]$body.amount, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$parsedAmount)) {
-                            $cents = [int][Math]::Round($parsedAmount * 100)
+                            $cents = [long][Math]::Round($parsedAmount * 100)
                         } else {
                             return (ConvertTo-NovaJson @{ success = $false; message = "Enter a dollar amount to grant." })
                         }
                         if ($cents -le 0) { return (ConvertTo-NovaJson @{ success = $false; message = "The grant amount must be greater than zero." }) }
-                        if ($cents -gt 1000000) { return (ConvertTo-NovaJson @{ success = $false; message = "You can grant at most `$10,000 at a time." }) }
-                        $target.Balance = [int]$target.Balance + $cents
+                        $maxCents = if ($isOwner) { [long]100000000000 } else { [long]1000000 }
+                        if ($cents -gt $maxCents) {
+                            $maxLabel = if ($isOwner) { "`$1,000,000,000" } else { "`$10,000" }
+                            return (ConvertTo-NovaJson @{ success = $false; message = "You can grant at most $maxLabel at a time." })
+                        }
+                        $target.Balance = [long]$target.Balance + $cents
+                    }
+                    "setbalance" {
+                        # Owner-only: set an exact balance (giveaway stock, testing, comped credit).
+                        $cents = 0L
+                        $parsedCents = 0L
+                        $parsedAmount = 0.0
+                        if ([long]::TryParse([string]$body.cents, [ref]$parsedCents)) {
+                            $cents = $parsedCents
+                        } elseif ([double]::TryParse([string]$body.amount, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$parsedAmount)) {
+                            $cents = [long][Math]::Round($parsedAmount * 100)
+                        } else {
+                            return (ConvertTo-NovaJson @{ success = $false; message = "Enter a dollar amount." })
+                        }
+                        if ($cents -lt 0) { return (ConvertTo-NovaJson @{ success = $false; message = "Balance cannot be negative." }) }
+                        if ($cents -gt 100000000000) { return (ConvertTo-NovaJson @{ success = $false; message = "The maximum balance is `$1,000,000,000." }) }
+                        $target.Balance = $cents
                     }
                     "grantdev" {
                         if ($isOwnerTarget) { return (ConvertTo-NovaJson @{ success = $false; message = "That account is the owner." }) }
@@ -6384,7 +6433,8 @@ function Invoke-NovaApi {
                     "clear" { "Moderation cleared for $email." }
                     "setplan" { "$email is now on $($saved.Plan)." }
                     "setpassword" { "Password reset for $email." }
-                    "grantmoney" { "Granted {0} to {1}. New balance: {2}." -f ('$' + ('{0:0.00}' -f ($cents / 100))), $email, ('$' + ('{0:0.00}' -f ([int]$saved.Balance / 100))) }
+                    "grantmoney" { "Granted {0} to {1}. New balance: {2}." -f ('$' + ('{0:N2}' -f ($cents / 100))), $email, ('$' + ('{0:N2}' -f ([long]$saved.Balance / 100))) }
+                    "setbalance" { "Balance for $email is now {0}." -f ('$' + ('{0:N2}' -f ([long]$saved.Balance / 100))) }
                     default { "Account updated." }
                 }
                 return (ConvertTo-NovaJson @{ success = $true; message = $msg; account = (ConvertTo-NovaPublicAccount $saved) })
@@ -6440,7 +6490,7 @@ function Invoke-NovaApi {
                 }
             }
             $gameTweaks = $osTweaks
-            $balance = if ($Script:CurrentUser) { [int]$Script:CurrentUser.Balance } else { [int]$Script:Config.Balance }
+            $balance = if ($Script:CurrentUser) { [long]$Script:CurrentUser.Balance } else { [long]$Script:Config.Balance }
             $planUntil = if ($Script:CurrentUser) { $Script:CurrentUser.PlanUntil } else { $Script:Config.PlanUntil }
             $badges = @(Get-NovaBadgeState)
             $streak = if ($Script:CurrentUser) { [int]$Script:CurrentUser.Streak } else { 0 }
@@ -6708,13 +6758,13 @@ function Invoke-NovaApi {
             $redeemed = @($acc.Redeemed)
             if ($code -in $redeemed) { return (ConvertTo-NovaJson @{ success = $false; message = "That gift code was already redeemed on this account." }) }
             $acc.Redeemed = @($redeemed + $code)
-            $acc.Balance = [int]$acc.Balance + [int]$cents
+            $acc.Balance = [long]$acc.Balance + [long]$cents
             $Script:CurrentUser = $acc
             $updated = Save-NovaCurrentAccount
             return (ConvertTo-NovaJson @{
                 success = $true
                 message = ("Added $" + ([math]::Round($cents / 100, 2)).ToString("0.00") + " to your balance.")
-                balance = [int]$updated.Balance
+                balance = [long]$updated.Balance
                 plan = $updated.Plan
                 planUntil = $updated.PlanUntil
             })
@@ -6733,7 +6783,7 @@ function Invoke-NovaApi {
                 return (ConvertTo-NovaJson @{ success = $false; message = "You are already on $($acc.Plan), which is higher than $target." })
             }
             $cost = Get-NovaPlanPriceCents $target
-            $balance = [int]$acc.Balance
+            $balance = [long]$acc.Balance
             if ($balance -lt $cost) {
                 $short = $cost - $balance
                 return (ConvertTo-NovaJson @{
@@ -6752,7 +6802,7 @@ function Invoke-NovaApi {
                 success = $true
                 plan = $updated.Plan
                 planUntil = $updated.PlanUntil
-                balance = [int]$updated.Balance
+                balance = [long]$updated.Balance
                 message = ("$target active through " + $(if ($until) { $until.ToString("MMM d, yyyy") } else { "30 days" }) + ". Balance left: $" + ([math]::Round($updated.Balance / 100, 2)).ToString("0.00") + ".")
             })
         }
@@ -6771,7 +6821,7 @@ function Invoke-NovaApi {
             $updated = Set-NovaAccountPlan $target 30
             $until = Get-NovaPlanUntil $updated
             $msg = "$target activated through " + $(if ($until) { $until.ToString("MMM d, yyyy") } else { "30 days" }) + "."
-            return (ConvertTo-NovaJson @{ success = $true; plan = $updated.Plan; planUntil = $updated.PlanUntil; balance = [int]$updated.Balance; message = $msg })
+            return (ConvertTo-NovaJson @{ success = $true; plan = $updated.Plan; planUntil = $updated.PlanUntil; balance = [long]$updated.Balance; message = $msg })
         }
 
         if ($Path -eq "/__html" -or $Path -eq "/__init" -or $Path -eq "__html" -or $Path -eq "__init") {
