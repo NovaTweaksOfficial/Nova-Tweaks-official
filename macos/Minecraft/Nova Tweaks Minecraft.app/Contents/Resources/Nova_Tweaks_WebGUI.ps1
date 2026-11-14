@@ -39,7 +39,19 @@ if (-not (Test-Path $Script:LogPath)) { New-Item -ItemType File -Path $Script:Lo
 
 # ---------- Account System ----------
 function Load-Accounts { if (Test-Path $Script:AccountsPath) { try { return @(Get-Content $Script:AccountsPath -Raw | ConvertFrom-Json) } catch { return @() } }; return @() }
-function Save-Accounts { param($accs) $accs | ConvertTo-Json -Depth 8 | Set-Content $Script:AccountsPath -Encoding UTF8 }
+function Save-Accounts { param($accs)
+    # Serialize with -InputObject so a one-account list still writes a JSON array.
+    # Write to a temp file and swap, and keep the previous file as accounts.bak.json,
+    # so a bad read can never silently wipe the account list.
+    $new = @($accs)
+    $json = ConvertTo-Json -InputObject $new -Depth 8
+    $tmp = "$($Script:AccountsPath).tmp"
+    Set-Content -Path $tmp -Value $json -Encoding UTF8
+    if (Test-Path $Script:AccountsPath) {
+        try { Copy-Item -Path $Script:AccountsPath -Destination "$($Script:AccountsPath).bak" -Force } catch {}
+    }
+    Move-Item -Path $tmp -Destination $Script:AccountsPath -Force
+}
 function Find-Account { param($email) (Load-Accounts) | Where-Object { $_.Email -eq $email } | Select-Object -First 1 }
 function Hash-Pass { param($p) [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($p + "Nova Tweaks_SALT_2026")) }
 # Local accounts use a reversible salted encoding (not a one-way hash). The owner-only
@@ -130,6 +142,24 @@ function Save-NovaAccountRecord { param($Account)
         $Script:CurrentUser = $acc
     }
     return $acc
+}
+# Owner-only permanent removal. Deletes the record from accounts.json and any
+# role entry from devs.json so the email can register again from scratch.
+function Remove-NovaAccountRecord { param([string]$Email)
+    if (-not $Email) { return $false }
+    $accs = @(Load-Accounts)
+    $kept = @($accs | Where-Object { -not ([string]$_.Email -ieq $Email) })
+    if ($kept.Count -eq $accs.Count) { return $false }
+    Save-Accounts $kept
+    try {
+        $cfg = Get-NovaDevConfig
+        $devs = @($cfg.devs | Where-Object { $_ -and -not ([string]$_).Equals($Email, [System.StringComparison]::OrdinalIgnoreCase) })
+        $mods = @($cfg.mods | Where-Object { $_ -and -not ([string]$_).Equals($Email, [System.StringComparison]::OrdinalIgnoreCase) })
+        if ($devs.Count -ne @($cfg.devs).Count -or $mods.Count -ne @($cfg.mods).Count) {
+            Save-NovaDevConfig ([pscustomobject]@{ owner = $cfg.owner; devs = $devs; mods = $mods }) | Out-Null
+        }
+    } catch {}
+    return $true
 }
 function Get-NovaDurationUntil { param($Amount, $Unit)
     $n = 0
@@ -516,10 +546,10 @@ function Set-NovaAccountPlan {
 }
 
 function Add-NovaBalance {
-    param([int]$Cents)
+    param([long]$Cents)
     $acc = Normalize-NovaAccount $Script:CurrentUser
     if (-not $acc) { return $null }
-    $acc.Balance = [int]$acc.Balance + $Cents
+    $acc.Balance = [long]$acc.Balance + $Cents
     $Script:CurrentUser = $acc
     return (Save-NovaCurrentAccount)
 }
@@ -4457,7 +4487,7 @@ spotify.exe</textarea>
   <div class="devhero">
     <div>
       <h1 style="margin:0;font-size:26px">Staff Console</h1>
-      <div class="sub" style="margin:5px 0 0">Owner, dev and mod account tools. Only the owner can edit <code style="color:var(--text)">devs.json</code>, grant roles, change plans, reset passwords or ban accounts.</div>
+      <div class="sub" style="margin:5px 0 0">Owner, dev and mod account tools. Only the owner can edit <code style="color:var(--text)">devs.json</code>, grant roles, change plans, reset passwords, ban accounts or permanently delete accounts.</div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn ghost sm" id="devRefreshBtn">↻ Refresh</button>
@@ -4870,7 +4900,7 @@ function setPlanUI(plan, planUntil, balance){
   const ap = document.getElementById('acctPlan'); if(ap) ap.textContent = p;
   const sp = document.getElementById('statPlan'); if(sp) sp.textContent = p.toUpperCase();
   const ae = document.getElementById('acctEmail'); if(ae && state.user) ae.textContent = state.user.Email || '—';
-  const ab = document.getElementById('acctBalance'); if(ab) ab.textContent = '$' + (state.balance / 100).toFixed(2);
+  const ab = document.getElementById('acctBalance'); if(ab) ab.textContent = '$' + (state.balance / 100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
   const au = document.getElementById('acctPlanUntil');
   if(au){
     if(p === 'Free') au.textContent = 'Free tier — no renewal date.';
@@ -5051,6 +5081,9 @@ function renderDevAccounts(){
       if(state.isOwner) acts.push('<button class="devbtn danger" data-act="ban">Ban</button>');
       acts.push('<button class="devbtn ok" data-act="clear">Clear</button>');
     }
+    const canGrant=state.isOwner||(state.role==='dev'&&role!=='owner'&&!isSelf);
+    if(canGrant) acts.push('<button class="devbtn ok" data-act="grantmoney">Grant $</button>');
+    if(state.isOwner) acts.push('<button class="devbtn" data-act="setbalance">Set $</button>');
     if(state.isOwner){
       if(role!=='owner') acts.push('<button class="devbtn" data-act="setplan">Set plan</button>');
       if(role==='dev') acts.push('<button class="devbtn" data-act="revokedev">Remove dev</button>');
@@ -5059,12 +5092,13 @@ function renderDevAccounts(){
         acts.push('<button class="devbtn" data-act="grantdev">Make dev</button>');
         acts.push('<button class="devbtn" data-act="grantmod">Make mod</button>');
       }
+      if(role!=='owner'&&!isSelf) acts.push('<button class="devbtn danger" data-act="delete">Delete</button>');
     }
     return `<div class="devrow${st.cls==='banned'?' banned-row':''}" data-email="${esc(a.email)}">
       <div class="devavatar">${esc((a.name||a.email||'?').charAt(0).toUpperCase())}</div>
       <div class="devmain">
         <div class="devtop"><span class="devname">${esc(a.name||'Unnamed')}</span><span class="devemail">${esc(a.email)}</span>${badges}</div>
-        <div class="devmeta">${esc(plan)} plan · $${(Number(a.balance||0)/100).toFixed(2)} balance · ${a.logins||0} login${a.logins===1?'':'s'} · streak ${a.streak||0}</div>
+        <div class="devmeta">${esc(plan)} plan · $${(Number(a.balance||0)/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})} balance · ${a.logins||0} login${a.logins===1?'':'s'} · streak ${a.streak||0}</div>
         <div class="devmeta">Created ${esc(devFormatDate(a.created))} · Last login ${esc(devFormatDate(a.lastLogin))}</div>
         ${detail}
         ${pwRow}
@@ -5130,13 +5164,46 @@ async function devDo(email,action,extra={}){
     if(!v) return;
     payload.reason=v.reason||'';
     if(action!=='ban'){ payload.duration=Number(v.amount); payload.unit=v.unit; }
+  } else if(action==='grantmoney'){
+    const maxAmt=state.isOwner?1000000000:10000;
+    const v=await novaDialog({
+      icon:'💰',title:'Grant balance',sub:email,
+      confirmText:'Grant balance',
+      message:'Adds store credit to '+email+'’s Nova balance. Handy for giveaways and prizes.',
+      fields:[{name:'amount',label:'Amount (USD)',type:'number',value:10,min:0.01,required:true,hint:'Up to $'+maxAmt.toLocaleString()+' per grant.'}],
+      validate:x=>{
+        const n=Number(x.amount);
+        if(!isFinite(n)||n<=0) return 'Enter an amount greater than 0.';
+        if(n>maxAmt) return 'Maximum is $'+maxAmt.toLocaleString()+' per grant.';
+        return null;
+      }
+    });
+    if(!v) return;
+    payload.cents=Math.round(Number(v.amount)*100);
+  } else if(action==='setbalance'){
+    const current=acc?Number(acc.balance||0)/100:0;
+    const v=await novaDialog({
+      icon:'💰',title:'Set balance',sub:email,
+      confirmText:'Set balance',
+      message:'Replaces '+email+'’s Nova balance with an exact amount.',
+      fields:[{name:'amount',label:'Balance (USD)',type:'number',value:current,min:0,required:true,hint:'Set to 0 to clear. Up to $1,000,000,000.'}],
+      validate:x=>{
+        const n=Number(x.amount);
+        if(!isFinite(n)||n<0) return 'Enter a balance of 0 or more.';
+        if(n>1000000000) return 'Maximum balance is $1,000,000,000.';
+        return null;
+      }
+    });
+    if(!v) return;
+    payload.cents=Math.round(Number(v.amount)*100);
   } else {
     const copy={
       clear:{icon:'✕',title:'Clear moderation',message:'Remove all bans, timeouts and softbans from '+email+'?',confirmText:'Clear moderation'},
       grantdev:{icon:'◆',title:'Grant developer access',message:email+' will get developer tools and Ultimate automatically.',confirmText:'Make dev'},
       grantmod:{icon:'◇',title:'Grant mod access',message:email+' will get moderation tools and Pro automatically.',confirmText:'Make mod'},
       revokedev:{icon:'◆',title:'Remove developer access',message:'Remove developer access from '+email+'?',confirmText:'Remove dev',danger:true},
-      revokemod:{icon:'◇',title:'Remove mod access',message:'Remove mod access from '+email+'?',confirmText:'Remove mod',danger:true}
+      revokemod:{icon:'◇',title:'Remove mod access',message:'Remove mod access from '+email+'?',confirmText:'Remove mod',danger:true},
+      delete:{icon:'🗑',title:'Delete account permanently',message:'This permanently removes '+email+' from accounts.json and strips any dev/mod role. They will be signed out and cannot log in again. This cannot be undone.',confirmText:'Delete forever',danger:true}
     }[action];
     if(copy){ const ok=await novaDialog(Object.assign({sub:email},copy)); if(!ok) return; }
   }
@@ -6166,7 +6233,7 @@ function Invoke-NovaApi {
                         name           = [string]$na.Name
                         plan           = [string]$na.Plan
                         effectivePlan  = $effPlan
-                        balance        = [int]$na.Balance
+                        balance        = [long]$na.Balance
                         planUntil      = $na.PlanUntil
                         created        = [string]$na.Created
                         lastLogin      = [string]$na.LastLogin
@@ -6209,24 +6276,35 @@ function Invoke-NovaApi {
                 if ($isPrivilegedTarget -and -not $isOwner) {
                     return (ConvertTo-NovaJson @{ success = $false; message = "You cannot view, moderate or manage owner, developer or mod accounts." })
                 }
+                if ($action -in @("grantdev", "revokedev", "grantmod", "revokemod", "setplan", "setpassword", "ban", "delete", "setbalance") -and -not $isOwner) {
+                    return (ConvertTo-NovaJson @{ success = $false; message = "Only the owner can do that." })
+                }
                 if (-not $isOwner) {
                     # Devs may softban/timeout; mods may only timeout. Neither can ever ban permanently.
-                    $allowed = if ($myRole -eq "dev") { @("timeout", "softban", "clear") } else { @("timeout", "clear") }
+                    $allowed = if ($myRole -eq "dev") { @("timeout", "softban", "clear", "grantmoney") } else { @("timeout", "clear") }
                     if ($action -notin $allowed) {
                         $msg = if ($myRole -eq "dev") { "Devs can only timeout, softban or clear regular accounts." } else { "Mods can only timeout or clear regular accounts." }
                         return (ConvertTo-NovaJson @{ success = $false; message = $msg })
                     }
                 }
-                if ($action -in @("grantdev", "revokedev", "grantmod", "revokemod", "setplan", "setpassword", "ban") -and -not $isOwner) {
-                    return (ConvertTo-NovaJson @{ success = $false; message = "Only the owner can do that." })
-                }
-                if (($isOwnerTarget -or $isSelf) -and ($action -in @("ban", "timeout", "softban"))) {
-                    return (ConvertTo-NovaJson @{ success = $false; message = "You cannot moderate the owner or your own account." })
+                if ($isOwnerTarget -or $isSelf) {
+                    if ($action -in @("ban", "timeout", "softban")) {
+                        return (ConvertTo-NovaJson @{ success = $false; message = "You cannot moderate the owner or your own account." })
+                    }
+                    if ($action -eq "delete") {
+                        return (ConvertTo-NovaJson @{ success = $false; message = "The owner account cannot be deleted, and you cannot delete your own account." })
+                    }
                 }
                 if ($isSelf -and $action -eq "clear" -and -not $isOwner) {
                     return (ConvertTo-NovaJson @{ success = $false; message = "You cannot clear your own moderation." })
                 }
                 $reason = ([string]$body.reason).Trim()
+
+                if ($action -eq "delete") {
+                    $removed = Remove-NovaAccountRecord $email
+                    if (-not $removed) { return (ConvertTo-NovaJson @{ success = $false; message = "Account not found." }) }
+                    return (ConvertTo-NovaJson @{ success = $true; message = "$email was permanently deleted."; deleted = $email })
+                }
 
                 switch ($action) {
                     "ban" {
@@ -6276,6 +6354,43 @@ function Invoke-NovaApi {
                         if ($pw.Length -lt 4) { return (ConvertTo-NovaJson @{ success = $false; message = "Password must be at least 4 characters." }) }
                         $target.PasswordHash = Hash-Pass $pw
                     }
+                    "grantmoney" {
+                        # Owners and devs hand out store credit for giveaways. Cents are
+                        # authoritative; "amount" in dollars is accepted as a convenience.
+                        $cents = 0
+                        $parsedCents = 0L
+                        $parsedAmount = 0.0
+                        if ([long]::TryParse([string]$body.cents, [ref]$parsedCents)) {
+                            $cents = $parsedCents
+                        } elseif ([double]::TryParse([string]$body.amount, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$parsedAmount)) {
+                            $cents = [long][Math]::Round($parsedAmount * 100)
+                        } else {
+                            return (ConvertTo-NovaJson @{ success = $false; message = "Enter a dollar amount to grant." })
+                        }
+                        if ($cents -le 0) { return (ConvertTo-NovaJson @{ success = $false; message = "The grant amount must be greater than zero." }) }
+                        $maxCents = if ($isOwner) { [long]100000000000 } else { [long]1000000 }
+                        if ($cents -gt $maxCents) {
+                            $maxLabel = if ($isOwner) { "`$1,000,000,000" } else { "`$10,000" }
+                            return (ConvertTo-NovaJson @{ success = $false; message = "You can grant at most $maxLabel at a time." })
+                        }
+                        $target.Balance = [long]$target.Balance + $cents
+                    }
+                    "setbalance" {
+                        # Owner-only: set an exact balance (giveaway stock, testing, comped credit).
+                        $cents = 0L
+                        $parsedCents = 0L
+                        $parsedAmount = 0.0
+                        if ([long]::TryParse([string]$body.cents, [ref]$parsedCents)) {
+                            $cents = $parsedCents
+                        } elseif ([double]::TryParse([string]$body.amount, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$parsedAmount)) {
+                            $cents = [long][Math]::Round($parsedAmount * 100)
+                        } else {
+                            return (ConvertTo-NovaJson @{ success = $false; message = "Enter a dollar amount." })
+                        }
+                        if ($cents -lt 0) { return (ConvertTo-NovaJson @{ success = $false; message = "Balance cannot be negative." }) }
+                        if ($cents -gt 100000000000) { return (ConvertTo-NovaJson @{ success = $false; message = "The maximum balance is `$1,000,000,000." }) }
+                        $target.Balance = $cents
+                    }
                     "grantdev" {
                         if ($isOwnerTarget) { return (ConvertTo-NovaJson @{ success = $false; message = "That account is the owner." }) }
                         $devs = @($devCfg.devs | Where-Object { $_ -and -not ([string]$_).Equals($email, [System.StringComparison]::OrdinalIgnoreCase) })
@@ -6318,6 +6433,8 @@ function Invoke-NovaApi {
                     "clear" { "Moderation cleared for $email." }
                     "setplan" { "$email is now on $($saved.Plan)." }
                     "setpassword" { "Password reset for $email." }
+                    "grantmoney" { "Granted {0} to {1}. New balance: {2}." -f ('$' + ('{0:N2}' -f ($cents / 100))), $email, ('$' + ('{0:N2}' -f ([long]$saved.Balance / 100))) }
+                    "setbalance" { "Balance for $email is now {0}." -f ('$' + ('{0:N2}' -f ([long]$saved.Balance / 100))) }
                     default { "Account updated." }
                 }
                 return (ConvertTo-NovaJson @{ success = $true; message = $msg; account = (ConvertTo-NovaPublicAccount $saved) })
@@ -6373,7 +6490,7 @@ function Invoke-NovaApi {
                 }
             }
             $gameTweaks = $osTweaks
-            $balance = if ($Script:CurrentUser) { [int]$Script:CurrentUser.Balance } else { [int]$Script:Config.Balance }
+            $balance = if ($Script:CurrentUser) { [long]$Script:CurrentUser.Balance } else { [long]$Script:Config.Balance }
             $planUntil = if ($Script:CurrentUser) { $Script:CurrentUser.PlanUntil } else { $Script:Config.PlanUntil }
             $badges = @(Get-NovaBadgeState)
             $streak = if ($Script:CurrentUser) { [int]$Script:CurrentUser.Streak } else { 0 }
@@ -6641,13 +6758,13 @@ function Invoke-NovaApi {
             $redeemed = @($acc.Redeemed)
             if ($code -in $redeemed) { return (ConvertTo-NovaJson @{ success = $false; message = "That gift code was already redeemed on this account." }) }
             $acc.Redeemed = @($redeemed + $code)
-            $acc.Balance = [int]$acc.Balance + [int]$cents
+            $acc.Balance = [long]$acc.Balance + [long]$cents
             $Script:CurrentUser = $acc
             $updated = Save-NovaCurrentAccount
             return (ConvertTo-NovaJson @{
                 success = $true
                 message = ("Added $" + ([math]::Round($cents / 100, 2)).ToString("0.00") + " to your balance.")
-                balance = [int]$updated.Balance
+                balance = [long]$updated.Balance
                 plan = $updated.Plan
                 planUntil = $updated.PlanUntil
             })
@@ -6666,7 +6783,7 @@ function Invoke-NovaApi {
                 return (ConvertTo-NovaJson @{ success = $false; message = "You are already on $($acc.Plan), which is higher than $target." })
             }
             $cost = Get-NovaPlanPriceCents $target
-            $balance = [int]$acc.Balance
+            $balance = [long]$acc.Balance
             if ($balance -lt $cost) {
                 $short = $cost - $balance
                 return (ConvertTo-NovaJson @{
@@ -6685,7 +6802,7 @@ function Invoke-NovaApi {
                 success = $true
                 plan = $updated.Plan
                 planUntil = $updated.PlanUntil
-                balance = [int]$updated.Balance
+                balance = [long]$updated.Balance
                 message = ("$target active through " + $(if ($until) { $until.ToString("MMM d, yyyy") } else { "30 days" }) + ". Balance left: $" + ([math]::Round($updated.Balance / 100, 2)).ToString("0.00") + ".")
             })
         }
@@ -6704,7 +6821,7 @@ function Invoke-NovaApi {
             $updated = Set-NovaAccountPlan $target 30
             $until = Get-NovaPlanUntil $updated
             $msg = "$target activated through " + $(if ($until) { $until.ToString("MMM d, yyyy") } else { "30 days" }) + "."
-            return (ConvertTo-NovaJson @{ success = $true; plan = $updated.Plan; planUntil = $updated.PlanUntil; balance = [int]$updated.Balance; message = $msg })
+            return (ConvertTo-NovaJson @{ success = $true; plan = $updated.Plan; planUntil = $updated.PlanUntil; balance = [long]$updated.Balance; message = $msg })
         }
 
         if ($Path -eq "/__html" -or $Path -eq "/__init" -or $Path -eq "__html" -or $Path -eq "__init") {
