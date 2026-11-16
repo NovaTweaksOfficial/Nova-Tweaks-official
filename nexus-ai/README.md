@@ -1,6 +1,6 @@
 # NEXUS AI
 
-A futuristic, model-agnostic AI assistant PWA. Mobile-first, installable on iPhone via Safari "Add to Home Screen".
+A futuristic personal AI assistant PWA by NEXUS AI. Mobile-first, installable on iPhone, Android, and Samsung.
 
 ## Stack
 

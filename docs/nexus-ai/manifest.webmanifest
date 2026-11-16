@@ -1,7 +1,7 @@
 {
   "name": "NEXUS AI — Futuristic Personal AI",
   "short_name": "NEXUS AI",
-  "description": "A futuristic, model-agnostic AI assistant.",
+  "description": "A futuristic personal AI assistant by NEXUS AI.",
   "id": "./",
   "start_url": "./",
   "scope": "./",
