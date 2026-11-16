@@ -1,9 +1,0 @@
-name = "nexus-ai-backend"
-main = "src/index.ts"
-compatibility_date = "2024-11-01"
-
-# Set secrets via: wrangler secret put OPENAI_API_KEY etc.
-# Optional vars:
-[vars]
-ALLOWED_ORIGINS = "*"
-DEFAULT_RATE_LIMIT = "30"
