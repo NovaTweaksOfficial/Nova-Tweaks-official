@@ -1,4 +1,4 @@
-name: Deploy NEXUS AI to GitHub Pages
+name: NEXUS AI (build & deploy)
 
 on:
   push:
@@ -14,7 +14,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: nexus-ai-pages
   cancel-in-progress: true
 
 jobs:
@@ -37,12 +37,25 @@ jobs:
         env:
           VITE_BACKEND_URL: ${{ vars.BACKEND_URL || secrets.BACKEND_URL }}
         run: npm run build
+      # The published copy lives in docs/nexus-ai so it ships with the existing
+      # branch-based Pages site (main -> /docs). Commit it from the repo when
+      # nexus-ai source changes:
+      #   rm -rf docs/nexus-ai && cp -R nexus-ai/dist docs/nexus-ai
+      - name: Verify published copy is current
+        run: |
+          if ! diff -q nexus-ai/dist/index.html docs/nexus-ai/index.html >/dev/null 2>&1; then
+            echo "::warning::docs/nexus-ai is out of date. Run: rm -rf docs/nexus-ai && cp -R nexus-ai/dist docs/nexus-ai"
+          fi
       - name: Upload Pages artifact
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-pages-artifact@v3
         with:
           path: nexus-ai/dist
 
   deploy:
+    # Manual-only: this repo's Pages site is currently served from main -> /docs,
+    # so a root deploy would replace the Nova Tweaks storefront.
+    if: github.event_name == 'workflow_dispatch'
     needs: build
     runs-on: ubuntu-latest
     environment:

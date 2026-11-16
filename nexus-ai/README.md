@@ -27,16 +27,33 @@ npm run preview
 
 ## Backend (secure AI proxy)
 
-See `backend/README.md`. The frontend always talks to the Cloudflare Worker; no API keys are ever stored in the browser.
+See `backend/README.md`. Requests go through the Cloudflare Worker when `VITE_BACKEND_URL` (repo variable `BACKEND_URL`) is set; no API keys are ever stored in the browser.
 
-By default the Worker routes to the free Pollinations provider, so **users need zero setup and no API keys**. The deployer can optionally add provider secrets (OpenAI, Anthropic, Gemini, OpenRouter) server-side for premium models.
+NEXUS works with **zero setup**: with no backend configured it talks to the keyless default engine directly, and with a backend configured it uses the Worker for rate limiting and server-side provider keys. The deployer can add premium provider secrets (OpenAI, Anthropic, Gemini, OpenRouter) server-side.
 
 ## Deploy to GitHub Pages
 
-The workflow `.github/workflows/deploy-nexus-ai.yml` builds and deploys `nexus-ai/dist`.
+**Live app:** https://novatweaksofficial.github.io/Nova-Tweaks-official/nexus-ai/
 
-1. Push to `main`.
-2. In repo Settings → Pages, set source to "GitHub Actions".
-3. The site will be available at `https://<user>.github.io/<repo>/`.
+The published build is committed to `docs/nexus-ai/`, which is served by the repo's existing
+branch-based Pages site (`main` → `/docs`). This keeps the Nova Tweaks storefront live at
+`/Nova-Tweaks-official/`.
 
-Vite uses a relative base (`./`) so assets resolve under any path.
+To publish a new build:
+
+```bash
+cd nexus-ai
+npm run build
+cd ..
+rm -rf docs/nexus-ai
+cp -R nexus-ai/dist docs/nexus-ai
+git add docs/nexus-ai && git commit -m "Publish NEXUS AI build" && git push
+```
+
+Vite uses a relative base (`./`) so assets, the manifest, and the service worker all resolve
+under `/nexus-ai/`. The app is installable on iOS Safari (Share → Add to Home Screen),
+Android Chrome, and Samsung Internet.
+
+`.github/workflows/deploy-nexus-ai.yml` builds on every `nexus-ai` change and can deploy to the
+Pages root manually (Actions → Run workflow). Only use that after switching Settings → Pages to
+"GitHub Actions", since it replaces the storefront at the site root.
