@@ -26,7 +26,7 @@ function Get-NovaViewIsWin { return ($IsWin -or $Script:WindowsPreview) }
 # Single-product app variants (separate apps; no in-app game switch). Defaults preserve the combined Windows app.
 $Script:FixedGame = if ($env:NOVA_FIXED_GAME -in @('Fortnite','Minecraft')) { $env:NOVA_FIXED_GAME } else { $null }
 $Script:AppVariant = if ($env:NOVA_APP_VARIANT) { [string]$env:NOVA_APP_VARIANT } else { $null }
-$Script:AppVersion = "5.6.2"
+$Script:AppVersion = "5.6.3"
 
 $Script:Root = if ($IsWin) { Join-Path $env:USERPROFILE "NovaTweaks" } else { Join-Path $env:HOME ".novatweaks" }
 $Script:BackupDir = Join-Path $Script:Root "backups"
@@ -3919,7 +3919,7 @@ h1{font-family:"Nova Sans","Plus Jakarta Sans",system-ui,sans-serif;font-size:26
         <div id="loginStatus" style="font-size:11px;color:var(--textmuted);text-align:center;margin-top:8px"></div>
       </div>
       <div id="registerForm" style="display:none">
-        <div class="login-field"><label>Display name</label><input class="login-input" id="regName" placeholder="austvns"></div>
+        <div class="login-field"><label>Display name</label><input class="login-input" id="regName" placeholder="Your name"></div>
         <div class="login-field"><label>Email</label><input class="login-input" id="regEmail" type="email" placeholder="you@email.com"></div>
         <div class="login-field"><label>Password</label><input class="login-input" id="regPass" type="password" placeholder="••••••••"></div>
         <button class="login-btn" id="registerBtn">Create account →</button>
