@@ -26,7 +26,7 @@ function Get-NovaViewIsWin { return ($IsWin -or $Script:WindowsPreview) }
 # Single-product app variants (separate apps; no in-app game switch). Defaults preserve the combined Windows app.
 $Script:FixedGame = if ($env:NOVA_FIXED_GAME -in @('Fortnite','Minecraft')) { $env:NOVA_FIXED_GAME } else { $null }
 $Script:AppVariant = if ($env:NOVA_APP_VARIANT) { [string]$env:NOVA_APP_VARIANT } else { $null }
-$Script:AppVersion = "5.6.3"
+$Script:AppVersion = "1"
 
 $Script:Root = if ($IsWin) { Join-Path $env:USERPROFILE "NovaTweaks" } else { Join-Path $env:HOME ".novatweaks" }
 $Script:BackupDir = Join-Path $Script:Root "backups"
